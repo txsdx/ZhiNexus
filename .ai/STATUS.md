@@ -27,7 +27,12 @@
 
 ## 0.9 本轮验证（2026-10-27）
 
-- 已推送应用实现 `42ed542`；自动 Validate [40363335936](https://github.com/txsdx/ZhiNexus/actions/runs/40363335936) 全部通过。首轮编译 [40363350765](https://github.com/txsdx/ZhiNexus/actions/runs/40363350765) 的 Ubuntu 编译/DEB 打包成功，但原生网络测试仍等待旧 display_name，和本轮“原始 ID”要求冲突；已修正为检查精确原始 ID 并断言不展示 display_name。该次仅修改测试，不改变 0.9.0 应用实现；三平台重新验证结果待记录。
+- **0.9.0 三平台最终构建与测试全部成功**：[Build and release 40364552600](https://github.com/txsdx/ZhiNexus/actions/runs/40364552600)，源码/测试 commit `9bea908`（应用实现 `42ed542`）。Windows job `121719104584`、Ubuntu job `121719104455`、Android job `121719104540` 和共享前端 job `121718610847` 均成功，含上传和缓存收尾；publish 按输入跳过，没有创建 Release。
+- **最终自动 Validate 全部成功**：[40364520371](https://github.com/txsdx/ZhiNexus/actions/runs/40364520371)：60 单元、26 脚本、36 Chromium 回归、前端构建及 locked Rust check。
+- Windows/Ubuntu 实际打包程序通过模型目录的精确原始 ID（拒绝 display_name）和代理请求、MCP stdio、快捷键、OCR、编辑、系统/portable 隔离、重启及损坏恢复测试。Android 编译 arm64 发布 APK 与测试用 x86_64 调试 APK，Android15/API35 模拟器安装后通过编辑、标签/内容重启恢复、移动导航、安全区域、通知和 OS 排程；没有 Android 实体手机验证。
+- 安装包在本轮 Artifacts：[Windows x64](https://github.com/txsdx/ZhiNexus/actions/runs/40364552600/artifacts/12670451172)（`*_protable.exe` / `*_setup.exe`）、[Ubuntu24+ x64](https://github.com/txsdx/ZhiNexus/actions/runs/40364552600/artifacts/12669498243)（`.deb`）、[Android15+ arm64](https://github.com/txsdx/ZhiNexus/actions/runs/40364552600/artifacts/12670582490)（`.apk`）。通过 CI 打包日志与上传元数据核对；当前云端 CLI 跟随产物存储重定向下载返回 HTTP403，未把本地 ZIP 读回描述为已验证。
+
+- 已推送应用实现 `42ed542`；自动 Validate [40363335936](https://github.com/txsdx/ZhiNexus/actions/runs/40363335936) 全部通过。首轮编译 [40363350765](https://github.com/txsdx/ZhiNexus/actions/runs/40363350765) 的 Ubuntu 编译/DEB 打包成功，但原生网络测试仍等待旧 display_name，和本轮“原始 ID”要求冲突；已修正为检查精确原始 ID 并断言不展示 display_name。该次仅修改测试，不改变 0.9.0 应用实现；三平台重新验证全部成功，结果见上。
 
 - `npm test` **60 项通过**，`npm run test:release` **26 项通过**；`npm run build`、Prettier 检查及 `git diff --check` 通过。构建仍有已有的大 chunk/混合静态动态 import 提示。
 - `npx playwright test` **36 项全量通过**。新增原始模型 ID/全局默认动态继承、任务及助手显式覆盖、同步到另一副本与重启恢复；大类/子类/条目删除在等待、取消、关闭、Esc、遮罩及存储失败时核对完整文档和日志均不变，再验证明确确认后的原子迁移/删除与重启持久化。
@@ -35,7 +40,7 @@
 - `cargo check --locked --manifest-path src-tauri/Cargo.toml` 通过。当前云环境最初缺 PipeWire/SPA 与 Clang 开发包，已从环境配置的 Debian HTTPS snapshot 下载并解包到原有 sysroot；检查使用 `zhinexus-env.sh`、`LIBCLANG_PATH`、sysroot `LD_LIBRARY_PATH` 与 Clang resource-dir。仅补齐当前环境，未更改仓库依赖或假设环境草稿已发布。
 - 确认根因：Tauri dialog 插件将 `window.confirm` 改为 async，DOM 类型仍为 boolean，旧 if 将 Promise 当作真。7 处旧调用全部改为统一应用内异步确认；图关系改在 React Flow 删除前拦截并等待提交，MCP 移除也增加确认。
 - 追加全局/词条对话、图连线、草稿、MCP、云快照、设备设置取消回归；浏览器通过初始化脚本模拟原生 async confirm。源码扫描测试禁止再调用 window/globalThis.confirm。详细结果见 DELETION_AUDIT.md。
-- 本轮尚无 Windows/Android 实机安装验证或真实 AI 账号兼容验证。用户已授权推送并启动三平台编译；不发布 Release，CI 结果将在运行完成后记录。
+- 代码按用户授权推送到 main，提交署名 codex。没有真实 AI 账号兼容、Android 实体机或正式 Release 安装升级验证。删除专项由模拟原生 async confirm 的浏览器回归覆盖，实际打包程序的其他原生流程按上方 CI 记录验证。
 
 ## 0.8 最终验证（2026-10-26）
 

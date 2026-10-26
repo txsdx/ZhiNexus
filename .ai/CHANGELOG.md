@@ -2,6 +2,8 @@
 
 ## 0.9.0 · 2026-10-27
 
+- 全部实现已推送 main；最终三平台构建与原生/设备 CI 全部通过，运行 40364552600（源码 9bea908），Windows EXE、Ubuntu DEB、Android arm64 APK 均已上传 Actions Artifacts。自动 Validate 40364520371 全部通过；未发布 Release。
+
 - 同步更新 Windows/Ubuntu 原生模型目录测试：检查精确原始 ID，并拒绝旧 display_name 展示；修复首轮 CI 原生测试因等待旧显示名而超时，应用版本不因测试断言调整而变化。
 
 - 修复 Tauri 原生 dialog 插件把 window.confirm 替换为异步 Promise 后，7 处旧同步守卫提前放行的问题：对话/分类/条目删除、丢弃未保存草稿、恢复设备设置、恢复云快照、启动更新全部使用统一异步确认。图关系在 onBeforeDelete 等待确认与提交，阻止乐观删除；MCP 移除增加确认。添加模拟原生 async confirm 的浏览器回归与禁止旧 API 的源码扫描守卫，审查记录见 DELETION_AUDIT.md。

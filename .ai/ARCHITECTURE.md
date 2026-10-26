@@ -8,7 +8,7 @@
 - `core/store`: repository, command serialization, auditable operations and React external-store projections.
 - `core/review`: maintained `ts-fsrs` scheduler, structured question and grade contracts.
 - `services`: strict HTTPS providers, CPA catalog, templates, bounded agent tool loop, official MCP SDK, WebDAV transport, OS capture/notifications/updates.
-- `pages`, `components`: React presentation. Rust only initializes native plugins. Native SQL does not expose an arbitrary shell.
+- `pages`, `components`: React presentation. Rust owns app-root selection, verified SQLite checkpoints/journal replay, explicit OS selection capture and verified update/install boundaries in separate modules. Native SQL does not expose an arbitrary shell.
 
 ## Replica protocol v1
 
@@ -32,4 +32,12 @@ Knowledge, categories, reviews, topics, graph positions, prompts, task/model con
 
 Incremental payload transfer is implemented, but discovery lists all immutable names and projection replays the log. Browser fallback persists the whole SQLite image per commit. This is an alpha protocol, not a claim of verified large-library performance. Next steps: local projection cache/indexes, immutable bounded log blocks, durable outbox, streaming blobs/backups, Merkle subtree exchange and authenticated snapshot bootstrap. Device manifests are diagnostics, not trusted consistency certificates.
 
-Missing remote logs that exist locally are republished, and missing local referenced blobs are retrieved and hash-checked. Logical corruption with a valid local copy can be repaired through explicit restore/sync; a physically corrupted SQLite file cannot currently self-heal automatically. Never erase/reset on integrity failure. Current manual snapshots are verifiable exports; automatic startup from a remote snapshot remains to implement.
+Missing remote logs that exist locally are republished, and missing local referenced blobs are retrieved and hash-checked. Explicit deep audit downloads known remote files, quarantines corrupt bytes and replaces them only from a verified same-hash local copy, then reads back. Cloud snapshot recovery verifies hashes, domain/causal closure and both digests before union import. No remote deletion or blind replacement occurs.
+
+Native persistence mirrors events, blobs and metadata into an fsynced app-owned durable journal before acknowledging SQLite commits. Verified rolling VACUUM INTO checkpoints provide three fallback generations; boot checks integrity, quarantines a damaged primary and replays all valid journal records on a restored checkpoint. Browser IndexedDB commits primary/checkpoint/digest atomically and preserves the damaged primary before fallback. This covers the exercised damage cases, not every filesystem, power-loss or external-tampering scenario. If no trustworthy recovery copy exists the app reports the error rather than silently resetting.
+
+## Platform data roots and updates
+
+`paths::StorageLocation` is chosen once before constructing webviews. Desktop executable-adjacent regular file `portable` selects `<exe-dir>/_data`, including SQL, journal/checkpoints, device settings and webview storage; otherwise Tauri app_data_dir is used. HTTP cookie persistence is disabled. Old normal-mode config data can be copied without overwriting existing user data; portable and normal roots are never silently merged.
+
+`versions.json` keeps common major.minor and independent patches. CI builds only selected platforms and generates schema-2 Release/latest.json; unbuilt platform metadata survives within the same common line. Each client compares its own binary version and selects the correct installer/portable payload. Native download checks the fixed GitHub repository, bounded HTTPS redirects, size and SHA-256; configured Minisign keys also bind the signed application version. Platform installers retain ordinary OS consent. Android's small private FileProvider bridge exposes only the verified APK; Windows portable replacement runs the verified new binary as a short-lived helper. No published upgrade round-trip has been validated yet.

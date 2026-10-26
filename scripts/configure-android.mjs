@@ -1,0 +1,69 @@
+/** Align generated Android minimum SDK with the committed Tauri requirement and report the current template SDK. */
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+/** Apply the user's Android 15+ requirement without pinning a stale generated compile SDK. */
+export function configureAndroid(text, minSdk) {
+  if (!Number.isInteger(minSdk) || minSdk < 35)
+    throw Error("Android 15+ requires minSdk >= 35");
+  const sdk = Number(text.match(/compileSdk\s*=\s*(\d+)/)?.[1]);
+  if (!sdk) throw Error("Generated Android compileSdk not found");
+  return {
+    text: text.replace(/minSdk\s*=\s*\d+/, `minSdk = ${minSdk}`),
+    compileSdk: sdk,
+  };
+}
+/** Modify only Tauri's ignored generated project, keeping source requirements and CI metadata synchronized. */
+export function run() {
+  const file = "src-tauri/gen/android/app/build.gradle.kts";
+  const config = JSON.parse(
+      fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    ),
+    result = configureAndroid(
+      fs.readFileSync(file, "utf8"),
+      config.bundle.android.minSdkVersion,
+    );
+  fs.writeFileSync(file, result.text);
+  const props = "src-tauri/gen/android/gradle.properties";
+  const current = fs.existsSync(props) ? fs.readFileSync(props, "utf8") : "";
+  if (!current.includes("org.gradle.caching="))
+    fs.appendFileSync(
+      props,
+      "\norg.gradle.caching=true\norg.gradle.parallel=true\n",
+    );
+  if (process.env.GITHUB_OUTPUT)
+    fs.appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `compile_sdk=${result.compileSdk}\nplatform_package=platforms;android-${result.compileSdk >= 37 ? result.compileSdk + ".0" : result.compileSdk}\n`,
+    );
+  const kotlinDir =
+    "src-tauri/gen/android/app/src/main/java/io/github/txsdx/zhinexus/updates";
+  fs.mkdirSync(kotlinDir, { recursive: true });
+  fs.copyFileSync(
+    "src-tauri/mobile/android/UpdateInstaller.kt",
+    kotlinDir + "/UpdateInstaller.kt",
+  );
+  const xmlDir = "src-tauri/gen/android/app/src/main/res/xml";
+  fs.mkdirSync(xmlDir, { recursive: true });
+  fs.copyFileSync(
+    "src-tauri/mobile/android/update_paths.xml",
+    xmlDir + "/zhinexus_update_paths.xml",
+  );
+  const manifestPath = "src-tauri/gen/android/app/src/main/AndroidManifest.xml";
+  let manifest = fs.readFileSync(manifestPath, "utf8");
+  if (!manifest.includes("android.permission.REQUEST_INSTALL_PACKAGES"))
+    manifest = manifest.replace(
+      "<application",
+      '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/><application',
+    );
+  if (!manifest.includes("zhinexus-updates"))
+    manifest = manifest.replace(
+      "</application>",
+      '<provider android:name="io.github.txsdx.zhinexus.updates.UpdateFileProvider" android:authorities="${applicationId}.zhinexus-updates" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/zhinexus_update_paths"/></provider></application>',
+    );
+  fs.writeFileSync(manifestPath, manifest);
+  console.log(
+    `Android minSdk=${config.bundle.android.minSdkVersion}; compileSdk=${result.compileSdk}`,
+  );
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  run();

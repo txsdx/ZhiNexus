@@ -5,6 +5,7 @@ export default defineConfig({
   testDir: "tests",
   timeout: 60000,
   workers: 1,
+  expect: { timeout: 15000 },
   use: {
     baseURL: `http://localhost:${port}`,
     locale: "zh-CN",

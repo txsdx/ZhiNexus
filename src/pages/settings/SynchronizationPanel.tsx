@@ -94,8 +94,8 @@ export function SynchronizationPanel() {
       </label>
       <p className="muted">
         {t(
-          "仅应用运行时提醒，关闭进程后的系统排程尚未接入。电脑和手机可独立开关。",
-          "Reminders currently run while the app is open. Closed-process scheduling is not yet integrated. Each device has its own switch.",
+          "Android 使用系统排程，关闭页面后仍可提醒（系统省电或强制停止可能延迟或阻止）；桌面版目前仅运行期间提醒。电脑和手机可独立开关。",
+          "Android alarms are scheduled with the OS and can fire after the webview closes; battery restrictions or force-stop can delay or prevent delivery. Desktop reminders currently require the app to run. Each device has its own switch.",
         )}
       </p>
       <div className="actions">

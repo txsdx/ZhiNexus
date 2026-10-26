@@ -1,66 +1,177 @@
-# Manually build installers; publishing is an explicit workflow input, never a side effect of push.
-name: Build desktop
+# Unified manual target selection. Configuration changes automatically verify Windows only; no automatic Release.
+name: Build selected platforms
 on:
+  push:
+    paths:
+      - ".github/workflows/desktop.yml"
+      - "src-tauri/tauri.conf.json"
+      - "scripts/package-portable.ps1"
+      - "scripts/release-config.mjs"
+      - "scripts/build-plan.mjs"
   workflow_dispatch:
     inputs:
+      build_windows:
+        description: Windows_latest_x64
+        type: boolean
+        default: true
+      build_android:
+        description: Android_15+_arm64-v8a
+        type: boolean
+        default: false
+      build_ubuntu:
+        description: Ubuntu_24.04+_x64
+        type: boolean
+        default: false
       publish_release:
-        description: Create a draft GitHub release (requires signing secrets and public key variable)
+        description: Publish successful artifacts to Release (automatic GITHUB_TOKEN, no custom keys required)
+        type: boolean
+        default: false
+      draft_release:
+        description: Keep the Release as a draft
         type: boolean
         default: false
       tag:
-        description: Release tag matching package version
-        default: v0.1.0
+        description: Optional version tag; defaults to the package version
+        default: ""
 permissions:
   contents: write
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+      has_desktop: ${{ steps.targets.outputs.has_desktop }}
+      android: ${{ steps.targets.outputs.android }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: targets
+        env:
+          BUILD_WINDOWS: ${{ github.event_name != 'workflow_dispatch' || inputs.build_windows }}
+          BUILD_ANDROID: ${{ inputs.build_android }}
+          BUILD_UBUNTU: ${{ inputs.build_ubuntu }}
+        run: node scripts/build-plan.mjs
   desktop:
+    needs: plan
+    if: needs.plan.outputs.has_desktop == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        if: runner.os == 'Windows'
+        with:
+          path: |
+            ~/AppData/Local/tauri
+            ~/AppData/Local/tauri-cli
+          key: tauri-bundlers-${{ runner.os }}-v2
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          cache-all-crates: true
+          cache-on-failure: true
+          shared-key: desktop-${{ matrix.target }}
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - run: npm ci
       - run: npm test
-      - if: inputs.publish_release
-        name: Configure signed updater
-        shell: bash
+      - run: node --test scripts/*.test.mjs
+      - run: node scripts/versions.mjs prepare ${{ matrix.version_key }}
+      - name: Configure optional updater signing
+        id: metadata
         env:
           UPDATER_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           RELEASE_TAG: ${{ inputs.tag }}
-        run: |
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';
-          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
-          if(process.env.RELEASE_TAG!==`v${pkg.version}`)throw Error('Tag must match package version');
-          if(!process.env.UPDATER_PUBLIC_KEY)throw Error('Configure TAURI_SIGNING_PUBLIC_KEY repository variable');
-          const path='src-tauri/tauri.conf.json',config=JSON.parse(fs.readFileSync(path,'utf8'));
-          config.plugins.updater={pubkey:process.env.UPDATER_PUBLIC_KEY,endpoints:['https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json']};
-          config.bundle.createUpdaterArtifacts=true;
-          fs.writeFileSync(path,JSON.stringify(config,null,2));
-          JS
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+          BUILD_PLATFORM: ${{ matrix.version_key }}
+        run: node scripts/release-config.mjs
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ inputs.publish_release && inputs.tag || '' }}
-          releaseName: ${{ inputs.publish_release && format('知枢 ZhiNexus {0}', inputs.tag) || '' }}
-          releaseBody: See .ai/CHANGELOG.md for implementation status and known limitations.
-          releaseDraft: true
+          args: --bundles ${{ matrix.bundles }}
+      - name: Package portable and setup executables without recompiling
+        if: runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: pwsh
+        run: ./scripts/package-portable.ps1
+      - name: Prepare Windows native UI driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/start-windows-driver.ps1
+      - name: Test real Windows storage and portable recovery
+        if: runner.os == 'Windows'
+        run: node scripts/native-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: Windows-native-test-results
+          path: native-test-results/
+      - name: Sign Ubuntu DEB when a publisher key is configured
+        if: runner.os == 'Linux'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/sign-release-files.mjs src-tauri/target/release/bundle/deb
       - uses: actions/upload-artifact@v4
         with:
-          name: ZhiNexus-${{ matrix.os }}
-          path: src-tauri/target/release/bundle/
+          name: ZhiNexus-${{ matrix.target }}
+          path: |
+            release-files/*.exe
+            release-files/*.sig
+            src-tauri/target/release/bundle/deb/
+  android:
+    needs: plan
+    if: needs.plan.outputs.android == 'true'
+    uses: ./.github/workflows/android.yml
+    with:
+      publish_release: false
+    secrets: inherit
+  publish:
+    needs: [plan, desktop, android]
+    if: >-
+      always() && !cancelled() && inputs.publish_release &&
+      needs.plan.result == 'success' &&
+      (needs.desktop.result == 'success' || needs.desktop.result == 'skipped') &&
+      (needs.android.result == 'success' || needs.android.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ZhiNexus-*
+          merge-multiple: true
+          path: release-artifacts
+      - name: Preserve metadata for unchanged platforms
+        run: curl --fail --silent --show-error --location 'https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json' -o previous-latest.json || rm -f previous-latest.json
+      - name: Build platform-specific update manifest
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/updater-manifest.mjs release-artifacts
+      - name: Publish all selected artifacts once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_DRAFT: ${{ inputs.draft_release }}
+        run: |
+          expected_tag="v$(node scripts/versions.mjs release)"
+          release_tag="${RELEASE_TAG:-$expected_tag}"
+          test "$release_tag" = "$expected_tag"
+          if ! gh release view "$release_tag"; then
+            draft_args=()
+            if [ "$RELEASE_DRAFT" = true ]; then draft_args+=(--draft); fi
+            gh release create "$release_tag" "${draft_args[@]}" --target "$GITHUB_SHA" --title "知枢 ZhiNexus $release_tag" --notes-file .ai/CHANGELOG.md
+          fi
+          mapfile -d '' assets < <(find release-artifacts -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.apk' -o -name '*.sig' -o -name 'latest.json' \) -print0)
+          test "${#assets[@]}" -gt 0
+          gh release upload "$release_tag" "${assets[@]}" --clobber

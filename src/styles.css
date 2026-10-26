@@ -2050,3 +2050,59 @@ details pre {
     gap: 8px;
   }
 }
+.brand-icon {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+.about-icon {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  margin-bottom: 20px;
+}
+.category-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.category-edit-row strong {
+  flex: 1;
+  font-size: 0.9rem;
+}
+.category-edit-row small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.category-edit-row input,
+.category-edit-row select {
+  flex: 1;
+  min-width: 100px;
+}
+.category-editor {
+  margin: 25px 0;
+}
+.revision-diff pre {
+  white-space: pre-wrap;
+  font-size: 0.78rem;
+  line-height: 1.8;
+  background: var(--bg);
+  padding: 12px;
+  max-height: 350px;
+  overflow: auto;
+}
+.revision-diff .added {
+  background: #218f4922;
+  color: #388551;
+}
+.revision-diff .removed {
+  background: #d4464622;
+  color: #b85454;
+  text-decoration: line-through;
+}
+.graph-page > .primary {
+  margin-bottom: 18px;
+}

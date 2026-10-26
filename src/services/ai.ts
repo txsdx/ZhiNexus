@@ -114,7 +114,6 @@ export async function generateImage(prompt: string): Promise<string> {
         model: ai.tasks.image.model,
         prompt,
         n: 1,
-        response_format: "b64_json",
       }),
     },
     180000,

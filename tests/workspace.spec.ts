@@ -137,6 +137,7 @@ test("AI review persists answer and grade then schedules and enriches the entry"
   await page.getByRole("button", { name: "检查我的理解" }).click();
   await expect(page.locator(".score strong")).toHaveText("55");
   await page.getByRole("button", { name: "记录结果并继续" }).click();
+  await expect(page.locator(".review-workspace")).toHaveCount(0);
   expect(
     await repository(page, `return store.getSnapshot().reviews[0].phase;`),
   ).toBe("done");
@@ -255,6 +256,9 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
   await expect(page.locator(".markdown img")).toBeVisible();
   await page.getByRole("button", { name: "设置与偏好" }).click();
   await page.getByRole("button", { name: "数据库与备份", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "一个舒适的思考空间" }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "备份到文件", exact: true }).click();
   await page
     .getByRole("dialog")
@@ -513,4 +517,156 @@ test("encrypted credential vault replicates secrets without exposing them or rep
     await repository(other, "return store.getSnapshot().device.notifications;"),
   ).toBe(true);
   await context.close();
+});
+
+test("verified local checkpoint recovers a damaged SQLite image without clearing knowledge", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.createEntry('恢复测试','不能丢失的笔记');`,
+  );
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("keyval-store");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result,
+            tx = db.transaction("keyval", "readwrite");
+          tx.objectStore("keyval").put(
+            new Uint8Array([0, 1, 2, 3, 4]),
+            "zhinexus.sqlite.v1",
+          );
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await expect(page.locator(".app-shell")).toBeVisible();
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].content;"),
+  ).toBe("不能丢失的笔记");
+  await expect(page.locator(".toast")).toContainText("数据库已从验证副本恢复");
+});
+
+test("category rename, move and removal preserve entries and reject cycles", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.patch('category','a',{name:'大类',parent:''});await store.patch('category','b',{name:'子类',parent:'a'});await store.createEntry('类别中的知识','content','test','b');`,
+  );
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await page.getByRole("button", { name: "知识分类", exact: true }).click();
+  await page.getByRole("button", { name: "编辑分类 子类" }).click();
+  await page.getByRole("textbox", { name: "修改分类名称" }).fill("新子类");
+  await page.getByRole("button", { name: "保存分类" }).click();
+  await expect(
+    page.getByRole("button", { name: "编辑分类 新子类" }),
+  ).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "删除分类 新子类" }).click();
+  await expect(
+    page.getByRole("button", { name: "编辑分类 新子类" }),
+  ).toHaveCount(0);
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].category;"),
+  ).toBe("a");
+});
+
+test("cloud audit repairs corrupt bytes with quarantine and restores snapshots by union", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const files = new Map<string, string>();
+  await mockDav(context, files);
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',davUser:'test',davPassword:'test',syncMinutes:0});await store.createEntry('云恢复','verified');`,
+  );
+  await page.evaluate(async () => {
+    const s = await import("/src/services/sync.ts" as string);
+    await s.synchronize();
+    await s.uploadSnapshot();
+  });
+  const [path, body] = [...files.entries()].find(([key]) =>
+    key.startsWith("events/"),
+  )!;
+  const corrupt = JSON.parse(body);
+  corrupt.op.patch.content = "BROKEN";
+  files.set(path, JSON.stringify(corrupt));
+  const result = await page.evaluate(async () => {
+    const { auditAndRepair } = await import(
+      "/src/services/integrity.ts" as string
+    );
+    return auditAndRepair();
+  });
+  expect(result.repaired).toBeGreaterThan(0);
+  expect([...files.keys()].some((k) => k.startsWith("quarantine/"))).toBe(true);
+  expect(files.get(path)).toBe(body);
+  const otherContext = await browser.newContext({ locale: "zh-CN" });
+  await mockDav(otherContext, files);
+  const other = await otherContext.newPage();
+  await other.goto("/");
+  await repository(
+    other,
+    `await store.createEntry('本地保留','local');await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',davUser:'test',davPassword:'test',syncMinutes:0});`,
+  );
+  await other.evaluate(async () => {
+    const { recoverCloudSnapshots } = await import(
+      "/src/services/integrity.ts" as string
+    );
+    await recoverCloudSnapshots();
+  });
+  expect(
+    await repository(
+      other,
+      "return store.getSnapshot().entries.map(e=>e.title).sort();",
+    ),
+  ).toEqual(["云恢复", "本地保留"].sort());
+  await otherContext.close();
+});
+
+test("agent write receipts prevent duplicate operations after delivery retries", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator(".app-shell")).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const { executeKnowledgeTool } = await import(
+      "/src/services/agent-tools.ts" as string
+    );
+    let confirmations = 0;
+    const allow = async () => {
+      confirmations++;
+      return true;
+    };
+    const a = await executeKnowledgeTool(
+      "create_entry",
+      { title: "幂等测试", content: "once" },
+      "tool-test-receipt",
+      allow,
+    );
+    const b = await executeKnowledgeTool(
+      "create_entry",
+      { title: "幂等测试", content: "once" },
+      "tool-test-receipt",
+      allow,
+    );
+    return { a, b, confirmations };
+  });
+  expect(result.confirmations).toBe(1);
+  expect(result.a).toEqual(result.b);
+  expect(
+    await repository(page, "return store.getSnapshot().entries.length;"),
+  ).toBe(1);
 });

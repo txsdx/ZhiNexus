@@ -36,7 +36,14 @@ export class WebDAV implements SyncTransport {
   }
   /** Create the root and immutable storage collections; existing collections are expected. */
   async init() {
-    for (const path of ["", "events/", "blobs/", "devices/", "snapshots/"]) {
+    for (const path of [
+      "",
+      "events/",
+      "blobs/",
+      "devices/",
+      "snapshots/",
+      "quarantine/",
+    ]) {
       const res = await this.call(path, "MKCOL");
       if (!res.ok && res.status !== 405)
         throw Error(`WebDAV MKCOL HTTP ${res.status}；请确保父目录存在`);
@@ -76,7 +83,10 @@ export class WebDAV implements SyncTransport {
   async read(path: string) {
     const res = await this.call(path, "GET");
     if (!res.ok) throw Error(`WebDAV GET HTTP ${res.status}`);
-    return boundedText(res, 32 * 1024 * 1024);
+    return boundedText(
+      res,
+      (path.startsWith("snapshots/") ? 256 : 32) * 1024 * 1024,
+    );
   }
   /** Upload deterministic bytes. Repeating an identical content-addressed PUT is idempotent. */
   async write(path: string, body: string) {

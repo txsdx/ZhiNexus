@@ -1,4 +1,5 @@
 /** Reusable taxonomy preview and native/browser backup file export. */
+import { categoryCount } from "../../services/categories";
 import { useT } from "../../components/common";
 import { native } from "../../core/database";
 import type { Category } from "../../core/types";
@@ -23,7 +24,7 @@ export function CategoryTree({
           <li key={c.id}>
             <span>
               {c.name}
-              <b>{assignments.filter((a) => a.category === c.id).length}</b>
+              <b>{categoryCount(categories, assignments, c.id)}</b>
             </span>
             <ul>{render(c.id, next)}</ul>
           </li>
@@ -44,7 +45,7 @@ export function CategoryTree({
 /** saveFile exposes one focused settings workflow. */
 export async function saveFile(text: string) {
   const name = "ZhiNexus-" + new Date().toISOString().slice(0, 10) + ".znb";
-  if (native && !/Android/i.test(navigator.userAgent)) {
+  if (native) {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const path = await save({
       defaultPath: name,

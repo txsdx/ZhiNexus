@@ -17,7 +17,9 @@ import {
   X,
 } from "lucide-react";
 import Fuse from "fuse.js";
+import { reconcileReminders } from "./services/reminders";
 import { enrichEntry } from "./services/enrichment";
+import { native } from "./core/database";
 import { registerCapture } from "./services/capture";
 import { Locale, useKnowledge, useT, Modal } from "./components/common";
 import { Library } from "./pages/Library";
@@ -45,16 +47,18 @@ function Capture({
   onOpen,
   initial = "",
   notify,
+  source = "manual-capture",
 }: {
   onClose: () => void;
   onOpen: (id: string) => void;
   initial?: string;
+  source?: string;
   notify: (text: string) => void;
 }) {
   const s = useKnowledge(),
     t = useT(),
     [title, setTitle] = useState(initial.split(/\r?\n/)[0].slice(0, 120)),
-    [content, setContent] = useState(initial.length > 120 ? initial : ""),
+    [content, setContent] = useState(initial),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const matches = title.trim()
@@ -73,6 +77,7 @@ function Capture({
           "Capture it now. Understanding can grow later. Similar entries appear below.",
         )}
       </p>
+      {initial && <p className="muted">{t("来源：", "Source: ") + source}</p>}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -83,13 +88,7 @@ function Capture({
           );
           const action = exact
             ? Promise.resolve(exact.id)
-            : store.createEntry(
-                title,
-                content || undefined,
-                initial
-                  ? "shortcut:clipboard-source-unknown"
-                  : "manual-capture",
-              );
+            : store.createEntry(title, content || undefined, source);
           void action
             .then((id) => {
               onClose();
@@ -230,7 +229,16 @@ function Shell() {
     [query, setQuery] = useState(""),
     [capture, setCapture] = useState(false),
     [captureText, setCaptureText] = useState(""),
+    [captureSource, setCaptureSource] = useState("manual-capture"),
     [toast, setToast] = useState("");
+  const reminderSignature = s.entries
+    .map((e) => e.id + ":" + e.card.due.toISOString())
+    .sort()
+    .join("|");
+  useEffect(() => {
+    if (s.ready)
+      void reconcileReminders().catch((e) => setToast(String(e.message)));
+  }, [s.ready, s.device.notifications, reminderSignature]);
   const search = useRef<HTMLInputElement>(null);
   const navigate = (next: string) => {
     if (
@@ -244,8 +252,9 @@ function Shell() {
   useEffect(() => {
     let cleanup: undefined | (() => void),
       live = true;
-    void registerCapture((text) => {
-      setCaptureText(text);
+    void registerCapture((captured) => {
+      setCaptureSource(captured.source);
+      setCaptureText(captured.text);
       setCapture(true);
     })
       .then((fn) => {
@@ -259,6 +268,15 @@ function Shell() {
     };
   }, []);
   const notify = (text: string) => setToast(text);
+  useEffect(() => {
+    if (store.db.recoveryNotice)
+      notify(
+        t(
+          "数据库已从验证副本恢复，原文件已保留。",
+          "Database recovered from a verified copy; original retained.",
+        ),
+      );
+  }, []);
   useEffect(() => {
     const onFailure = (event: PromiseRejectionEvent) => {
       event.preventDefault();
@@ -287,11 +305,13 @@ function Shell() {
         search.current?.focus();
       }
       if (
+        !native &&
         (e.ctrlKey || e.metaKey) &&
         e.shiftKey &&
         e.key.toLowerCase() === "n"
       ) {
         e.preventDefault();
+        setCaptureSource("in-app-selection:ZhiNexus");
         setCaptureText(window.getSelection()?.toString() ?? "");
         setCapture(true);
       }
@@ -345,7 +365,7 @@ function Shell() {
             navigate("home");
           }}
         >
-          <span className="brand-mark">知</span>
+          <img className="brand-icon" src="/app-icon.png" alt="" />
           <span>
             <strong>知枢</strong>
             <small>ZhiNexus</small>
@@ -354,6 +374,7 @@ function Shell() {
         <button
           className="capture-button"
           onClick={() => {
+            setCaptureSource("manual-capture");
             setCaptureText("");
             setCapture(true);
           }}
@@ -472,7 +493,11 @@ function Shell() {
             <Library
               dashboard
               onOpen={open}
-              onCreate={() => setCapture(true)}
+              onCreate={() => {
+                setCaptureText("");
+                setCaptureSource("manual-capture");
+                setCapture(true);
+              }}
               onReview={() => navigate("review")}
             />
           )}{" "}
@@ -480,7 +505,11 @@ function Shell() {
             <Library
               query={query}
               onOpen={open}
-              onCreate={() => setCapture(true)}
+              onCreate={() => {
+                setCaptureText("");
+                setCaptureSource("manual-capture");
+                setCapture(true);
+              }}
               onReview={() => navigate("review")}
             />
           )}{" "}
@@ -507,6 +536,7 @@ function Shell() {
       {capture && (
         <Capture
           notify={notify}
+          source={captureSource}
           initial={captureText}
           onClose={() => setCapture(false)}
           onOpen={open}

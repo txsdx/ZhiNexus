@@ -1,5 +1,21 @@
 # 更新日志
 
+## 0.2.0 · 2026-10-26
+
+- 透明 1024 图标和平台资源；工具无指定 image-2.5 选择字段，来源记录见 ICON.md。
+- Windows/Android/Ubuntu 可选目标、默认仅 Windows、NSIS/portable EXE、APK、Deb；使用 GITHUB_TOKEN 发布，npm/Rust/Gradle/NDK/打包工具缓存。
+- 修复实际 Action 的中文 WiX 码页和 Debian 包名错误，停用 macOS。
+- portable 标记统一 _data 根，涵盖 SQL、配置、WebView、恢复与更新文件。
+- SQLite 三代验证检查点、原生耐久日志、损坏隔离和自动恢复；浏览器原子检查点。
+- WebDAV 深度审计、隔离坏块并从可信副本修复、云快照合并恢复。
+- 分类重命名/移动/删除、递归计数、内容行差异、Dagre 自动图排版。
+- Android 系统复习通知排程与重启重建；Windows 选区/进程、X11 PRIMARY 捕获。
+- Agent 工具调用逐步持久化、原子本地回执与陈旧编辑保护，避免重试重复写入。
+- 统一 latest.json 平台更新、独立补丁版本、SHA-256/可选发布者签名、Android FileProvider 安装授权、Windows 便携更新助手。
+- 修正设置面板全部同时显示的条件渲染缺陷，补齐原生/设备 CI 测试。Git 本机作者 codex。
+
+验证：23 核心、16 发布脚本、13 浏览器测试通过，TypeScript/Vite、Linux Rust 编译及真实 WebKit 便携隔离/坏库恢复通过，Android x86_64 debug（含安装器）编译通过。最终 arm64/CI 状态见 STATUS；真实服务和正式升级未验证。
+
 ## 0.1.0 · 2026-10-26
 
 从仅含 README 的仓库建立首个可运行知枢工程。

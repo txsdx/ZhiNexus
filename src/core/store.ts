@@ -97,12 +97,23 @@ export class KnowledgeStore {
   /** Open storage; a fresh writer identity prevents cross-tab counter reuse. */
   async init() {
     await this.db.open();
-    if ((await this.db.integrity()) !== "ok")
-      throw Error("SQLite 完整性检查失败；未自动清除数据");
-    const persisted = await this.db.events();
-    for (const event of persisted) await validateEnvelope(event);
-    assertCausalClosure(persisted);
-    validateDocuments(materialize(persisted));
+    const validate = async () => {
+      if ((await this.db.integrity()) !== "ok")
+        throw Error("SQLite integrity_check failed");
+      const persisted = await this.db.events();
+      for (const event of persisted) await validateEnvelope(event);
+      assertCausalClosure(persisted);
+      validateDocuments(materialize(persisted));
+    };
+    try {
+      await this.db.replayJournal();
+      await validate();
+    } catch {
+      await this.db.recover();
+      await this.db.replayJournal();
+      await validate();
+    }
+    await this.db.checkpoint();
     this.deviceId = crypto.randomUUID();
     const device = await this.db.local("device", defaultDevice);
     await this.reload(device);
@@ -136,6 +147,8 @@ export class KnowledgeStore {
     source = "manual",
   ) {
     return this.serial(async () => {
+      if (!this.deviceId)
+        throw Error("数据库尚未初始化 / Storage initialization incomplete");
       const events = await this.db.events(),
         vector = joinVectors(events),
         added: Envelope[] = [];
@@ -153,7 +166,7 @@ export class KnowledgeStore {
           at: new Date().toISOString(),
           source,
         };
-        added.push({ op, hash: await sha256(op) });
+        added.push(await validateEnvelope({ op, hash: await sha256(op) }));
       }
       validateDocuments(materialize([...events, ...added]));
       await this.db.append(added);

@@ -1,4 +1,5 @@
 /** Categories configuration panel with explicit persistence and verification. */
+import { CategoryEditor } from "../../components/CategoryEditor";
 import { Sparkles } from "lucide-react";
 import { store } from "../../core/store";
 import { proposeClassification } from "../../services/classification";
@@ -58,6 +59,7 @@ export function CategoriesPanel() {
         {t("添加分类", "Add category")}
       </button>
       <CategoryTree categories={s.categories} assignments={s.entries} />
+      <CategoryEditor />
       <button
         className="primary"
         disabled={!!busy || !s.entries.length}

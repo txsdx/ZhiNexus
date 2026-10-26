@@ -1,4 +1,5 @@
 /** Editable knowledge graph using React Flow; relationships and node positions are replicated documents. */
+import dagre from "@dagrejs/dagre";
 import { useEffect, useMemo } from "react";
 import {
   ReactFlow,
@@ -84,6 +85,31 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
           </p>
         </div>
       </div>
+      <button
+        className="primary"
+        onClick={() => {
+          const graph = new dagre.graphlib.Graph()
+            .setGraph({ rankdir: "LR", nodesep: 70, ranksep: 110 })
+            .setDefaultEdgeLabel(() => ({}));
+          for (const n of nodes)
+            graph.setNode(n.id, { width: 190, height: 65 });
+          for (const e of edges) graph.setEdge(e.source, e.target);
+          dagre.layout(graph);
+          void store.patch(
+            "setting",
+            "graph",
+            Object.fromEntries(
+              nodes.map((n) => {
+                const p = graph.node(n.id);
+                return [n.id, json({ x: p.x - 95, y: p.y - 32.5 })];
+              }),
+            ),
+            "graph-auto-layout",
+          );
+        }}
+      >
+        {t("自动整理布局", "Arrange automatically")}
+      </button>
       <div className="graph-canvas">
         <ReactFlow
           nodes={nodes}

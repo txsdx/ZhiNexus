@@ -1,4 +1,5 @@
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
+import { RevisionDiff } from "../components/RevisionDiff";
 import { useEffect, useState, type ChangeEvent } from "react";
 import {
   ArrowLeft,
@@ -545,6 +546,7 @@ export function EntryPage({
                     "Process provenance is only available to supported native capture flows.",
                   )}
                 </p>
+                <RevisionDiff event={e} history={doc?.history ?? []} />
                 <pre>{JSON.stringify(e.op.patch, null, 2)}</pre>
               </details>
             ))}

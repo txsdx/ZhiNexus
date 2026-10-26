@@ -1,8 +1,11 @@
 /** Database configuration panel with explicit persistence and verification. */
+import {
+  auditAndRepair,
+  auditLocal,
+  recoverCloudSnapshots,
+} from "../../services/integrity";
 import { ConflictManager } from "../../components/ConflictManager";
 import { Database, Download, ShieldCheck, Upload } from "lucide-react";
-import { stateHash, validateEnvelope } from "../../core/crdt";
-import { merkle } from "../../core/crypto";
 import { store } from "../../core/store";
 import { uploadSnapshot } from "../../services/sync";
 import { useSettings } from "./context";
@@ -23,6 +26,22 @@ export function DatabasePanel() {
   return (
     <>
       <h2>{t("数据始终属于你", "Your data stays yours")}</h2>
+      {store.db.storageLocation && (
+        <div className="notice">
+          {store.db.storageLocation.portable
+            ? t(
+                "便携模式：数据随程序目录保存",
+                "Portable mode: data stays with this executable",
+              )
+            : t(
+                "系统用户应用数据目录",
+                "System user application-data directory",
+              )}
+          <code style={{ overflowWrap: "anywhere" }}>
+            {store.db.storageLocation.root}
+          </code>
+        </div>
+      )}
       <div className="database-stats">
         <strong>
           {(size / 1024 / 1024).toFixed(2)} <small>MiB</small>
@@ -37,20 +56,8 @@ export function DatabasePanel() {
           disabled={!!busy}
           onClick={() =>
             void act(t("校验日志与附件…", "Checking integrity…"), async () => {
-              for (const e of s.events) await validateEnvelope(e);
-              for (const h of await store.db.blobHashes())
-                await store.db.blob(h);
-              setReport(
-                "SQLite: " +
-                  (await store.db.integrity()) +
-                  "\nMerkle: " +
-                  (await merkle([
-                    ...s.events.map((e) => e.hash),
-                    ...(await store.db.blobHashes()),
-                  ])) +
-                  "\nState: " +
-                  (await stateHash(s.events)),
-              );
+              const report = await auditLocal();
+              setReport("SQLite: ok\n" + JSON.stringify(report, null, 2));
             })
           }
         >
@@ -87,6 +94,49 @@ export function DatabasePanel() {
           {t("上传完整快照", "Upload full snapshot")}
         </button>
       </div>
+      <h3>{t("同步修复与恢复", "Replica repair and recovery")}</h3>
+      <div className="actions">
+        <button
+          disabled={!!busy}
+          onClick={() =>
+            void act(
+              t("深度校验并修复…", "Deep auditing and repairing…"),
+              async () =>
+                setReport(JSON.stringify(await auditAndRepair(), null, 2)),
+            )
+          }
+        >
+          {t("校验并修复云端副本", "Audit and repair cloud replica")}
+        </button>
+        <button
+          disabled={!!busy}
+          onClick={() => {
+            if (
+              window.confirm(
+                t(
+                  "验证并合并云端全部完整快照？本地修改会保留。",
+                  "Verify and merge cloud snapshots? Local edits will be retained.",
+                ),
+              )
+            )
+              void act(
+                t("恢复云快照…", "Recovering cloud snapshots…"),
+                async () =>
+                  setReport(
+                    JSON.stringify(await recoverCloudSnapshots(), null, 2),
+                  ),
+              );
+          }}
+        >
+          {t("从云端快照恢复", "Recover cloud snapshots")}
+        </button>
+      </div>
+      <p className="muted">
+        {t(
+          "修复前会保留远端损坏文件；只使用摘要完全匹配的副本，修复后重新读取验证。本机会自动保留已验证恢复点。",
+          "Damaged remote files are quarantined before repair. Only matching verified copies are used, then read back. Verified local recovery points are retained automatically.",
+        )}
+      </p>
       <h3>{t("加密文件备份", "Encrypted file backup")}</h3>
       <p className="muted">
         {t(

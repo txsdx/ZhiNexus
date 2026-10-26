@@ -43,7 +43,6 @@ export function Settings({
   } = context;
   return (
     <SettingsContext.Provider value={context}>
-      (
       <div className="page settings-page">
         <div className="page-heading">
           <div>
@@ -72,14 +71,14 @@ export function Settings({
             ))}
           </aside>
           <div className="settings-content">
-            {<AppearancePanel />}
-            {<ModelsPanel />}
-            {<PromptsPanel />}
-            {<CategoriesPanel />}
-            {<SynchronizationPanel />}
-            {<McpPanel />}
-            {<DatabasePanel />}
-            {<AboutPanel />}
+            {tab === "appearance" && <AppearancePanel />}
+            {tab === "ai" && <ModelsPanel />}
+            {tab === "prompts" && <PromptsPanel />}
+            {tab === "categories" && <CategoriesPanel />}
+            {tab === "sync" && <SynchronizationPanel />}
+            {tab === "mcp" && <McpPanel />}
+            {tab === "database" && <DatabasePanel />}
+            {tab === "about" && <AboutPanel />}
             {report && <pre className="report">{report}</pre>}
           </div>
         </div>
@@ -206,7 +205,6 @@ export function Settings({
           </Modal>
         )}
       </div>
-      )
     </SettingsContext.Provider>
   );
 }

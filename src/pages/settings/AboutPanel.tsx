@@ -1,16 +1,31 @@
-/** About configuration panel with explicit persistence and verification. */
-import { RefreshCw } from "lucide-react";
+/** Platform-specific version and update controls backed by the shared GitHub Release manifest. */
+import { useState, useEffect } from "react";
+import { RefreshCw, Download } from "lucide-react";
 import { native } from "../../core/database";
-import { installUpdate, latestRelease } from "../../services/device";
+import {
+  checkUpdates,
+  applyUpdate,
+  type UpdateInfo,
+} from "../../services/updates";
+import { Markdown } from "../../components/Markdown";
 import { useSettings } from "./context";
-/** AboutPanel exposes one focused settings workflow. */
+import versions from "../../../versions.json";
+/** Show only the running platform's patch changes; installers retain normal operating-system consent prompts. */
 export function AboutPanel() {
-  const { t, busy, act, setReport, notify } = useSettings();
+  const { t, busy, act, notify } = useSettings(),
+    [update, setUpdate] = useState<UpdateInfo | null>(null),
+    [current, setCurrent] = useState(versions.platforms.windows);
+  useEffect(() => {
+    if (native)
+      void import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke<{ version: string }>("update_identity"))
+        .then((r) => setCurrent(r.version));
+  }, []);
   return (
     <>
-      <div className="about-mark">知</div>
+      <img className="about-icon" src="/app-icon.png" alt="ZhiNexus" />
       <h2>知枢 · ZhiNexus</h2>
-      <p>0.1.0 · Local-first learning workspace</p>
+      <p>{current} · Local-first learning workspace</p>
       <p>
         {t(
           "让零散的知识，生长为自己的理解。",
@@ -21,44 +36,64 @@ export function AboutPanel() {
         <button
           disabled={!!busy}
           onClick={() =>
-            void act(t("读取 Release…", "Checking releases…"), async () => {
-              const r = await latestRelease();
-              setReport(r.version + "\n" + r.url);
+            void act(t("读取更新信息…", "Checking updates…"), async () => {
+              const info = await checkUpdates();
+              setUpdate(info);
+              notify(
+                info?.available
+                  ? t(
+                      "发现此平台的新版本",
+                      "A new version is available for this platform",
+                    )
+                  : t(
+                      "此平台已是最新版本，或尚无可用产物",
+                      "Already current, or no artifact is published for this platform",
+                    ),
+              );
             })
           }
         >
           <RefreshCw size={16} />
-          {t("检查 GitHub Release", "Check GitHub release")}
+          {t("检查更新", "Check for updates")}
         </button>
         <button
-          disabled={!!busy || !native}
+          className="primary"
+          disabled={!!busy || !native || !update?.available}
           onClick={() => {
             if (
+              update &&
               window.confirm(
                 t(
-                  "下载并安装签名更新？安装后将重启。",
-                  "Download and install a signed update? The app will restart.",
+                  "下载并校验更新，然后打开安装程序？系统可能要求确认权限。",
+                  "Download and verify the update, then open its installer? The OS may require consent.",
                 ),
               )
             )
               void act(
-                t("检查签名更新…", "Checking signed updates…"),
-                async () =>
-                  notify(
-                    (await installUpdate())
-                      ? t("正在重启", "Restarting")
-                      : t("暂无更新", "No updates available"),
-                  ),
+                t("下载并校验…", "Downloading and verifying…"),
+                async () => {
+                  await applyUpdate(update);
+                  notify(t("已启动更新安装程序", "Update installer started"));
+                },
               );
           }}
         >
-          {t("一键安装签名更新", "Install signed update")}
+          <Download size={16} />
+          {t("一键更新", "Update now")}
         </button>
       </div>
+      {update && (
+        <section>
+          <h3>
+            {update.current} → {update.version}
+          </h3>
+          <Markdown>{update.notes}</Markdown>
+        </section>
+      )}
       <p className="muted">
         {t(
-          "一键更新需发布者配置签名公钥及 Release 更新清单，Android 使用签名 APK。当前版本尚未发布。",
-          "Desktop updates require a publisher signing key and release manifest. Android uses signed APKs. This version has not been released.",
+          "所有产物必须通过 HTTPS 来源与 SHA-256 校验；配置发布者公钥时还强制验证签名。安装版 Windows、Android 和 Ubuntu 会打开系统安装程序，便携版 Windows 会安全替换自身并重启。",
+          "All artifacts require trusted HTTPS and SHA-256 verification; publisher signatures are enforced when a key is configured. Installed Windows, Android and Ubuntu builds open their OS installer. Windows portable builds replace themselves and restart.",
         )}
       </p>
       <a

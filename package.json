@@ -1,6 +1,6 @@
 {
   "name": "zhinexus",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,9 +11,12 @@
     "tauri": "tauri",
     "check": "tsc -b",
     "format": "prettier --write src tests *.ts *.json .github src-tauri/*.json src-tauri/capabilities/*.json",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "version:bump": "node scripts/versions.mjs bump",
+    "test:release": "node --test scripts/*.test.mjs"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.8",
     "@fontsource-variable/noto-sans-sc": "^5.3.1",
     "@fontsource-variable/noto-serif-sc": "^5.3.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -28,6 +31,7 @@
     "@tauri-apps/plugin-sql": "^2.3.0",
     "@tauri-apps/plugin-updater": "^2.9.0",
     "@xyflow/react": "^12.8.0",
+    "diff": "^8.0.4",
     "fuse.js": "^7.1.0",
     "idb-keyval": "^6.2.2",
     "katex": "^0.16.22",

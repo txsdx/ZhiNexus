@@ -15,3 +15,11 @@ test-results/
 .DS_Store
 .idea/
 .vscode/
+
+src-tauri/target-desktop/
+
+android-test-results/
+native-test-results/
+release-files/
+release-artifacts/
+previous-latest.json

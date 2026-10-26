@@ -63,4 +63,6 @@
 - Windows 0.3.1 依赖修复：cargo check --locked 通过，Windows 目标树不再包含 zip，Cargo.lock 已移除 zip/相关包；cargo-audit 仅剩未启用 rsa 的上游公告。
 
 - Ubuntu 0.3.1 GitHub run 40260563816 全部成功，包含实际 Deb 原生编辑、普通/portable 隔离、主库+WAL 损坏后检查点/日志恢复。
-- Windows 驱动生命周期已修正；下一失败为 EdgeDriver 的 DevToolsActivePort，驱动已启动但 profile 目录与自定义 webview 根不一致。测试使用 Microsoft 原生 WebView2 驱动并显式指定实际普通/portable 的 userDataFolder，启用详细启动日志，避免改变产品目录规则。待 CI 复验。
+- Windows 驱动生命周期已修正；下一失败为 EdgeDriver 的 DevToolsActivePort，驱动已启动但尚不能连接 WebView，正对齐实际 profile 目录。测试使用 Microsoft 原生 WebView2 驱动并显式指定实际普通/portable 的 userDataFolder，启用详细启动日志，避免改变产品目录规则。待 CI 复验。
+
+- Android run 40259812214：arm64 release、APK签名、x86_64 debug 全部成功；安装 API35 测试镜像时 runner 磁盘满，尚未安装/运行应用。0.3.1 CI 已释放无关预装工具空间并缓存原厂系统镜像，等待复跑。

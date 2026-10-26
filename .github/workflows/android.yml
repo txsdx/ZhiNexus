@@ -32,6 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Reserve space for two Android ABIs and the API 35 emulator
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -105,6 +110,10 @@ jobs:
         run: |
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_CACHE_ROOT }}/system-images/android-35/google_apis/x86_64
+          key: android-test-image-api35-google-apis-x86_64-v1
       - name: Test installed app on Android 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -146,6 +155,7 @@ jobs:
           mapfile -d '' assets < <(find release-files -type f \( -name '*.apk' -o -name '*.sig' -o -name 'latest.json' \) -print0)
           gh release upload "$release_tag" "${assets[@]}" --clobber
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ZhiNexus-Android
           path: |

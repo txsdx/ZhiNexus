@@ -6,7 +6,7 @@
   <p><a href="#快速开始">快速开始</a> · <a href="#功能">功能</a> · <a href="#数据与同步">数据与同步</a> · <a href="#构建原生应用">原生构建</a> · <a href=".ai/STATUS.md">完成情况</a></p>
 </div>
 
-> **0.3.0 开发版 / Early development.** 核心学习流程、数据库滚动备份/日志恢复、便携目录与三平台更新协议已实现。Linux 原生恢复测试和 Android 编译通过；Windows、Android 设备测试与正式安装升级尚需 CI/真机验证。真实 AI/WebDAV 与大库性能未完成验证。完整边界见 [已知问题](.ai/KNOWN_ISSUES.md)。
+> **0.3 系列开发版 / Early development.** 核心学习流程、数据库滚动备份/日志恢复、便携目录与三平台更新协议已实现。Linux 原生恢复测试和 Android 编译通过；Windows、Android 设备测试与正式安装升级尚需 CI/真机验证。真实 AI/WebDAV 与大库性能未完成验证。完整边界见 [已知问题](.ai/KNOWN_ISSUES.md)。
 
 ## 功能
 

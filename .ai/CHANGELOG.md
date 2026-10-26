@@ -1,5 +1,12 @@
 # 更新日志
 
+## Android 0.3.1 · 2026-10-26
+
+- GitHub 已完成 arm64 发布 APK/签名及 x86_64 调试 APK 编译；设备测试首次因 runner 磁盘不足、无法解压 API35 镜像中止，尚未进入应用。
+- 在 Android 专用临时 runner 删除无关 .NET/Haskell/Swift/CodeQL 预装工具，保留 SDK/NDK/JDK/Rust，预留镜像空间；缓存原厂测试系统镜像。
+- 无论测试结果如何保留已生成安装包为 Artifact；失败测试仍阻止 Release 发布，不隐藏失败。
+
+
 ## Windows 0.3.1 · 2026-10-26
 
 - 禁用更新插件可选 ZIP 解压依赖，保留 Rustls TLS/系统代理；项目仅处理直接 exe/apk/deb 更新，不启用 zip 格式。

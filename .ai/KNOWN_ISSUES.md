@@ -31,3 +31,5 @@
 ## 已核查的依赖审计范围
 
 npm audit 在安全依赖升级后为 0 项。cargo-audit 0.22.2（RustSec 数据库 2026-10-24）报告锁文件中的 rsa 0.9.10（RUSTSEC-2023-0071，无上游修复）和 zip 4.6.1（三项 2026 提取相关 advisory，修复要求 zip>=9）。rsa 在本工程启用的目标特性图中不出现。zip 来自 Tauri updater 的可选 Windows ZIP 功能，已在 Windows 0.3.1 显式禁用该默认 feature，保留 TLS/系统代理，并由 Cargo 重算移除了 zip 锁项；三平台更新只处理 exe/apk/deb。需要通过 cargo tree 的实际 Windows 目标检查，不能因 Linux 默认树不出现就推定所有平台不使用。更新后的 cargo-audit 仅剩未启用 rsa 的 advisory，不能称整个锁文件零 advisory；没有忽略审计条目。GTK 3/glib 等上游链另有维护/unsoundness notice，应用未直接使用被指出的 VariantStrIter API。GitHub Dependabot 剩余 1 moderate 的详情读取权限为 403，不能推定准确归因。
+
+Android GitHub 首轮两种 APK 编译/签名成功，但设备镜像因 runner 磁盘满安装失败；已补充专用 runner 空间清理和原厂镜像缓存。必须在新模拟器实际安装/运行后才标记手机验证通过。

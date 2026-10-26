@@ -115,7 +115,10 @@ jobs:
         if: always()
         with:
           name: ${{ runner.os }}-native-test-results
-          path: native-test-results/
+          path: |
+            native-test-results/
+            ${{ runner.temp }}/tauri-driver.log
+            ${{ runner.temp }}/tauri-driver.err.log
       - name: Sign Ubuntu DEB when a publisher key is configured
         if: runner.os == 'Linux'
         env:

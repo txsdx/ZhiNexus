@@ -50,3 +50,6 @@
 
 - Ubuntu 0.3.1（仅 CI/产物补丁）：实际下载并检查 0.2 Deb，包名 zhi-nexus、架构 amd64、依赖正常；发现 artifact 同时包含中间打包树，已收窄为仅 .deb/.sig，减少冗余上传。打包改为仅手动/API dispatch，push 保留 Validate。Windows/Android 仍为 0.3.0，不产生无意义平台更新。
 - Android 0.3.0 arm64 Release APK、开发签名验证、aapt minSdk35/唯一 arm64-v8a/versionName0.3.0、最新 JSON 生成：全部通过；APK 约 38 MiB。
+
+- Ubuntu 0.3.0 的 Deb 原生测试已创建/编辑/重启并恢复最新正文；隔离断言未通过，原因是 SQLite WAL 本身足以修复单独损坏的主文件头。故障注入改为同时损坏主文件/WAL 头，独立检查点+日志恢复在本机真实 WebKit 再验证通过。测试诊断输出包含驱动日志，不降低断言。纯测试修正不触发无关平台用户更新。
+- Windows 0.2.0 的编译和 portable/setup 打包已通过，新增原生测试失败，等待 job 完成后读取日志定位，尚不记运行通过。

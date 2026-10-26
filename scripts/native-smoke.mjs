@@ -137,9 +137,13 @@ try {
     db = path.join(root, "zhinexus.db");
   assert.ok(fs.existsSync(db));
   assert.ok(fs.existsSync(path.join(root, "recovery", "journal", "events")));
-  const damaged = fs.readFileSync(db);
-  damaged.fill(0, 0, 32);
-  fs.writeFileSync(db, damaged);
+  // WAL can legitimately repair the primary header by itself. Damage both headers to exercise the independent checkpoint/journal fallback.
+  for (const file of [db, db + "-wal"]) {
+    if (!fs.existsSync(file)) continue;
+    const damaged = fs.readFileSync(file);
+    damaged.fill(0, 0, Math.min(64, damaged.length));
+    fs.writeFileSync(file, damaged);
+  }
   await start();
   await click(".sidebar nav button:nth-child(2)");
   await type(".search-box input", "Native portable recovery");
@@ -167,6 +171,10 @@ try {
   );
 } catch (error) {
   fs.mkdirSync("native-test-results", { recursive: true });
+  fs.writeFileSync(
+    "native-test-results/error.txt",
+    String(error.stack || error),
+  );
   try {
     fs.writeFileSync(
       "native-test-results/native-failure.txt",

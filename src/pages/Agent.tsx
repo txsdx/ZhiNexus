@@ -1,4 +1,5 @@
 /** Global and entry-scoped assistant with isolated persisted topic histories and tool confirmation. */
+import { diagnostics } from "../services/diagnostics";
 import { useState } from "react";
 import { ArrowUp, Bot, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useKnowledge, useT, Busy, Empty, Modal } from "../components/common";
@@ -61,6 +62,7 @@ export function Agent({
         { model, effort },
       );
     } catch (e) {
+      diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
       notify(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);

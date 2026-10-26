@@ -1,4 +1,5 @@
 /** Application shell, responsive navigation, capture flow and per-device background services. */
+import { diagnostics } from "./services/diagnostics";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -137,7 +138,14 @@ function Capture({
                     ),
                   );
             })
-            .catch((e) => setError(String(e)))
+            .catch((e) => {
+              diagnostics.error(
+                "ai",
+                "词条自动整理失败 / Entry enrichment failed",
+                e,
+              );
+              setError(String(e));
+            })
             .finally(() => setSaving(false));
         }}
       >
@@ -403,6 +411,7 @@ function Shell() {
         void synchronize()
           .then(() => notify(t("增量同步完成", "Incremental sync complete")))
           .catch((e) => {
+            diagnostics.error("app", "自动同步失败 / Automatic sync failed", e);
             notify(String(e.message));
             void notifyCompletion("sync", String(e.message)).catch(() => {});
           });

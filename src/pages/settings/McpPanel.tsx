@@ -1,7 +1,6 @@
 /** Local MCP transport configuration, validated argument/environment editing and explicit connection tests. */
 import { useState } from "react";
 import { z } from "zod";
-import { store } from "../../core/store";
 import type { McpConfig } from "../../core/types";
 import { connectMcp } from "../../services/mcp";
 import { serviceUrl } from "../../services/network";
@@ -14,11 +13,32 @@ export function McpPanel() {
   const [drafts, setDrafts] = useState<
     Record<string, { args?: string; env?: string }>
   >({});
+  const [jsonError, setJsonError] = useState("");
   const update = (id: string, patch: Partial<McpConfig>) =>
     setDevice({
       ...device,
       mcp: device.mcp.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     });
+  const updateJson = (id: string, key: "args" | "env", text: string) => {
+    setDrafts((previous) => ({
+      ...previous,
+      [id]: { ...previous[id], [key]: text },
+    }));
+    try {
+      const value: unknown = JSON.parse(text);
+      if (key === "args")
+        update(id, { args: z.array(z.string()).max(128).parse(value) });
+      else update(id, { env: z.record(z.string(), z.string()).parse(value) });
+      setJsonError("");
+    } catch {
+      setJsonError(
+        t(
+          "JSON 格式无效，该字段尚未保存；修正后自动保存。",
+          "Invalid JSON; this field is not saved until corrected.",
+        ),
+      );
+    }
+  };
   const parse = (m: McpConfig): McpConfig => {
     if (m.transport !== "stdio") {
       serviceUrl(m.url);
@@ -46,6 +66,7 @@ export function McpPanel() {
           "Supports Streamable HTTP, SSE and desktop stdio. Configure executable, argument array and environment variables. Agent tool execution requires confirmation; imported stdio configurations start disabled.",
         )}
       </p>
+      {jsonError && <p role="alert">{jsonError}</p>}
       {device.mcp.map((m) => (
         <section className="mcp-card" key={m.id}>
           <label>
@@ -89,12 +110,7 @@ export function McpPanel() {
                   value={
                     drafts[m.id]?.args ?? JSON.stringify(m.args ?? [], null, 2)
                   }
-                  onChange={(e) =>
-                    setDrafts({
-                      ...drafts,
-                      [m.id]: { ...drafts[m.id], args: e.target.value },
-                    })
-                  }
+                  onChange={(e) => updateJson(m.id, "args", e.target.value)}
                 />
               </label>
               <label>
@@ -108,12 +124,7 @@ export function McpPanel() {
                   value={
                     drafts[m.id]?.env ?? JSON.stringify(m.env ?? {}, null, 2)
                   }
-                  onChange={(e) =>
-                    setDrafts({
-                      ...drafts,
-                      [m.id]: { ...drafts[m.id], env: e.target.value },
-                    })
-                  }
+                  onChange={(e) => updateJson(m.id, "env", e.target.value)}
                 />
               </label>
               <label>
@@ -184,8 +195,8 @@ export function McpPanel() {
               onClick={() =>
                 void confirmation.request(
                   t(
-                    `移除 MCP 配置「${m.name}」？保存后生效。`,
-                    `Remove MCP configuration "${m.name}"? Save to apply.`,
+                    `移除 MCP 配置「${m.name}」？确认后自动保存。`,
+                    `Remove MCP configuration "${m.name}"? Confirm to save automatically.`,
                   ),
                   async () =>
                     setDevice((current) => ({
@@ -220,19 +231,6 @@ export function McpPanel() {
           }
         >
           {t("添加 MCP", "Add MCP")}
-        </button>
-        <button
-          className="primary"
-          disabled={!!busy}
-          onClick={() =>
-            void act(t("保存 MCP", "Saving MCP"), async () => {
-              const mcp = device.mcp.map((m) => (m.enabled ? parse(m) : m));
-              await store.saveDevice({ ...store.getSnapshot().device, mcp });
-              notify(t("MCP 配置已保存", "MCP configuration saved"));
-            })
-          }
-        >
-          {t("保存 MCP 配置", "Save MCP configuration")}
         </button>
       </div>
       {confirmation.dialog}

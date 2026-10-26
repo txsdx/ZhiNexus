@@ -1,4 +1,5 @@
 /** Capture enrichment pipeline: preserve raw material, avoid stale overwrites and link only known concepts. */
+import { flushAISettings } from "./settings";
 import { z } from "zod";
 import { entryTemplate } from "../core/defaults";
 import { resolveModel } from "../core/ai-config";
@@ -6,6 +7,7 @@ import { store, json } from "../core/store";
 import { runTask, parseJson } from "./ai";
 /** Enrich only configured tasks and report partial success without rolling back the captured note. */
 export async function enrichEntry(id: string): Promise<void> {
+  await flushAISettings();
   let s = store.getSnapshot(),
     entry = s.entries.find((e) => e.id === id);
   if (!entry || !s.device.apiKey) return;

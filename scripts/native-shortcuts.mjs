@@ -54,10 +54,9 @@ export async function testNativeShortcuts({ click, script, waitFor, command }) {
     "Control+Shift+N",
   );
   assert.ok(initial);
-  await click(".settings-content .primary");
   await waitFor(() =>
     script(
-      'return /Desktop preferences saved|后台与快捷键设置已保存/.test(document.querySelector(".toast")?.innerText??"")',
+      'return document.querySelector("[data-save-status]")?.getAttribute("data-save-status")==="saved"',
     ),
   );
 }

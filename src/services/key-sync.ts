@@ -132,7 +132,7 @@ function schedule() {
       .catch(() =>
         report(
           "error",
-          "密钥同步未完成，请重新保存配置 / Key synchronization incomplete",
+          "密钥同步未完成，请检查 AI 配置 / Key synchronization incomplete",
         ),
       )
       .finally(() => {
@@ -151,6 +151,7 @@ export async function saveAIAndKey(
   ai: AIConfig,
   apiKey: string,
   customKey: string,
+  clearKey = false,
 ) {
   const normalized = { ...ai, baseUrl: apiBaseUrl(ai.baseUrl) },
     key = normalizeApiKey(apiKey);
@@ -171,6 +172,7 @@ export async function saveAIAndKey(
   try {
     let value = key;
     if (
+      !clearKey &&
       (!value ||
         (value === store.getSnapshot().device.apiKey &&
           existing?.cipher !== lastCipher)) &&
@@ -195,7 +197,7 @@ export async function saveAIAndKey(
       apiKeyEndpoint: normalized.baseUrl,
       apiKeySyncKey: customKey,
     });
-    if (value) {
+    if (value || clearKey) {
       const cipher = await encryptSecret(
         { apiKey: value, baseUrl: normalized.baseUrl },
         "sync-api-key",

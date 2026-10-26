@@ -174,7 +174,7 @@ try {
     .click();
   const toggle = page.locator(".settings-content input[type=checkbox]").first();
   await toggle.check();
-  await page.locator(".settings-content .primary").click();
+  await page.locator('[data-save-status="saved"]').waitFor();
   await waitFor(() => device("shell", "dumpsys", "alarm").includes(pkg));
   captureScreen("sync-reminders");
   fs.writeFileSync(

@@ -8,12 +8,20 @@ import {
   Plug,
   Settings2,
   Sparkles,
+  ScrollText,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type SetStateAction,
+} from "react";
 import { useKnowledge, useT } from "../../components/common";
 import { store } from "../../core/store";
 import type { AIConfig, DeviceConfig, Task } from "../../core/types";
 import { type Classification } from "../../services/classification";
+import { settingsEditor, flushSettings } from "../../services/settings";
+import { diagnostics } from "../../services/diagnostics";
 /** useSettingsState exposes one focused settings workflow. */
 export function useSettingsState(
   notify: (s: string) => void,
@@ -22,8 +30,6 @@ export function useSettingsState(
   const s = useKnowledge(),
     t = useT(),
     [tab, setTab] = useState(initialTab === "sync" ? "database" : initialTab),
-    [ai, setAI] = useState<AIConfig>(structuredClone(s.ai)),
-    [device, setDevice] = useState<DeviceConfig>(structuredClone(s.device)),
     [task, setTask] = useState<Task>("explain"),
     [busy, setBusy] = useState(""),
     [report, setReport] = useState(""),
@@ -36,24 +42,46 @@ export function useSettingsState(
     } | null>(null),
     [password, setPassword] = useState(""),
     [size, setSize] = useState(0);
-  const appearance =
-    s.docs.find((d) => d.collection === "setting" && d.id === "appearance")
-      ?.fields ?? {};
+  const editor = settingsEditor();
+  const saved = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
+  const { ai, device } = saved.value;
+  const setAI = (update: SetStateAction<AIConfig>) =>
+    editor.update((previous) => ({
+      ...previous,
+      ai: typeof update === "function" ? update(previous.ai) : update,
+    }));
+  const setDevice = (update: SetStateAction<DeviceConfig>) =>
+    editor.update((previous) => ({
+      ...previous,
+      device: typeof update === "function" ? update(previous.device) : update,
+    }));
+  useEffect(
+    () => () => {
+      void editor.flush().catch(() => {});
+    },
+    [editor],
+  );
+  const appearance = saved.value.appearance;
   useEffect(() => {
     void store.db.size().then(setSize);
   }, [s.revision]);
   const act = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
     try {
+      await flushSettings();
       await fn();
     } catch (e) {
+      diagnostics.error("app", label, e);
       notify(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy("");
     }
   };
   const updateAppearance = (key: string, value: string | number) =>
-    void store.patch("setting", "appearance", { [key]: value });
+    editor.update((previous) => ({
+      ...previous,
+      appearance: { ...previous.appearance, [key]: value },
+    }));
   const tabs = [
     { id: "appearance", label: t("外观与语言", "Appearance"), icon: Palette },
     { id: "ai", label: t("AI 与模型", "AI & models"), icon: Sparkles },
@@ -77,6 +105,7 @@ export function useSettingsState(
       icon: Settings2,
     },
     { id: "about", label: t("关于与更新", "About & updates"), icon: Globe },
+    { id: "logs", label: t("日志", "Logs"), icon: ScrollText },
   ];
   return {
     s,
@@ -110,6 +139,8 @@ export function useSettingsState(
     updateAppearance,
     tabs,
     notify,
+    saveState: saved,
+    flushSettings,
   };
 }
 export type SettingsValue = ReturnType<typeof useSettingsState>;

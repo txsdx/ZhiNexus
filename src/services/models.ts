@@ -1,7 +1,8 @@
 /** CPA model discovery ported from the uploaded reference: at most two ordinary catalog requests. */
 import { z } from "zod";
 import type { Model } from "../core/types";
-import { request, responseJson, apiBaseUrl, normalizeApiKey } from "./network";
+import { request, boundedText, apiBaseUrl, normalizeApiKey } from "./network";
+import { traceAI, diagnostics, diagnosticJson } from "./diagnostics";
 const record = z.record(z.string(), z.unknown());
 /** Extract only declared reasoning levels, including CPA effort objects; unknown stays unknown. */
 function levels(raw: unknown): string[] {
@@ -104,15 +105,32 @@ export async function discoverModels(
   base: string,
   key: string,
 ): Promise<Model[]> {
-  const url = apiBaseUrl(base) + "/models";
-  const options = {
-    headers: {
-      Authorization: "Bearer " + normalizeApiKey(key),
-      Accept: "application/json",
-    },
-  };
-  let res = await request(url + "?client_version=cpa", options);
-  if ([400, 404, 405, 422, 501].includes(res.status))
-    res = await request(url, options);
-  return normalizeModels(await responseJson(res));
+  return traceAI("models", "", async (logId) => {
+    const url = apiBaseUrl(base) + "/models";
+    diagnostics.update(logId, {
+      request: JSON.stringify({
+        method: "GET",
+        url: url + "?client_version=cpa",
+      }),
+    });
+    const options = {
+      headers: {
+        Authorization: "Bearer " + normalizeApiKey(key),
+        Accept: "application/json",
+      },
+    };
+    let res = await request(url + "?client_version=cpa", options);
+    if ([400, 404, 405, 422, 501].includes(res.status)) {
+      diagnostics.update(logId, {
+        status: res.status,
+        response: await boundedText(res),
+        request: JSON.stringify({
+          method: "GET",
+          attempts: [url + "?client_version=cpa", url],
+        }),
+      });
+      res = await request(url, options);
+    }
+    return normalizeModels(await diagnosticJson(res, logId));
+  });
 }

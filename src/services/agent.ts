@@ -1,5 +1,6 @@
 /** Bounded, persisted agent tool loop with explicit confirmation for writes and external MCP execution. */
 import { sha256 } from "../core/crypto";
+import { diagnostics } from "./diagnostics";
 import { executeKnowledgeTool, knowledgeTools } from "./agent-tools";
 import { store, json } from "../core/store";
 import type { Message, Topic } from "../core/types";
@@ -106,6 +107,11 @@ async function chatInternal(
         );
         return result;
       } catch (e) {
+        diagnostics.error(
+          "app",
+          "Agent 工具执行失败 / Agent tool failed: " + call.function.name,
+          e,
+        );
         return { error: e instanceof Error ? e.message : "tool error" };
       }
     };

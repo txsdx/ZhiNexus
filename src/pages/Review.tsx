@@ -1,4 +1,5 @@
 /** Resumable AI review sessions with answer persistence, teaching feedback and FSRS commits. */
+import { diagnostics } from "../services/diagnostics";
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, Clock3, Sparkles } from "lucide-react";
 import { useKnowledge, useT, Busy, Empty } from "../components/common";
@@ -24,6 +25,7 @@ export function Review({ notify }: { notify: (s: string) => void }) {
     try {
       await fn();
     } catch (e) {
+      diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
       notify(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy("");

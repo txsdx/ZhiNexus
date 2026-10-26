@@ -1,4 +1,5 @@
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
+import { diagnostics } from "../services/diagnostics";
 import { useEntryDocument } from "../hooks/useEntryDocument";
 import { useConfirmation } from "../hooks/useConfirmation";
 import { BlockEditor } from "../components/editor/BlockEditor";
@@ -96,6 +97,7 @@ export function EntryPage({
     try {
       await fn();
     } catch (e) {
+      diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
       notify(String(e instanceof Error ? e.message : e));
     } finally {
       setBusy("");

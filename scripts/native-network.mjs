@@ -45,20 +45,21 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
       ".settings-content input:not([type])",
       `http://127.0.0.1:${proxy.address().port}`,
     );
-    await click(".settings-content .primary");
     await waitFor(() =>
       script(
-        'return /Global proxy applied|全局代理已应用/.test(document.querySelector(".toast")?.innerText??"")',
+        'return document.querySelector("[data-save-status]")?.getAttribute("data-save-status")==="saved"',
       ),
     );
     await click('[data-settings-tab="ai"]');
     await type(
       '.settings-content input[placeholder="https://api.example.com/v1"]',
       "http://native-fixture.invalid:12010/v1/chat/completions",
+      ["http://native-fixture.invalid:12010/v1"],
     );
     await type(
       '.settings-content input[type="password"]',
       " Bearer native-fixture-key ",
+      ["native-fixture-key"],
     );
     await click(".settings-content .actions button");
     await waitFor(() =>
@@ -79,10 +80,9 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
     await script(
       'const e=document.querySelector(".settings-content select");Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,"value").set.call(e,"system");e.dispatchEvent(new Event("change",{bubbles:true}));return true;',
     );
-    await click(".settings-content .primary");
     await waitFor(() =>
       script(
-        'return /Global proxy applied|全局代理已应用/.test(document.querySelector(".toast")?.innerText??"")',
+        'return document.querySelector("[data-save-status]")?.getAttribute("data-save-status")==="saved"',
       ),
     );
     proxy.closeAllConnections();

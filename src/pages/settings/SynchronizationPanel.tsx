@@ -1,7 +1,7 @@
 /** Synchronization configuration panel with explicit persistence and verification. */
 import { useState } from "react";
 import { sealCredentials, unlockCredentials } from "../../services/vault";
-import { RefreshCw, Save, ShieldCheck } from "lucide-react";
+import { RefreshCw, ShieldCheck } from "lucide-react";
 import { store } from "../../core/store";
 import { synchronize } from "../../services/sync";
 import { useSettings } from "./context";
@@ -70,26 +70,6 @@ export function SynchronizationPanel() {
       </label>
       <div className="actions">
         <button
-          className="primary"
-          disabled={!!busy}
-          onClick={() =>
-            void act(t("保存同步设置", "Saving sync settings"), async () => {
-              if (device.davUrl) {
-                const { secureUrl } = await import("../../services/network");
-                secureUrl(device.davUrl);
-              }
-              await store.saveDevice({
-                ...store.getSnapshot().device,
-                ...device,
-              });
-              notify(t("本设备设置已保存", "Device settings saved"));
-            })
-          }
-        >
-          <Save size={16} />
-          {t("保存本设备设置", "Save device settings")}
-        </button>
-        <button
           disabled={!!busy}
           onClick={() =>
             void act(t("同步中…", "Syncing…"), async () => {
@@ -99,7 +79,7 @@ export function SynchronizationPanel() {
           }
         >
           <RefreshCw size={16} />
-          {t("立即同步（使用已保存设置）", "Sync saved settings")}
+          {t("立即同步", "Sync now")}
         </button>
       </div>
       <p>

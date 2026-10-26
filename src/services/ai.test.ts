@@ -164,3 +164,87 @@ it("does not silently choose a catalog model when neither default nor override i
   await expect(generateImage("image")).rejects.toThrow("配置图片模型");
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it.each([null, undefined, []])(
+  "accepts a text response with tool_calls=%j across AI tasks",
+  async (calls) => {
+    const { fetcher } = configuredAI();
+    fetcher.mockImplementation(async () =>
+      Response.json({
+        choices: [
+          { message: { content: "valid explanation", tool_calls: calls } },
+        ],
+      }),
+    );
+    for (const task of [
+      "explain",
+      "question",
+      "grade",
+      "classify",
+      "relations",
+      "agent",
+      "ocr",
+    ] as const) {
+      await expect(
+        complete(task, [{ role: "user", content: "prompt" }]),
+      ).resolves.toEqual({ content: "valid explanation", calls: [] });
+    }
+  },
+);
+
+it("keeps malformed non-null tool calls invalid and retains provider error data in diagnostics", async () => {
+  const { fetcher } = configuredAI();
+  const { diagnostics } = await import("./diagnostics");
+  fetcher.mockImplementationOnce(async () =>
+    Response.json({
+      choices: [{ message: { content: "text", tool_calls: "broken" } }],
+    }),
+  );
+  await expect(
+    complete("agent", [{ role: "user", content: "private fixture-key" }]),
+  ).rejects.toThrow();
+  expect(diagnostics.getSnapshot()[0]).toMatchObject({
+    level: "error",
+    status: 200,
+    task: "agent",
+  });
+  expect(diagnostics.getSnapshot()[0].response).toContain(
+    '"tool_calls": "broken"',
+  );
+  expect(diagnostics.getSnapshot()[0].request).not.toContain("fixture-key");
+  fetcher.mockImplementationOnce(
+    async () =>
+      new Response("upstream gateway is unavailable", { status: 502 }),
+  );
+  await expect(complete("explain", [])).rejects.toThrow("HTTP 502");
+  expect(diagnostics.getSnapshot()[0]).toMatchObject({
+    level: "error",
+    status: 502,
+    response: "upstream gateway is unavailable",
+  });
+});
+
+it("accepts an image response whose optional URL is null", async () => {
+  const { fetcher } = configuredAI();
+  fetcher.mockImplementation(async () =>
+    Response.json({ data: [{ b64_json: "AA==", url: null }] }),
+  );
+  vi.spyOn(store.db, "putBlob").mockResolvedValue("image-hash");
+  await expect(generateImage("image prompt")).resolves.toBe("image-hash");
+});
+
+it("redacts the request's original credential even if it rotates before the response", async () => {
+  const { fetcher } = configuredAI();
+  const originalSnapshot = store.getSnapshot();
+  fetcher.mockImplementationOnce(async () => {
+    vi.spyOn(store, "getSnapshot").mockReturnValue({
+      ...originalSnapshot,
+      device: { ...originalSnapshot.device, apiKey: "rotated-key" },
+    });
+    return new Response("upstream rejected fixture-key", { status: 401 });
+  });
+  await expect(complete("agent", [])).rejects.toThrow("HTTP 401");
+  const { diagnostics } = await import("./diagnostics");
+  expect(diagnostics.getSnapshot()[0].response).not.toContain("fixture-key");
+  expect(diagnostics.getSnapshot()[0].response).toContain("[redacted]");
+});

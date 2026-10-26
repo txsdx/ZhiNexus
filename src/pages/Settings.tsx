@@ -19,6 +19,7 @@ import { ModelsPanel } from "./settings/ModelsPanel";
 import { PromptsPanel } from "./settings/PromptsPanel";
 import { CategoryTree, saveFile } from "./settings/shared";
 import { useConfirmation } from "../hooks/useConfirmation";
+import { LogsPanel } from "./settings/LogsPanel";
 /** Render independent settings panels and reviewable taxonomy/backup confirmations. */
 export function Settings({
   notify,
@@ -43,6 +44,8 @@ export function Settings({
     setArchive,
     password,
     setPassword,
+    saveState,
+    flushSettings,
   } = context;
   const confirmation = useConfirmation(notify, {
     title: t("确认恢复设备设置", "Confirm device settings restore"),
@@ -50,7 +53,12 @@ export function Settings({
   });
   return (
     <SettingsContext.Provider value={context}>
-      <div className="page settings-page">
+      <div
+        className="page settings-page"
+        onBlurCapture={() => {
+          void flushSettings().catch(() => {});
+        }}
+      >
         <div className="page-heading">
           <div>
             <div className="eyebrow">MAKE IT YOURS</div>
@@ -63,6 +71,26 @@ export function Settings({
             </p>
           </div>
           {busy && <Busy label={busy} />}
+        </div>
+        <div
+          className="settings-save-status"
+          role={saveState.status === "error" ? "alert" : "status"}
+          data-save-status={saveState.status}
+        >
+          {saveState.status === "saved"
+            ? t("所有配置已自动保存", "All settings saved automatically")
+            : saveState.status === "error"
+              ? t("自动保存失败：", "Autosave failed: ") + saveState.error
+              : t("正在自动保存…", "Saving automatically…")}
+          {saveState.status === "error" && (
+            <button
+              onClick={() => {
+                void flushSettings().catch(() => {});
+              }}
+            >
+              {t("重试自动保存", "Retry autosave")}
+            </button>
+          )}
         </div>
         <div className="settings-shell">
           <aside className="settings-tabs">
@@ -89,6 +117,7 @@ export function Settings({
             {tab === "notifications" && <NotificationsPanel />}
             {tab === "database" && <DatabasePanel />}
             {tab === "about" && <AboutPanel />}
+            {tab === "logs" && <LogsPanel />}
             {report && <pre className="report">{report}</pre>}
           </div>
         </div>

@@ -1,4 +1,5 @@
 /** Editable OCR review with offline recognition first and an explicit vision-model upload action. */
+import { diagnostics } from "../services/diagnostics";
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, useT } from "./common";
@@ -66,6 +67,7 @@ export function OcrResult({
         );
       void notifyCompletion("ocr", result).catch(() => {});
     } catch (e) {
+      diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);

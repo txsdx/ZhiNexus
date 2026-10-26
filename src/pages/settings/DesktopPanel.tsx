@@ -6,22 +6,37 @@ import {
   defaultDesktop,
   quitDesktop,
 } from "../../services/desktop";
-import { store } from "../../core/store";
 import type { DesktopPreferences } from "../../core/types";
 import { ShortcutCapture } from "./ShortcutCapture";
 import { useSettings } from "./context";
 /** Keep OS integrations explicit and report actual shortcut conflicts without silently dropping registrations. */
 export function DesktopPanel() {
-  const { t, act, busy, notify } = useSettings();
-  const [settings, setSettings] = useState(defaultDesktop),
-    [warning, setWarning] = useState("");
+  const { t, act, busy, device, setDevice } = useSettings();
+  const settings = { ...defaultDesktop, ...device.desktop };
+  const setSettings = (
+    value:
+      | DesktopPreferences
+      | ((previous: DesktopPreferences) => DesktopPreferences),
+  ) =>
+    setDevice((previous) => ({
+      ...previous,
+      desktop:
+        typeof value === "function"
+          ? value({ ...defaultDesktop, ...previous.desktop })
+          : value,
+    }));
+  const [warning, setWarning] = useState("");
   useEffect(() => {
     if (desktopAvailable)
       void invoke<{ settings: DesktopPreferences; warning: string }>(
         "desktop_configuration",
       )
         .then((value) => {
-          setSettings(value.settings);
+          setDevice((previous) =>
+            previous.desktop
+              ? previous
+              : { ...previous, desktop: value.settings },
+          );
           setWarning(value.warning);
         })
         .catch((e) => setWarning(String(e)));
@@ -94,28 +109,6 @@ export function DesktopPanel() {
       </p>
       {warning && <p role="alert">{warning}</p>}
       <div className="actions">
-        <button
-          className="primary"
-          disabled={!!busy}
-          onClick={() =>
-            void act(
-              t("应用桌面设置", "Applying desktop preferences"),
-              async () => {
-                await invoke("configure_desktop", { settings });
-                await store.saveDevice({
-                  ...store.getSnapshot().device,
-                  desktop: settings,
-                });
-                setWarning("");
-                notify(
-                  t("后台与快捷键设置已保存", "Desktop preferences saved"),
-                );
-              },
-            )
-          }
-        >
-          {t("保存并应用", "Save and apply")}
-        </button>
         <button
           disabled={!!busy}
           onClick={() => void act(t("退出", "Quitting"), quitDesktop)}

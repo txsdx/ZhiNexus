@@ -1,7 +1,7 @@
 /** Models configuration panel with explicit persistence and verification. */
 import { useSyncExternalStore } from "react";
-import { keySyncStatus, saveAIAndKey } from "../../services/key-sync";
-import { KeyRound, RefreshCw, Save } from "lucide-react";
+import { keySyncStatus } from "../../services/key-sync";
+import { KeyRound, RefreshCw } from "lucide-react";
 import { discoverModels } from "../../services/models";
 import { useSettings } from "./context";
 /** ModelsPanel exposes one focused settings workflow. */
@@ -10,7 +10,8 @@ export function ModelsPanel() {
     keySyncStatus.subscribe,
     keySyncStatus.getSnapshot,
   );
-  const { t, ai, setAI, device, setDevice, busy, act, notify } = useSettings();
+  const { t, ai, setAI, device, setDevice, busy, act, notify, flushSettings } =
+    useSettings();
   return (
     <>
       <h2>{t("连接你的 AI", "Connect your AI")}</h2>
@@ -96,11 +97,12 @@ export function ModelsPanel() {
           onClick={() =>
             void act(t("读取模型目录…", "Discovering models…"), async () => {
               const models = await discoverModels(ai.baseUrl, device.apiKey);
-              setAI({ ...ai, models });
+              setAI((previous) => ({ ...previous, models }));
+              await flushSettings();
               notify(
                 t(
-                  `发现 ${models.length} 个模型，请保存后分配给任务`,
-                  `Discovered ${models.length} models; save and assign them to tasks`,
+                  `发现 ${models.length} 个模型，已自动保存，可分配给任务`,
+                  `Discovered ${models.length} models; automatically saved and ready for tasks`,
                 ),
               );
             })
@@ -108,19 +110,6 @@ export function ModelsPanel() {
         >
           <RefreshCw size={16} />
           {t("读取模型与能力", "Discover models & capabilities")}
-        </button>
-        <button
-          className="primary"
-          disabled={!!busy}
-          onClick={() =>
-            void act(t("保存…", "Saving…"), async () => {
-              await saveAIAndKey(ai, device.apiKey, device.apiKeySyncKey ?? "");
-              notify(t("AI 配置已保存", "AI configuration saved"));
-            })
-          }
-        >
-          <Save size={16} />
-          {t("保存 AI 配置", "Save AI settings")}
         </button>
       </div>
       <div className="model-list">

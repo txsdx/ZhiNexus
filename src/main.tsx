@@ -6,6 +6,8 @@ import { OcrOverlay } from "./components/OcrOverlay";
 import { startKeySync } from "./services/key-sync";
 import { store } from "./core/store";
 import "./styles.css";
+import { diagnostics, initDiagnostics } from "./services/diagnostics";
+import { flushSettings } from "./services/settings";
 /** Keep storage and rendering failures visible without clearing user data. */
 class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -14,6 +16,9 @@ class ErrorBoundary extends Component<
   state = { error: "" };
   static getDerivedStateFromError(e: Error) {
     return { error: e.message };
+  }
+  componentDidCatch(error: Error) {
+    diagnostics.error("app", "界面渲染错误 / Render failure", error);
   }
   render() {
     return this.state.error ? (
@@ -44,7 +49,35 @@ if (new URLSearchParams(location.search).has("ocr-overlay")) {
 } else
   store
     .init()
-    .then(() => {
+    .then(async () => {
+      await initDiagnostics().catch((error) => {
+        diagnostics.storageError = String(error);
+        diagnostics.error(
+          "app",
+          "日志加载失败 / Log initialization failed",
+          error,
+        );
+      });
+      window.addEventListener("error", (event) =>
+        diagnostics.error(
+          "app",
+          "运行错误 / Runtime error",
+          event.error ?? event.message,
+        ),
+      );
+      window.addEventListener("unhandledrejection", (event) =>
+        diagnostics.error(
+          "app",
+          "未处理错误 / Unhandled rejection",
+          event.reason,
+        ),
+      );
+      const flush = () => {
+        void flushSettings().catch(() => {});
+        void diagnostics.flush().catch(() => {});
+      };
+      window.addEventListener("blur", flush);
+      window.addEventListener("pagehide", flush);
       startKeySync();
       root.render(
         <ErrorBoundary>

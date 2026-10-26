@@ -70,7 +70,7 @@ async function click(selector) {
   );
 }
 /** Enter text with standard WebDriver keyboard events so React receives actual input. */
-async function type(selector, text) {
+async function type(selector, text, normalizedValues = []) {
   const e = await waitFor(() => element(selector)),
     id = e["element-6066-11e4-a52e-4f735466cecf"];
   // Select before typing: React can restore the old controlled value between clear() and sendKeys().
@@ -95,8 +95,8 @@ async function type(selector, text) {
   });
   await waitFor(() =>
     script(
-      "return document.querySelector(arguments[0])?.value===arguments[1]",
-      [selector, text],
+      "return [arguments[1],...arguments[2]].includes(document.querySelector(arguments[0])?.value)",
+      [selector, text, normalizedValues],
     ),
   );
 }

@@ -1,6 +1,4 @@
 /** Independent device notification settings for reviews, unfocused AI/OCR completion and sync failures. */
-import { store } from "../../core/store";
-import { enableNotifications } from "../../services/device";
 import {
   defaultNotifications,
   testNotification,
@@ -8,7 +6,7 @@ import {
 import { useSettings } from "./context";
 /** Persist notification choices separately from appearance and synchronization credentials. */
 export function NotificationsPanel() {
-  const { t, device, setDevice, busy, act, notify } = useSettings();
+  const { t, device, setDevice, busy, act } = useSettings();
   const options = { ...defaultNotifications, ...device.notificationOptions };
   const update = (key: keyof typeof options, value: boolean | number) =>
     setDevice({ ...device, notificationOptions: { ...options, [key]: value } });
@@ -85,37 +83,6 @@ export function NotificationsPanel() {
         )}
       </p>
       <div className="actions">
-        <button
-          className="primary"
-          disabled={!!busy}
-          onClick={() =>
-            void act(
-              t("保存通知设置", "Saving notification settings"),
-              async () => {
-                const enabled =
-                  device.notifications ||
-                  options.aiWhenUnfocused ||
-                  options.ocrWhenUnfocused ||
-                  options.syncFailures;
-                if (enabled && !(await enableNotifications()))
-                  throw Error(
-                    t(
-                      "未获得系统通知权限",
-                      "Notification permission was not granted",
-                    ),
-                  );
-                await store.saveDevice({
-                  ...store.getSnapshot().device,
-                  notifications: device.notifications,
-                  notificationOptions: options,
-                });
-                notify(t("通知设置已保存", "Notification settings saved"));
-              },
-            )
-          }
-        >
-          {t("保存通知设置", "Save notification settings")}
-        </button>
         <button
           disabled={!!busy}
           onClick={() =>

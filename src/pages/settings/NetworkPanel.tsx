@@ -1,15 +1,10 @@
 /** Global per-device system/HTTP/SOCKS5 proxy configuration shared by all native transports. */
 import { native } from "../../core/database";
-import { store } from "../../core/store";
-import {
-  defaultProxy,
-  normalizeProxy,
-  ensureNativeProxy,
-} from "../../services/proxy";
+import { defaultProxy } from "../../services/proxy";
 import { useSettings } from "./context";
 /** Keep proxy credentials local and apply changes to both fetch and native release downloads. */
 export function NetworkPanel() {
-  const { t, device, setDevice, busy, act, notify } = useSettings();
+  const { t, device, setDevice } = useSettings();
   const proxy = { ...defaultProxy, ...device.proxy };
   const update = (patch: Partial<typeof proxy>) =>
     setDevice({ ...device, proxy: { ...proxy, ...patch } });
@@ -84,23 +79,6 @@ export function NetworkPanel() {
           )}
         </p>
       )}
-      <button
-        className="primary"
-        disabled={!!busy || (!native && proxy.mode !== "system")}
-        onClick={() =>
-          void act(t("应用代理配置", "Applying proxy settings"), async () => {
-            const value = normalizeProxy(proxy);
-            await ensureNativeProxy(value);
-            await store.saveDevice({
-              ...store.getSnapshot().device,
-              proxy: value,
-            });
-            notify(t("全局代理已应用", "Global proxy applied"));
-          })
-        }
-      >
-        {t("保存并应用", "Save and apply")}
-      </button>
     </>
   );
 }

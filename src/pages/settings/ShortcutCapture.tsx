@@ -13,7 +13,7 @@ export function ShortcutCapture({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const { t, notify, busy } = useSettings();
+  const { t, notify, busy, flushSettings } = useSettings();
   const [recording, setRecording] = useState(false),
     [starting, setStarting] = useState(false);
   const token = useRef<string | null>(null),
@@ -46,8 +46,7 @@ export function ShortcutCapture({
       }
       const next = shortcutFromStroke(e);
       if (next) {
-        onChange(next);
-        void release();
+        void release().then(() => onChange(next));
       }
     };
     const blur = () => void release();
@@ -81,7 +80,8 @@ export function ShortcutCapture({
               return;
             }
             setStarting(true);
-            void invoke<string>("begin_shortcut_capture")
+            void flushSettings()
+              .then(() => invoke<string>("begin_shortcut_capture"))
               .then((lease) => {
                 token.current = lease;
                 if (

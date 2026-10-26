@@ -1,13 +1,11 @@
 /** Prompts configuration panel with explicit persistence and verification. */
-import { Save } from "lucide-react";
 import { taskLabels, templates } from "../../core/defaults";
-import { store } from "../../core/store";
 import { resolveModel } from "../../core/ai-config";
 import type { Task } from "../../core/types";
 import { useSettings } from "./context";
 /** PromptsPanel exposes one focused settings workflow. */
 export function PromptsPanel() {
-  const { t, task, setTask, ai, setAI, act } = useSettings();
+  const { t, task, setTask, ai, setAI } = useSettings();
   return (
     <>
       <h2>
@@ -122,15 +120,6 @@ export function PromptsPanel() {
           }
         >
           {t("恢复默认模板", "Reset template")}
-        </button>
-        <button
-          className="primary"
-          onClick={() =>
-            void act(t("保存模板", "Saving prompts"), () => store.saveAI(ai))
-          }
-        >
-          <Save size={16} />
-          {t("保存全部任务", "Save all tasks")}
         </button>
       </div>
     </>

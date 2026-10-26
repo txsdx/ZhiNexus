@@ -90,8 +90,8 @@ export function DatabasePanel() {
       </div>
       <p className="muted">
         {t(
-          "校验将联网读取云端日志、附件与快照，合并本地尚未上传的修改，双向修复后重新读取并比较摘要，再安全清理恢复冗余。无法连接、缺少可信副本或云端持续变更时不清理。请先在下方保存 WebDAV 配置。",
-          "Verification reads cloud operations, attachments and snapshots, merges unpublished local edits, repairs both replicas and compares fresh digests before cleaning recovery redundancy. Cleanup is skipped on connection failures, missing repair sources or ongoing cloud changes. Save WebDAV settings below first.",
+          "校验将联网读取云端日志、附件与快照，合并本地尚未上传的修改，双向修复后重新读取并比较摘要，再安全清理恢复冗余。无法连接、缺少可信副本或云端持续变更时不清理。请先在下方配置 WebDAV，配置会自动保存。",
+          "Verification reads cloud operations, attachments and snapshots, merges unpublished local edits, repairs both replicas and compares fresh digests before cleaning recovery redundancy. Cleanup is skipped on connection failures, missing repair sources or ongoing cloud changes. Configure WebDAV below; settings save automatically.",
         )}
       </p>
       <SynchronizationPanel />

@@ -260,12 +260,7 @@ test("MCP removal cannot change draft or saved configuration before confirmation
     .getByRole("button", { name: "确认删除", exact: true })
     .click();
   await expect(page.locator(".mcp-card")).toHaveCount(0);
-  expect(
-    await repository(page, "return store.getSnapshot().device.mcp.length"),
-  ).toBe(1);
-  await page
-    .getByRole("button", { name: "保存 MCP 配置", exact: true })
-    .click();
+
   await expect
     .poll(() =>
       repository(page, "return store.getSnapshot().device.mcp.length"),
@@ -359,8 +354,7 @@ test("raw model IDs and live global defaults persist without overwriting task or
   ]);
   await expect(page.locator(".model-list")).toContainText("Tools: ?");
   await page.getByLabel("全局默认模型").selectOption("gpt-6.1-sol-fast");
-  await page.getByRole("button", { name: "保存 AI 配置" }).click();
-  await expect(page.locator(".toast")).toContainText("AI 配置已保存");
+  await expect(page.locator('[data-save-status="saved"]')).toBeVisible();
   await page.getByRole("button", { name: "任务与提示词", exact: true }).click();
   await expect(page.getByLabel("任务模型")).toHaveValue("");
   await expect(page.getByLabel("任务模型").locator("option")).toHaveText([
@@ -374,7 +368,6 @@ test("raw model IDs and live global defaults persist without overwriting task or
     "ultra",
   ]);
   await page.getByLabel("任务模型").selectOption("gpt-6.1-sol");
-  await page.getByRole("button", { name: "保存全部任务" }).click();
   await expect
     .poll(() =>
       repository(page, "return store.getSnapshot().ai.tasks.explain.model"),
@@ -1306,8 +1299,7 @@ test("notification settings are independent, persistent and per device", async (
   ).toBeVisible();
   await page.getByLabel("主窗口失去焦点后，AI 响应结束时通知").uncheck();
   await page.getByLabel("自动同步失败时通知").check();
-  await page.getByRole("button", { name: "保存通知设置", exact: true }).click();
-  await expect(page.locator(".toast")).toContainText("通知设置已保存");
+  await expect(page.locator('[data-save-status="saved"]')).toBeVisible();
   await page.reload();
   expect(
     await repository(
@@ -1742,6 +1734,16 @@ test("rich editing retains math, Mermaid and local images, and concurrent saved 
   await page
     .getByRole("textbox", { name: "一句话解释", exact: true })
     .fill("用户设置的一句话");
+  await expect
+    .poll(() =>
+      page.evaluate(async (entryId) => {
+        const { entryWorkspace } = await import(
+          "/src/core/workspace.ts" as string
+        );
+        return entryWorkspace.getSnapshot().drafts[entryId]?.summary;
+      }, id),
+    )
+    .toBe("用户设置的一句话");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
   expect(

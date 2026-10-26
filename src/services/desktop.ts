@@ -1,4 +1,6 @@
 /** Native desktop event ownership, live DPI observation and safe storage handoff. */
+import { flushSettings } from "./settings";
+import { diagnostics } from "./diagnostics";
 import { invoke } from "@tauri-apps/api/core";
 import { native } from "../core/database";
 import { store } from "../core/store";
@@ -68,6 +70,8 @@ export async function quitDesktop() {
   )
     return;
   try {
+    await flushSettings();
+    await diagnostics.flush().catch(() => {});
     await entryWorkspace.init();
     await entryWorkspace.flush();
     await store.suspend();
@@ -89,6 +93,8 @@ export interface MigrationPlan {
 }
 /** Freeze local writes only after the user reviews the plan; helper failure restores the original connection. */
 export async function migrateStorage(plan: MigrationPlan) {
+  await flushSettings();
+  await diagnostics.flush().catch(() => {});
   if (
     !window.dispatchEvent(new Event("zhinexus:navigate", { cancelable: true }))
   )

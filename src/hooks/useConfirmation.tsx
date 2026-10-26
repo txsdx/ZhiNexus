@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal, useT } from "../components/common";
 import { runConfirmed } from "../core/confirmation";
+import { diagnostics } from "../services/diagnostics";
 
 /** Await a clear choice; dismissals and unmounts cancel, while failures go to the caller's feedback. */
 export function useConfirmation(
@@ -39,6 +40,11 @@ export function useConfirmation(
     try {
       await runConfirmed(() => ask(text), action);
     } catch (e) {
+      diagnostics.error(
+        "app",
+        options.title ?? "确认操作失败 / Confirmed action failed",
+        e,
+      );
       onError(e instanceof Error ? e.message : String(e));
     } finally {
       working.current = false;

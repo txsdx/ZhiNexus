@@ -1,5 +1,14 @@
 # 更新日志
 
+## 0.3.0 · 2026-10-26
+
+- 更新 Vitest 至 4.1.12、KaTeX 至 0.18.2 并统一传递渲染依赖，修复已报告的测试/公式依赖漏洞；npm audit 0 漏洞。
+- 修复 Android SDK Action 默认安装已移除 tools 包的问题，显式安装 platform-tools；扩大 SDK/Rust/浏览器缓存。
+- 浏览器 CI 在保存完成前刷新导致竞态：新增持久保存确认再重载断言。
+- 清理旧 updater 调用路径与 Android 专属编译警告，保留统一 latest.json 平台更新入口。
+- Ubuntu GitHub Deb 构建通过，并补充实际 Deb 解包后的原生恢复测试 CI。
+- 0.2 arm64 发布 APK 编译通过；0.3 最终缓存构建/原生 CI 结果见 STATUS。
+
 ## 0.2.0 · 2026-10-26
 
 - 透明 1024 图标和平台资源；工具无指定 image-2.5 选择字段，来源记录见 ICON.md。

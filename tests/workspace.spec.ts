@@ -73,6 +73,9 @@ test("capture, edit, fuzzy search, formula/diagram render, reload and mobile set
     .getByRole("textbox", { name: "Markdown", exact: true })
     .fill("# 持久化测试\n\n已保存的理解。");
   await page.getByRole("button", { name: "保存", exact: true }).click();
+  // A click starts asynchronous durable storage; reload only after the editor acknowledges the saved content.
+  await expect(page.locator(".content-editor")).toHaveCount(0);
+  await expect(page.locator(".markdown")).toContainText("已保存的理解");
   await page.reload();
   await page.getByRole("button", { name: "我的知识库", exact: true }).click();
   await page.locator(".entry-card").filter({ hasText: "间隔重复" }).click();

@@ -41,17 +41,23 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
       - name: Resolve SDK cache directory
-        run: echo "ANDROID_CACHE_NDK=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+        run: echo "ANDROID_CACHE_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
       - uses: actions/cache@v4
         with:
           path: |
             ~/.android/cache
-            ${{ env.ANDROID_CACHE_NDK }}
-          key: android-sdk-${{ runner.os }}-ndk-27.2.12479018-api35
+            ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
+            ${{ env.ANDROID_CACHE_ROOT }}/platforms
+            ${{ env.ANDROID_CACHE_ROOT }}/build-tools
+          key: android-sdk-${{ runner.os }}-ndk-27.2.12479018-api35-template37-${{ hashFiles('package-lock.json') }}
+          restore-keys: android-sdk-${{ runner.os }}-ndk-27.2.12479018-api35-template37-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,x86_64-linux-android

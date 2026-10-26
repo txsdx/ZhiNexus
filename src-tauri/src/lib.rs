@@ -46,6 +46,7 @@ pub fn run() {
     builder
         .setup(|app| {
             let location = paths::initialize(app.handle())?;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let webview_data = location.root.join("webview");
             app.manage(location);
             for config in &app.config().app.windows {

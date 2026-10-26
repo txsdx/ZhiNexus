@@ -214,7 +214,6 @@ pub async fn install_platform_update(
             .0
             .run_mobile_plugin::<serde_json::Value>("installApk", serde_json::json!({"path":file}))
             .map_err(|e| e.to_string())?;
-        return Ok(());
     }
     #[cfg(not(target_os = "android"))]
     app.opener()

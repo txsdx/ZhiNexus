@@ -78,7 +78,7 @@ jobs:
           cache-on-failure: true
           shared-key: desktop-${{ matrix.target }}
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf webkit2gtk-driver xvfb dbus-x11
       - run: npm ci
       - run: npm test
       - run: node --test scripts/*.test.mjs
@@ -112,10 +112,16 @@ jobs:
       - name: Test real Windows storage and portable recovery
         if: runner.os == 'Windows'
         run: node scripts/native-smoke.mjs
+      - name: Prepare native driver and extract Ubuntu DEB
+        if: runner.os == 'Linux'
+        run: bash scripts/start-linux-driver.sh
+      - name: Test the packaged Ubuntu executable and portable recovery
+        if: runner.os == 'Linux'
+        run: node scripts/native-smoke.mjs
       - uses: actions/upload-artifact@v4
-        if: always() && runner.os == 'Windows'
+        if: always()
         with:
-          name: Windows-native-test-results
+          name: ${{ runner.os }}-native-test-results
           path: native-test-results/
       - name: Sign Ubuntu DEB when a publisher key is configured
         if: runner.os == 'Linux'

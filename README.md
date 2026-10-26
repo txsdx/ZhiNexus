@@ -6,7 +6,7 @@
   <p><a href="#快速开始">快速开始</a> · <a href="#功能">功能</a> · <a href="#数据与同步">数据与同步</a> · <a href="#构建原生应用">原生构建</a> · <a href=".ai/STATUS.md">完成情况</a></p>
 </div>
 
-> **0.2.0 开发版 / Early development.** 核心学习流程、数据库滚动备份/日志恢复、便携目录与三平台更新协议已实现。Linux 原生恢复测试和 Android 编译通过；Windows、Android 设备测试与正式安装升级尚需 CI/真机验证。真实 AI/WebDAV 与大库性能未完成验证。完整边界见 [已知问题](.ai/KNOWN_ISSUES.md)。
+> **0.3.0 开发版 / Early development.** 核心学习流程、数据库滚动备份/日志恢复、便携目录与三平台更新协议已实现。Linux 原生恢复测试和 Android 编译通过；Windows、Android 设备测试与正式安装升级尚需 CI/真机验证。真实 AI/WebDAV 与大库性能未完成验证。完整边界见 [已知问题](.ai/KNOWN_ISSUES.md)。
 
 ## 功能
 
@@ -110,7 +110,7 @@ npm run tauri -- android dev
 npm run tauri -- android build --apk --target aarch64
 ```
 
-`src-tauri/gen/` 是平台生成目录，不纳入版本控制。Android x86_64 调试 APK（含安装器桥接）已经编译通过，arm64 发布包和设备测试状态见 STATUS。使用官方通知插件排程最多 48 个合并后的复习提醒；系统强制停止、权限与省电策略会影响通知，重启应用会重建排程。桌面完全退出后的排程尚未实现。
+`src-tauri/gen/` 是平台生成目录，不纳入版本控制。Android x86_64 调试 APK（含安装器桥接）已经编译通过，arm64 发布 APK 也已编译通过；设备测试状态见 STATUS。使用官方通知插件排程最多 48 个合并后的复习提醒；系统强制停止、权限与省电策略会影响通知，重启应用会重建排程。桌面完全退出后的排程尚未实现。
 
 ### Windows 便携数据
 

@@ -1,6 +1,6 @@
 # 需求完成情况
 
-当前阶段：**0.2.0 开发版**。核心流程可运行，持续完善；未称为已满足所有故障、所有平台的正式版。实现、模拟服务、真实原生运行和生产集成分别记录。
+当前阶段：**0.3.0 开发版**。核心流程可运行，持续完善；未称为已满足所有故障、所有平台的正式版。实现、模拟服务、真实原生运行和生产集成分别记录。
 
 | 需求 | 当前实现与验证边界 |
 |---|---|
@@ -40,6 +40,10 @@
 - Playwright：**13/13**，包括复习、分类/Agent 确认、图片备份、并发同步、加密凭证、浏览器坏库恢复、分类改移删、远端坏块修复/云快照恢复、工具幂等回执。
 - Rust Linux `cargo build --locked` 和 portable 路径单元测试：通过。
 - 真实 Linux Tauri/WebKit WebDriver：SQLite 创建编辑、普通/portable 数据隔离、重启、主动破坏 SQLite 文件头、验证检查点+耐久日志恢复最新编辑并保留坏库：**通过**。使用已验证 Debian 库、Xvfb、proot 映射 WebKit 固定安装路径；未关闭 TLS 或 WebKit sandbox。
-- Android API 35+ x86_64 debug APK（最新自定义安装器桥接、Rust/Kotlin）：**编译通过**。arm64 Release APK 正在验证，最终结果应随提交更新。
+- Android API 35+ x86_64 debug APK（最新自定义安装器桥接、Rust/Kotlin）：**编译通过**。arm64 Release APK 也已编译通过，正在验证 0.3.0 缓存重建、开发签名和清单生成。
 - 本机无 KVM，API 35 软件模拟器启动后不能稳定执行外部 shell/安装；未标记设备运行通过。已加入 GitHub 托管 KVM Android 测试和 Windows 原生 WebDriver 测试，仍需观察实际结果。
-- Windows/Ubuntu 安装产物、正式发布与升级、真实 AI/WebDAV/MCP：未验证，不将模拟结果算作通过。
+- Ubuntu 0.2.0 GitHub Deb 构建通过（run 40258520419，artifact ZhiNexus-ubuntu-24.04-x64）；Windows 仍在编译。正式发布与升级、真实 AI/WebDAV/MCP 未验证，不将模拟结果算作通过。
+
+- 依赖安全迭代 0.3.0：Vitest 4.1.12、KaTeX 0.18.2（所有渲染链通过统一 override 去除旧版）；23 核心、13 浏览器复验及生产构建通过，npm audit 0 漏洞。CI 发现浏览器测试在异步保存完成前立即刷新，已增加保存确认再验证重载的断言，仍需新 CI 运行确认。Android setup Action 旧 tools 包不存在，已显式 packages: platform-tools，并扩大 SDK 缓存。
+
+- 0.3.0：23 核心、16 发布脚本、13 浏览器测试及 TypeScript/Vite、Linux cargo check 通过。追加从实际 Deb 解包后在 Ubuntu/Xvfb 上运行恢复测试的 CI；该新增步骤尚需运行。

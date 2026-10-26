@@ -1,0 +1,234 @@
+/* Block document, focus controls, outline and multi-tab workspace styles across desktop and narrow screens. */
+.block-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.block-toolbar button,
+.block-toolbar select {
+  padding: 5px 8px;
+  font-size: 0.82rem;
+}
+.block-toolbar button[aria-pressed="true"] {
+  background: var(--soft);
+  color: var(--accent);
+}
+.rich-editor {
+  padding: 25px 34px;
+  min-height: 280px;
+}
+.block-document {
+  outline: 0 !important;
+  min-height: 220px;
+  overflow-wrap: anywhere;
+  line-height: 1.9;
+}
+.block-document > * {
+  position: relative;
+}
+.block-document p {
+  margin-bottom: 14px;
+}
+.block-document [data-blockid]:hover {
+  background: color-mix(in srgb, var(--soft) 25%, transparent);
+}
+.block-document ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 5px;
+}
+.block-document li[data-type="taskItem"] {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+}
+.block-document li[data-type="taskItem"] > div {
+  flex: 1;
+}
+.block-document table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 15px 0;
+}
+.block-document th,
+.block-document td {
+  border: 1px solid var(--border);
+  padding: 8px;
+  vertical-align: top;
+}
+.block-document th {
+  background: var(--soft);
+}
+.block-document .selectedCell {
+  background: var(--soft);
+}
+.block-document .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+.block-document pre {
+  white-space: pre-wrap;
+}
+.rich-code-block {
+  margin: 14px 0;
+}
+.rich-code-block > div > label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.diagram-source-hidden {
+  display: none;
+}
+.raw-markdown {
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+.document-outline {
+  position: sticky;
+  top: 10px;
+}
+.outline-row {
+  display: flex;
+  gap: 3px;
+}
+.outline-row > button:first-child {
+  flex: 1;
+  justify-content: start;
+  text-align: left;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  padding: 6px 4px;
+  background: transparent;
+  font-size: 0.84rem;
+}
+.outline-focus {
+  border: 0;
+  background: transparent;
+  padding: 5px;
+}
+.document-outline details {
+  margin-top: 12px;
+}
+.document-outline summary {
+  font-size: 0.83rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.focus-breadcrumb {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 20px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--border);
+}
+.editor-mode {
+  display: flex;
+  gap: 7px;
+  padding: 8px 15px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.editor-mode button {
+  padding: 5px 9px;
+  font-size: 0.83rem;
+}
+.editor-mode .active {
+  color: var(--accent);
+  background: var(--soft);
+}
+.editor-mode > small {
+  color: var(--muted);
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+.entry-tabs {
+  display: flex;
+  align-items: center;
+  overflow: auto;
+  gap: 3px;
+  padding: 7px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.entry-tab {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-width: 250px;
+  flex-shrink: 0;
+}
+.entry-tab.active {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+.entry-tab > button {
+  background: transparent;
+  border: 0;
+  padding: 7px 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 205px;
+  font-size: 0.87rem;
+}
+.entry-tab .close-tab {
+  padding: 6px;
+}
+.entry-tabs-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 10px;
+}
+.entry-summary-editor {
+  margin: 15px 0;
+}
+.entry-summary-editor input {
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .rich-editor {
+    padding: 18px 16px;
+  }
+  .block-toolbar {
+    position: static;
+  }
+  .entry-tabs {
+    padding: 6px 10px;
+  }
+  .entry-tabs-status {
+    display: none;
+  }
+  .entry-tab {
+    max-width: 190px;
+  }
+  .entry-tab > button {
+    max-width: 145px;
+  }
+  .editor-mode {
+    flex-wrap: wrap;
+  }
+  .editor-mode > small {
+    margin-left: 0;
+  }
+  .document-outline {
+    position: static;
+  }
+}
+
+.block-document[contenteditable="true"] .tiptap-mathematics-render {
+  cursor: pointer;
+}

@@ -73,8 +73,32 @@ async function click(selector) {
 async function type(selector, text) {
   const e = await waitFor(() => element(selector)),
     id = e["element-6066-11e4-a52e-4f735466cecf"];
-  await command("POST", "/element/" + id + "/clear", {});
-  await command("POST", "/element/" + id + "/value", { text });
+  // Select before typing: React can restore the old controlled value between clear() and sendKeys().
+  await click(selector);
+  await command("POST", "/actions", {
+    actions: [
+      {
+        type: "key",
+        id: "replace-input",
+        actions: [
+          { type: "keyDown", value: "\uE009" },
+          { type: "keyDown", value: "a" },
+          { type: "keyUp", value: "a" },
+          { type: "keyUp", value: "\uE009" },
+        ],
+      },
+    ],
+  });
+  // WebKit sendKeys ignores raw LF characters; use the WebDriver Return key for real multiline input.
+  await command("POST", "/element/" + id + "/value", {
+    text: text.replace(/\r\n?/g, "\n").replace(/\n/g, "\uE007"),
+  });
+  await waitFor(() =>
+    script(
+      "return document.querySelector(arguments[0])?.value===arguments[1]",
+      [selector, text],
+    ),
+  );
 }
 /** Start a Tauri process and wait for the SQLite-backed workspace. */
 async function start() {
@@ -212,9 +236,10 @@ try {
   );
   await click('.mcp-card input[type="checkbox"]');
   await click(".mcp-card .actions button");
-  await waitFor(() =>
-    script('return document.querySelector(".toast")?.innerText.includes("1")'),
+  const mcpResult = await waitFor(() =>
+    script('return document.querySelector(".toast")?.innerText'),
   );
+  assert.match(mcpResult, /Connected: 1 tools|连接成功：1 个工具/);
   await click('.settings-tabs [data-settings-tab="database"]');
   await testNativeShortcuts({ click, script, waitFor, command });
   await testNativeNetwork({ click, type, script, waitFor });
@@ -239,6 +264,40 @@ try {
     ),
   );
   await click(".entry-heading .actions button:nth-child(2)");
+  await click('[data-editor-mode="rich"]');
+  await click('.block-document[contenteditable="true"]');
+  const richText = "native rich block editing persists.";
+  await command("POST", "/actions", {
+    actions: [
+      {
+        type: "key",
+        id: "rich-editor",
+        actions: [
+          { type: "keyDown", value: "\uE009" },
+          { type: "keyDown", value: "a" },
+          { type: "keyUp", value: "a" },
+          { type: "keyUp", value: "\uE009" },
+          ...Array.from(richText).flatMap((value) => [
+            { type: "keyDown", value },
+            { type: "keyUp", value },
+          ]),
+        ],
+      },
+    ],
+  });
+  await waitFor(() =>
+    script(
+      'return document.querySelector(".rich-editor")?.textContent.includes("native rich block editing persists.")',
+    ),
+  );
+  await click(".entry-heading .primary");
+  await waitFor(() =>
+    script(
+      'return !document.querySelector(".title-input")&&document.querySelector(".rich-editor")?.textContent.includes("native rich block editing persists.")',
+    ),
+  );
+  await click(".entry-heading .actions button:nth-child(2)");
+  await click('[data-editor-mode="source"]');
   await type(
     ".content-editor",
     "# Native portable recovery\n\nVerified native edit survives corruption.",
@@ -334,20 +393,22 @@ try {
     fs.writeFileSync(file, damaged);
   }
   await start();
-  await waitFor(() =>
-    script("return document.body.innerText.includes(arguments[0])", [
-      freshTitle,
-    ]),
-  );
   await click(".sidebar nav button:nth-child(2)");
-  await type(".search-box input", "Native portable recovery");
-  await waitFor(() =>
-    script('return document.querySelectorAll(".entry-card").length===1'),
-  );
-  await click(".entry-card");
+  await type(".search-box input", freshTitle);
   await waitFor(() =>
     script(
-      'return document.querySelector(".paper .markdown")?.innerText.includes("Verified native edit survives corruption.")',
+      'return document.querySelector(".entry-row")?.innerText.includes(arguments[0])',
+      [freshTitle],
+    ),
+  );
+  await type(".search-box input", "Native portable recovery");
+  await waitFor(() =>
+    script('return document.querySelectorAll(".entry-row").length===1'),
+  );
+  await click(".entry-row");
+  await waitFor(() =>
+    script(
+      'return document.querySelector(".paper .markdown h1")?.textContent==="Native portable recovery"&&document.querySelector(".paper .markdown")?.innerText.includes("Verified native edit survives corruption.")',
     ),
   );
   assert.ok(

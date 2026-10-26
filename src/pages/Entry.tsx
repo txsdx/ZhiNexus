@@ -1,6 +1,10 @@
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
+import { useEntryDocument } from "../hooks/useEntryDocument";
+import { BlockEditor } from "../components/editor/BlockEditor";
+import { DocumentOutline } from "../components/editor/DocumentOutline";
+import { entryDocument, documentBlocks } from "../components/editor/document";
 import { RevisionDiff } from "../components/RevisionDiff";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import {
   ArrowLeft,
   Check,
@@ -28,12 +32,14 @@ import { json } from "../core/store";
 /** Render and edit one entry; save only changed fields so concurrent category changes are preserved. */
 export function EntryPage({
   id,
+  active = true,
   onBack,
   onOpen,
   onChat,
   notify,
 }: {
   id: string;
+  active?: boolean;
   onBack: () => void;
   onOpen: (id: string) => void;
   onChat: (id: string) => void;
@@ -43,41 +49,38 @@ export function EntryPage({
     t = useT(),
     entry = s.entries.find((e) => e.id === id),
     doc = s.docs.find((d) => d.collection === "entry" && d.id === id);
-  const [editing, setEditing] = useState(false),
-    [content, setContent] = useState(entry?.content ?? ""),
-    [title, setTitle] = useState(entry?.title ?? ""),
-    [history, setHistory] = useState(false),
+  const {
+    editing,
+    saving,
+    setEditing,
+    content,
+    setContent,
+    title,
+    setTitle,
+    summary,
+    setSummary,
+    sourceMode,
+    setSourceMode,
+    sourceOnly,
+    focus,
+    focusId,
+    setFocusId,
+    setRichCache,
+    document,
+    dirty,
+    base,
+    compareSave,
+    setCompareSave,
+    save,
+    beginEditing,
+    appendImage,
+    locate,
+  } = useEntryDocument(id, entry, notify);
+  const [history, setHistory] = useState(false),
     [busy, setBusy] = useState(""),
     [imagePrompt, setImagePrompt] = useState<string | null>(null),
     [preview, setPreview] = useState<string | null>(null);
-  useEffect(() => {
-    setContent(entry?.content ?? "");
-    setTitle(entry?.title ?? "");
-    setEditing(false);
-  }, [id]);
-  const dirty =
-    editing && (content !== entry?.content || title !== entry?.title);
-  useEffect(() => {
-    const f = (e: BeforeUnloadEvent) => {
-      if (dirty) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-    const navigate = (e: Event) => {
-      if (
-        dirty &&
-        !window.confirm(t("放弃尚未保存的修改？", "Discard unsaved changes?"))
-      )
-        e.preventDefault();
-    };
-    window.addEventListener("zhinexus:navigate", navigate);
-    window.addEventListener("beforeunload", f);
-    return () => {
-      window.removeEventListener("zhinexus:navigate", navigate);
-      window.removeEventListener("beforeunload", f);
-    };
-  }, [dirty]);
+  if (!active) return null;
   if (!entry)
     return (
       <div className="page">
@@ -96,19 +99,6 @@ export function EntryPage({
       setBusy("");
     }
   };
-  const save = async () => {
-    const patch: Record<string, string> = {
-      updatedAt: new Date().toISOString(),
-    };
-    if (content !== entry.content) patch.content = content;
-    if (title !== entry.title) {
-      if (!title.trim()) throw Error("标题不能为空");
-      patch.title = title.trim();
-    }
-    await store.patch("entry", id, patch);
-    setEditing(false);
-    notify(t("已保存", "Saved"));
-  };
   const attach = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -122,11 +112,7 @@ export function EntryPage({
       new Uint8Array(await file.arrayBuffer()),
       file.type,
     );
-    setContent(
-      (editing ? content : entry.content) +
-        `\n\n![${file.name.replace(/[\[\]\n]/g, "")}](asset:${hash})\n`,
-    );
-    setEditing(true);
+    appendImage(hash, file.name.replace(/[\[\]\n]/g, ""));
   };
   return (
     <div className="page entry-page">
@@ -148,6 +134,7 @@ export function EntryPage({
           {editing ? (
             <input
               className="title-input"
+              disabled={saving}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -169,20 +156,15 @@ export function EntryPage({
           >
             <History size={19} />
           </button>
-          <button
-            onClick={() => {
-              setContent(entry.content);
-              setTitle(entry.title);
-              setEditing(!editing);
-            }}
-          >
+          <button disabled={saving} onClick={beginEditing}>
             <Edit3 size={16} />
             {editing ? t("取消", "Cancel") : t("编辑", "Edit")}
           </button>
           {editing && (
             <button
               className="primary"
-              onClick={() => void act(t("保存中", "Saving"), save)}
+              disabled={saving}
+              onClick={() => void act(t("保存中", "Saving"), () => save())}
             >
               <Save size={16} />
               {t("保存", "Save")}
@@ -238,24 +220,110 @@ export function EntryPage({
             </button>
             {busy && <Busy label={busy} />}
           </div>
-          {editing ? (
+          {editing && (
+            <div className="editor-mode">
+              <button
+                data-editor-mode="rich"
+                disabled={sourceOnly || saving}
+                className={!sourceMode ? "active" : ""}
+                onClick={() => setSourceMode(false)}
+              >
+                {t("所见即所得", "Rich blocks")}
+              </button>
+              <button
+                data-editor-mode="source"
+                disabled={saving}
+                className={sourceMode ? "active" : ""}
+                onClick={() => {
+                  setFocusId(null);
+                  setSourceMode(true);
+                }}
+              >
+                {t("Markdown 源码", "Markdown source")}
+              </button>
+              <small>
+                {t(
+                  "本机草稿；保存词条后参与同步",
+                  "Local draft; save the entry to sync",
+                )}
+              </small>
+            </div>
+          )}
+          {focusId && (
+            <div className="focus-breadcrumb">
+              <button onClick={() => setFocusId(null)}>
+                {t("完整文档", "Full document")}
+              </button>
+              <span>
+                ›{" "}
+                {documentBlocks(document).find((b) => b.id === focusId)?.text ||
+                  t("当前块", "Focused block")}
+              </span>
+            </div>
+          )}
+          {sourceOnly && (
+            <p className="notice">
+              {t(
+                "此文档含脚注或 HTML，使用 Markdown 源码编辑以保留原文。",
+                "This document contains footnotes or HTML. Use Markdown source to preserve its original content.",
+              )}
+            </p>
+          )}
+          {editing && (sourceMode || sourceOnly) ? (
             <textarea
               className="content-editor"
+              disabled={saving}
               aria-label="Markdown"
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                setContent(e.target.value);
+                setRichCache(null);
+                setFocusId(null);
+              }}
             />
+          ) : sourceOnly ? (
+            <Markdown>{entry.content}</Markdown>
           ) : (
-            <Markdown>
-              {entry.content ||
-                t(
-                  "点击编辑，记录你的理解。",
-                  "Edit to start capturing your understanding.",
-                )}
-            </Markdown>
+            <BlockEditor
+              document={document}
+              editable={editing && !saving}
+              focus={focus}
+              onFocus={(id) => setFocusId(id)}
+              onChange={(json, markdown) => {
+                setRichCache({ source: markdown, json });
+                setContent(markdown);
+              }}
+            />
           )}
         </article>
         <aside className="entry-aside">
+          <DocumentOutline
+            document={document}
+            focusId={focusId}
+            onFocus={setFocusId}
+            allowFocus={!sourceOnly}
+            onLocate={locate}
+          />
+          <section className="entry-summary-editor">
+            <h3>{t("一句话解释", "One-line explanation")}</h3>
+            {editing ? (
+              <input
+                aria-label={t("一句话解释", "One-line explanation")}
+                disabled={saving}
+                value={summary}
+                maxLength={600}
+                onChange={(e) => setSummary(e.target.value)}
+              />
+            ) : (
+              <p>
+                {entry.summary ||
+                  t(
+                    "自动提取正文中的一句话解释；编辑可单独设置。",
+                    "Uses the one-sentence section from the body; edit to set it explicitly.",
+                  )}
+              </p>
+            )}
+          </section>
           <section>
             <h3>
               <GitBranch size={17} />
@@ -442,6 +510,41 @@ export function EntryPage({
           </section>
         </aside>
       </div>
+      {compareSave && (
+        <Modal
+          wide
+          title={t(
+            "保存前比较外部修改",
+            "Compare external changes before saving",
+          )}
+          onClose={() => setCompareSave(false)}
+        >
+          <p>
+            {t(
+              "开始编辑后，词条已在其他位置改变。请比较后再确认使用本机草稿；历史版本会保留。",
+              "The entry changed elsewhere after editing began. Compare before applying this local draft; prior versions remain in history.",
+            )}
+          </p>
+          <div className="compare-trees">
+            <section>
+              <h3>{t("当前已保存版本", "Current saved version")}</h3>
+              <strong>{entry.title}</strong>
+              <Markdown>{entry.content}</Markdown>
+            </section>
+            <section>
+              <h3>{t("本机草稿", "Local draft")}</h3>
+              <strong>{title}</strong>
+              <Markdown>{content}</Markdown>
+            </section>
+          </div>
+          <button
+            className="primary"
+            onClick={() => void act(t("保存中", "Saving"), () => save(true))}
+          >
+            {t("确认保存草稿", "Confirm draft save")}
+          </button>
+        </Modal>
+      )}
       {preview !== null && (
         <Modal
           wide
@@ -454,6 +557,15 @@ export function EntryPage({
           <button
             className="primary"
             onClick={() => {
+              base.current = {
+                title: entry.title,
+                content: entry.content,
+                summary: entry.summary ?? "",
+              };
+              setRichCache({
+                source: preview,
+                json: entryDocument({ content: preview }),
+              });
               setContent(preview);
               setTitle(entry.title);
               setEditing(true);
@@ -481,12 +593,7 @@ export function EntryPage({
             onClick={() =>
               void act(t("生成图片…", "Generating image…"), async () => {
                 const hash = await generateImage(imagePrompt);
-                setContent(
-                  (editing ? content : entry.content) +
-                    `\n\n![AI illustration](asset:${hash})\n`,
-                );
-                setTitle(entry.title);
-                setEditing(true);
+                appendImage(hash, "AI illustration");
                 setImagePrompt(null);
               })
             }

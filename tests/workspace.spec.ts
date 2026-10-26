@@ -61,30 +61,31 @@ test("capture, edit, fuzzy search, formula/diagram render, reload and mobile set
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await page.getByRole("button", { name: "载入示例" }).click();
-  await expect(page.locator(".entry-card")).toHaveCount(3);
+  await expect(page.locator(".entry-row")).toHaveCount(3);
   await page.screenshot({
     path: "test-results/overview-desktop.png",
     fullPage: true,
   });
-  await page.locator(".entry-card").filter({ hasText: "间隔重复" }).click();
+  await page.locator(".entry-row").filter({ hasText: "间隔重复" }).click();
   await expect(page.locator(".katex").first()).toBeVisible();
   await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.locator('[data-editor-mode="source"]').click();
   await page
     .getByRole("textbox", { name: "Markdown", exact: true })
     .fill("# 持久化测试\n\n已保存的理解。");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   // A click starts asynchronous durable storage; reload only after the editor acknowledges the saved content.
-  await expect(page.locator(".content-editor")).toHaveCount(0);
+  await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
   await expect(page.locator(".markdown")).toContainText("已保存的理解");
   await page.reload();
   await page.getByRole("button", { name: "我的知识库", exact: true }).click();
-  await page.locator(".entry-card").filter({ hasText: "间隔重复" }).click();
+  await page.locator(".entry-row").filter({ hasText: "间隔重复" }).click();
   await expect(page.locator(".markdown")).toContainText("已保存的理解");
   await page.getByRole("button", { name: "返回知识库" }).click();
   await page.getByRole("textbox", { name: "搜索知识" }).fill("费曼学");
-  await expect(page.locator(".entry-card")).toHaveCount(1);
+  await expect(page.locator(".entry-row")).toHaveCount(1);
   await page.getByRole("button", { name: "Clear search" }).click();
-  await page.locator(".entry-card").filter({ hasText: "Local-first" }).click();
+  await page.locator(".entry-row").filter({ hasText: "Local-first" }).click();
   await expect(page.locator(".diagram svg")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "设置", exact: true }).click();
@@ -256,7 +257,7 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
     ),
   });
   await page.getByRole("button", { name: "保存", exact: true }).click();
-  await expect(page.locator(".content-editor")).toHaveCount(0);
+  await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
   await expect(page.locator(".markdown img")).toBeVisible();
   await page.getByRole("button", { name: "设置与偏好" }).click();
   await page
@@ -962,4 +963,288 @@ test("deep verification retries concurrent cloud additions before certifying equ
   expect(
     await repository(page, "return store.getSnapshot().categories[0].name"),
   ).toBe("并发云端分类");
+});
+
+test("knowledge uses a dense category tree with summaries, review dates and FSRS memory coloring", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.patch('category','parent',{name:'父分类',parent:''});await store.patch('category','child',{name:'子分类',parent:'parent'});
+ const first=await store.createEntry('熟悉概念','# 熟悉概念\\n\\n## 一句话解释\\n可显示的一句话。','test','parent');
+ const old=await store.createEntry('易忘概念','older material','test','child');
+ const {schedule}=await import('/src/core/review.ts');
+ for(const[id,time]of [[first,new Date()],[old,new Date('2020-01-01T12:00:00Z')]]){const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify(schedule(e.card,95,time)))});}
+ await store.createEntry('首次复习的概念','new material');`,
+  );
+  await page.getByRole("button", { name: "我的知识库", exact: true }).click();
+  await expect(page.locator(".entry-row")).toHaveCount(3);
+  await expect(
+    page.getByRole("columnheader", { name: "一句话解释", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: /上次复习/ }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".entry-row").filter({ hasText: "熟悉概念" }),
+  ).toContainText("可显示的一句话。");
+  const color = await page.locator(".entry-row").evaluateAll((rows) =>
+    rows.map((row) => ({
+      title: row.querySelector(".entry-title-cell")?.textContent,
+      r: row.querySelector(".memory-cell")?.getAttribute("data-retention"),
+    })),
+  );
+  expect(Number(color.find((x) => x.title === "熟悉概念")!.r)).toBeGreaterThan(
+    Number(color.find((x) => x.title === "易忘概念")!.r),
+  );
+  expect(color.find((x) => x.title === "首次复习的概念")!.r).toBe("unknown");
+  await page
+    .locator(".category-row")
+    .filter({ hasText: "父分类" })
+    .getByRole("button")
+    .click();
+  await expect(page.locator(".entry-row")).toHaveCount(1);
+  await page.getByRole("button", { name: "展开全部", exact: true }).click();
+  await expect(page.locator(".entry-row")).toHaveCount(3);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page
+      .locator(".knowledge-table-scroll")
+      .evaluate((e) => e.scrollWidth > e.clientWidth),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/knowledge-tree-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("rich block focus cannot delete hidden sections, tabs keep drafts and reload restores the focused edit", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.createEntry('块式编辑','# Alpha\\n\\n前面的内容必须保留。\\n\\n## Target\\n\\n需要修改的内容。\\n\\n## Next\\n\\n后面的内容必须保留。');await store.createEntry('第二个标签','another entry');`,
+  );
+  await page.getByRole("button", { name: "我的知识库", exact: true }).click();
+  await page.locator(".entry-row").filter({ hasText: "块式编辑" }).click();
+  await page.getByRole("button", { name: "聚焦：Target", exact: true }).click();
+  await expect(page.locator(".rich-editor")).toContainText("需要修改的内容");
+  await expect(page.locator(".rich-editor")).not.toContainText("前面的内容");
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  const editor = page.getByRole("textbox", {
+    name: "所见即所得编辑器",
+    exact: true,
+  });
+  await editor.fill("聚焦后的新内容");
+  await expect(editor).toContainText("聚焦后的新内容");
+  // A second full replacement must remain inside the original frozen region after its heading disappeared.
+  await editor.fill("第二次聚焦编辑");
+  await page.getByRole("button", { name: "返回知识库", exact: true }).click();
+  await page.locator(".entry-row").filter({ hasText: "第二个标签" }).click();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await page.getByRole("tab", { name: /块式编辑/ }).click();
+  await expect(
+    page.getByRole("textbox", { name: "所见即所得编辑器", exact: true }),
+  ).toContainText("第二次聚焦编辑");
+  await expect(page.locator(".entry-tabs-status")).toContainText(
+    "本机草稿已保存",
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "所见即所得编辑器", exact: true }),
+  ).toContainText("第二次聚焦编辑");
+  await page.getByRole("button", { name: "完整文档", exact: true }).click();
+  await expect(page.locator(".rich-editor")).toContainText(
+    "前面的内容必须保留",
+  );
+  await expect(page.locator(".rich-editor")).toContainText(
+    "后面的内容必须保留",
+  );
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
+  const content = await repository<string>(
+    page,
+    `return store.getSnapshot().entries.find(e=>e.title==='块式编辑').content;`,
+  );
+  expect(content).toContain("第二次聚焦编辑");
+  expect(content).toContain("前面的内容必须保留");
+  expect(content).toContain("后面的内容必须保留");
+  await page.screenshot({
+    path: "test-results/block-editor-tabs.png",
+    fullPage: true,
+  });
+});
+
+test("rich editing retains math, Mermaid and local images, and concurrent saved changes require comparison", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const id = await repository<string>(
+    page,
+    `const hash=await store.db.putBlob(new Uint8Array([137,80,78,71]),'image/png');return store.createEntry('富文本保真','# 标题\\n\\n$x^2$\\n\\n$$\\nE=mc^2\\n$$\\n\\n~~~mermaid\\nflowchart LR\\n A --> B\\n~~~\\n\\n![asset](asset:'+hash+')');`,
+  );
+  await page.getByRole("button", { name: "我的知识库", exact: true }).click();
+  await page.locator(".entry-row").click();
+  await expect(page.locator(".rich-editor .katex").first()).toBeVisible();
+  await expect(page.locator(".rich-editor .diagram svg")).toBeVisible();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.locator('.block-document [data-type="block-math"]').click();
+  await expect(
+    page.getByRole("dialog", { name: "编辑 LaTeX 公式" }),
+  ).toBeVisible();
+  await page.getByRole("textbox", { name: "LaTeX", exact: true }).fill("F=ma");
+  await page.getByRole("button", { name: "应用公式", exact: true }).click();
+  await expect(
+    page.locator('.block-document [data-type="block-math"]'),
+  ).toHaveAttribute("data-latex", "F=ma");
+  await page
+    .getByRole("textbox", { name: "一句话解释", exact: true })
+    .fill("用户设置的一句话");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
+  expect(
+    await repository(
+      page,
+      `return store.getSnapshot().entries.find(e=>e.id==='${id}').summary`,
+    ),
+  ).toBe("用户设置的一句话");
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.locator('[data-editor-mode="source"]').click();
+  await page
+    .getByRole("textbox", { name: "Markdown", exact: true })
+    .fill("# 本地草稿\n\nlocal");
+  await repository(
+    page,
+    `await store.patch('entry','${id}',{content:'# 其他设备\\n\\nremote'});`,
+  );
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "保存前比较外部修改" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toContainText("其他设备");
+  await expect(page.getByRole("dialog")).toContainText("本地草稿");
+  expect(
+    await repository(
+      page,
+      `return store.getSnapshot().entries.find(e=>e.id==='${id}').content`,
+    ),
+  ).toContain("remote");
+  await page.getByRole("button", { name: "确认保存草稿", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(
+    await repository(
+      page,
+      `return store.getSnapshot().entries.find(e=>e.id==='${id}').content`,
+    ),
+  ).toContain("local");
+});
+
+test("complex Markdown keeps footnotes and inert HTML in source mode", async ({
+  page,
+}) => {
+  let trackers = 0;
+  await page.route("https://tracker.invalid/**", async (r) => {
+    trackers++;
+    await r.fulfill({ status: 200, body: "" });
+  });
+  await page.goto("/");
+  const source =
+    '# 复杂文档\n\n保留脚注[^a]。\n\n[^a]: 原始脚注定义\n\n<img src="https://tracker.invalid/pixel">';
+  await repository(
+    page,
+    `await store.createEntry('原文保留',${JSON.stringify(source)});`,
+  );
+  await page.getByRole("button", { name: "我的知识库", exact: true }).click();
+  await page.locator(".entry-row").click();
+  await expect(
+    page.locator(".notice").filter({ hasText: "脚注或 HTML" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.locator('[data-editor-mode="rich"]')).toBeDisabled();
+  await expect(
+    page.getByRole("textbox", { name: "Markdown", exact: true }),
+  ).toHaveValue(source);
+  await page
+    .getByRole("textbox", { name: "Markdown", exact: true })
+    .fill(source.replace("复杂文档", "修改标题"));
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].content"),
+  ).toBe(source.replace("复杂文档", "修改标题"));
+  expect(trackers).toBe(0);
+});
+
+test("an image finishing in a background tab appends to the newest draft without replacing later typing", async ({
+  page,
+}) => {
+  let finishImage: () => void = () => {};
+  const released = new Promise<void>((resolve) => {
+    finishImage = resolve;
+  });
+  let started = false;
+  await page.route(
+    "https://ai.example/v1/images/generations",
+    async (route) => {
+      started = true;
+      await released;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              b64_json:
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aIn0AAAAASUVORK5CYII=",
+            },
+          ],
+        }),
+      });
+    },
+  );
+  try {
+    await page.goto("/");
+    await repository(
+      page,
+      `const ai=structuredClone(store.getSnapshot().ai);ai.baseUrl='https://ai.example/v1';ai.tasks.image.model='image-fixture';ai.models=[{id:'image-fixture',name:'Image fixture',efforts:[],thinking:null,tools:null,vision:null,image:true}];await store.saveAI(ai);await store.saveDevice({...store.getSnapshot().device,apiKey:'fixture-key',apiKeyEndpoint:ai.baseUrl});await store.createEntry('后台配图','initial');await store.createEntry('其他标签','other');`,
+    );
+    await page.getByRole("button", { name: "我的知识库", exact: true }).click();
+    await page.locator(".entry-row").filter({ hasText: "后台配图" }).click();
+    await page.getByRole("button", { name: "编辑", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "所见即所得编辑器", exact: true })
+      .fill("生成前的草稿");
+    await page.getByRole("button", { name: "AI 配图", exact: true }).click();
+    await page
+      .getByRole("button", { name: "生成并插入草稿", exact: true })
+      .click();
+    await expect.poll(() => started).toBe(true);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "所见即所得编辑器", exact: true })
+      .fill("生成期间继续写下的新理解");
+    await page.getByRole("button", { name: "返回知识库", exact: true }).click();
+    await page.locator(".entry-row").filter({ hasText: "其他标签" }).click();
+    finishImage();
+    await expect(page.getByRole("tab", { name: /后台配图/ })).toContainText(
+      "●",
+    );
+    await page.getByRole("tab", { name: /后台配图/ }).click();
+    await expect(page.locator(".rich-editor img")).toBeVisible();
+    await expect(page.locator(".rich-editor")).toContainText(
+      "生成期间继续写下的新理解",
+    );
+    await page.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(page.locator(".entry-heading .title-input")).toHaveCount(0);
+    const body = await repository<string>(
+      page,
+      `return store.getSnapshot().entries.find(e=>e.title==='后台配图').content`,
+    );
+    expect(body).toContain("生成期间继续写下的新理解");
+    expect(body).toContain("asset:");
+  } finally {
+    finishImage();
+  }
 });

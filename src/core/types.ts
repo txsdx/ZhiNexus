@@ -40,6 +40,8 @@ export interface Entry {
   id: string;
   title: string;
   content: string;
+  summary?: string;
+  editorDocument?: { schema: 1; markdown: string; json: Json };
   category: string;
   tags: string[];
   prerequisites: string[];

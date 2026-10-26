@@ -9,7 +9,7 @@ import { store } from "../core/store";
 import "katex/dist/katex.min.css";
 
 /** Render Mermaid through its strict sanitizer; errors remain readable rather than becoming raw HTML. */
-function Diagram({ code }: { code: string }) {
+export function Diagram({ code }: { code: string }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, ""),
     [svg, setSvg] = useState(""),
     [error, setError] = useState(false);
@@ -46,7 +46,7 @@ function Diagram({ code }: { code: string }) {
   );
 }
 /** Resolve only content-addressed images; remote Markdown cannot silently track the reader. */
-function AssetImage({ src, alt }: { src?: string; alt?: string }) {
+export function AssetImage({ src, alt }: { src?: string; alt?: string }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
     let live = true,

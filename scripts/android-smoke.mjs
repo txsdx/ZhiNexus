@@ -90,6 +90,21 @@ try {
       .innerText()
       .then((t) => t.includes("SQLite content survives")),
   );
+  await page.locator(".entry-heading .actions button:nth-child(2)").click();
+  await page.locator('[data-editor-mode="rich"]').click();
+  await page
+    .locator('.block-document[contenteditable="true"]')
+    .fill(
+      "SQLite content survives a native restart. Rich blocks were edited on Android.",
+    );
+  await page.locator(".entry-heading .primary").click();
+  await page.locator(".entry-heading h1").waitFor();
+  await waitFor(() =>
+    page
+      .locator(".entry-tabs-status")
+      .textContent()
+      .then((text) => /Local drafts saved|本机草稿已保存/.test(text ?? "")),
+  );
   await page.screenshot({
     path: "android-test-results/entry.png",
     fullPage: true,
@@ -108,9 +123,10 @@ try {
   device("shell", "am", "start", "-W", "-n", pkg + "/.MainActivity");
   connected = await connect();
   page = connected.page;
+  await page.locator('.entry-tabs [role="tab"]').waitFor();
   await page.locator(".sidebar nav button:nth-child(2)").click();
   await page.locator(".search-box input").fill("Android native memory");
-  await page.locator(".entry-card").click();
+  await page.locator(".entry-row").click();
   assert.ok(
     (await page.locator(".paper .markdown").innerText()).includes(
       "SQLite content survives",

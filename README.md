@@ -6,11 +6,12 @@
   <p><a href="#快速开始">快速开始</a> · <a href="#功能">功能</a> · <a href="#数据与同步">数据与同步</a> · <a href="#构建原生应用">原生构建</a> · <a href=".ai/STATUS.md">完成情况</a></p>
 </div>
 
-> **0.6 开发版 / Early development.** 桌面后台/快捷键/OCR、数据目录迁移、全局代理、API Key 加密同步与独立通知设置已实现。0.6 的 Windows、Ubuntu 安装产物原生测试和 Android15 模拟器测试已通过；见 [验证记录](.ai/STATUS.md)。真实提供商、实体手机、正式升级与大型库仍需后续验证。
+> **0.7 开发版 / Early development.** 桌面后台/快捷键/OCR、数据目录迁移、全局代理、API Key 加密同步与独立通知设置已实现。0.6 的平台验证作为历史记录；本轮验证进展见 [验证记录](.ai/STATUS.md)。真实提供商、实体手机、正式升级与大型库仍需后续验证。
 
 ## 功能
 
-- **知识库**：离线 SQLite、模糊检索、分类标签、标准解释模板、Markdown / LaTeX / Mermaid、本地图片、AI 配图提示词预览。
+- **知识库**：分类树表格、递归数量与折叠、模糊查询、标题/一句话解释/创建/上次复习时间；FSRS 遗忘估计用黑→红→紫显示，首次复习单独标记。
+- **块编辑与多标签**：所见即所得与 Markdown 源码、大纲定位、块/章节聚焦、块移动、表格/任务/公式/Mermaid、本地图片与 AI 配图；按设备恢复标签和未保存草稿，后台配图保留后续输入。
 - **理解式复习**：FSRS 到期队列，AI 简答/选择题、评分、补教与遗漏点补充；题目、答案和评分阶段持久化，可重开继续。
 - **学习助手**：全局与每词条独立话题及上下文、模型/深度选择、知识库检索与编辑工具；写操作和 MCP 外部工具调用先确认。
 - **AI 配置**：OpenAI-compatible Chat Completions、CPA 扩展模型目录和有限回退；未知能力不猜测。每项功能独立模型、思考偏好、可编辑提示词。
@@ -19,9 +20,11 @@
 - **多设备数据**：HTTPS WebDAV 增量日志交换、版本向量、字段多值 CRDT、SHA-256 附件寻址、Merkle 和逻辑状态摘要、完整快照。
 - **数据掌控**：数据库空间、深度完整性检查、远端坏块隔离修复、VACUUM、回收站、SQLite 滚动备份和耐久日志自动恢复、AES-256-GCM 加密文件备份及合并恢复。
 - **舒适阅读**：简中/English 自动系统语言、日间/夜间/护眼、主题色、内置思源黑体/宋体、整体字体缩放、桌面和手机布局预设。
-- **原生入口**：Tauri 2 + Rust、桌面快捷键选区捕获、Android 系统复习排程、Windows 便携模式、统一 Release JSON 和平台更新、可选目标的缓存构建。
+- **原生入口**：Tauri 2 + Rust、桌面快捷键选区捕获、Android 系统复习排程、Windows 便携模式、统一 Release JSON 和平台更新、全平台统一缓存构建。
 
 新建条目会先保存原始材料；配置相应 AI 任务后自动解释、建立关联和归入已有分类。某步失败时原始数据仍保留。相同名称会打开已有条目，模糊匹配可手动选择相近概念。
+
+块聚焦只编辑当前区域，完整文档仍保留；返回完整文档可继续浏览。遇到脚注或原始 HTML 时使用源码模式，避免有损转换。未保存草稿保存在本机，保存词条后才参与多设备同步与知识快照备份。编辑期间其他设备修改了正文，保存前会显示两版比较。
 
 ## 快速开始
 
@@ -132,17 +135,19 @@ Windows 输出 `ZhiNexus_windows_x64_<version>_protable.exe` 和 `*_setup.exe`�
 
 ### GitHub Actions 与更新
 
-在 Actions 的 **Build selected platforms → Run workflow** 中勾选目标：
+在 Actions 的 **Build and release → Run workflow** 运行一次，统一构建 Windows x64、Ubuntu 24.04+ x64 和 Android 15+ arm64-v8a：
 
-| 选项 | 默认 | 发布产物 |
-|---|---|---|
-| Windows_latest_x64 | 开 | `*_protable.exe`、`*_setup.exe` |
-| Android_15+_arm64-v8a | 关 | `.apk` |
-| Ubuntu_24.04+_x64 | 关 | `.deb` |
+| 平台 | 输出 |
+|---|---|
+| Windows | `*_protable.exe`、`*_setup.exe` |
+| Android | `.apk` |
+| Ubuntu | `.deb` |
 
-此入口**只编译测试**，没有发布选项。Windows、Android、Ubuntu 另各有独立编译入口。正式发布使用 **Release → Run workflow**：固定编译全部平台，可勾选 **Create Release** 与 **Save as draft**（默认草稿）。macOS 不参与编译；push 只运行 Validate。
+入口只有 **Publish Release**（默认关闭）和 **Save Release as draft**（默认开启，发布时生效）两个选项。旧平台选择入口及转发 workflow 已删除；push/PR 保留自动 Validate。
 
-Release 使用 GitHub 自动注入的 `GITHUB_TOKEN` 和 `contents: write`，**不需要自行配置上传密钥**。npm、Rust 编译产物、Gradle、NDK 和 Tauri 打包工具分别通过官方缓存 Action 复用。首次构建和依赖变更仍需要编译。Android 还会构建不发布的 x86_64 调试 APK，在 API 35 模拟器测试重启、SQLite 与通知；Windows 原生测试验证真实 exe 的普通/便携隔离及数据库损坏恢复。
+前端在共享任务中只编译一次，以提交版本和 SHA-256 清单校验后交给三个原生目标。Windows、Linux、Android 的 Rust/系统工具链按各自 ABI 并行构建，不能共用原生二进制。npm、Rust、Gradle、SDK/NDK 和打包工具继续缓存；实际加速幅度取决于链接、下载和设备测试时间。
+
+Release 使用 GitHub 自动 `GITHUB_TOKEN`，无需自行配置上传密钥；只有全部原生任务成功后才按所选发布/草稿参数上传。Android 会额外构建测试 APK，在 API35 模拟器测试原生块编辑、重启、SQLite 与通知；桌面测试验证真实 exe/DEB、块编辑、快捷键、OCR、便携隔离、清理及数据库/快照损坏恢复。
 
 发布时生成同一个 [`latest.json`](https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json)：
 

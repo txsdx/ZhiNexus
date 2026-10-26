@@ -1,68 +1,18 @@
 /** Searchable knowledge library and a live, local-first learning overview. */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Fuse from "fuse.js";
 import {
   ArrowUpRight,
   BookOpen,
   Clock3,
   Layers3,
-  MoreHorizontal,
   Plus,
   Sparkles,
   Target,
 } from "lucide-react";
 import { useKnowledge, useT, Empty } from "../components/common";
-import type { Entry } from "../core/types";
+import { KnowledgeTable } from "../components/library/KnowledgeTable";
 import { store } from "../core/store";
-/** Render a compact knowledge card with real category, due state and content excerpt. */
-function EntryCard({
-  entry,
-  onOpen,
-}: {
-  entry: Entry;
-  onOpen: (id: string) => void;
-}) {
-  const { categories } = useKnowledge(),
-    t = useT();
-  const category = categories.find((c) => c.id === entry.category);
-  return (
-    <button className="entry-card" onClick={() => onOpen(entry.id)}>
-      <div className="card-top">
-        <span
-          className={
-            "category-dot " + (entry.category === "technology" ? "blue" : "")
-          }
-        >
-          {category?.name || t("未分类", "Uncategorized")}
-        </span>
-        <MoreHorizontal size={18} />
-      </div>
-      <h3>{entry.title}</h3>
-      <p>
-        {entry.content
-          .replace(/[#*`>$\[\]]/g, "")
-          .replace(/\n+/g, " ")
-          .slice(0, 110) ||
-          t(
-            "为这个概念写下第一条笔记…",
-            "Start with a note about this concept…",
-          )}
-      </p>
-      <footer>
-        <span>
-          <BookOpen size={13} />
-          {entry.card.reps || 0} {t("次复习", "reviews")}
-        </span>
-        <span className={entry.card.due <= new Date() ? "due" : ""}>
-          <Clock3 size={13} />
-          {entry.card.due <= new Date()
-            ? t("待复习", "Due now")
-            : new Date(entry.card.due).toLocaleDateString()}
-        </span>
-      </footer>
-    </button>
-  );
-}
 /** Display library results with fuzzy search, category filters and deterministic sorting. */
 export function Library({
   onOpen,
@@ -78,27 +28,20 @@ export function Library({
   onReview: () => void;
 }) {
   const s = useKnowledge(),
-    t = useT(),
-    [category, setCategory] = useState("all"),
-    [sort, setSort] = useState("updated");
+    t = useT();
   const due = s.entries.filter((e) => e.card.due <= new Date());
   const results = useMemo(() => {
     let rows = query.trim()
       ? new Fuse(s.entries, {
-          keys: [{ name: "title", weight: 3 }, "tags", "content"],
+          keys: [{ name: "title", weight: 3 }, "tags", "content", "summary"],
           threshold: 0.35,
           ignoreLocation: true,
         })
           .search(query)
           .map((r) => r.item)
       : [...s.entries];
-    if (category !== "all") rows = rows.filter((e) => e.category === category);
-    return rows.sort((a, b) =>
-      sort === "title"
-        ? a.title.localeCompare(b.title)
-        : b.updatedAt.localeCompare(a.updatedAt),
-    );
-  }, [s.entries, category, query, sort]);
+    return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }, [s.entries, query]);
   return (
     <div className="page">
       <div className="page-heading">
@@ -215,52 +158,14 @@ export function Library({
             <span className="count">{results.length}</span>
           </h2>
         </div>
-        <select
-          aria-label={t("排序", "Sort")}
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-        >
-          <option value="updated">{t("最近更新", "Recently updated")}</option>
-          <option value="title">{t("名称排序", "Alphabetical")}</option>
-        </select>
-      </div>
-      <div className="filter-row">
-        <button
-          className={category === "all" ? "active" : ""}
-          onClick={() => setCategory("all")}
-        >
-          {t("全部", "All knowledge")}
-          <span>{s.entries.length}</span>
-        </button>
-        {s.categories.map((c) => (
-          <button
-            key={c.id}
-            className={category === c.id ? "active" : ""}
-            onClick={() => setCategory(c.id)}
-          >
-            {c.name}
-            <span>{s.entries.filter((e) => e.category === c.id).length}</span>
-          </button>
-        ))}
       </div>
       {results.length ? (
-        <div className="entry-grid">
-          {(dashboard ? results.slice(0, 6) : results).map((e) => (
-            <EntryCard key={e.id} entry={e} onOpen={onOpen} />
-          ))}
-          <button className="new-card" onClick={onCreate}>
-            <span>
-              <Plus size={23} />
-            </span>
-            <strong>{t("捕捉新的灵感", "Capture a new idea")}</strong>
-            <small>
-              {t(
-                "从一个概念，开始新的连接",
-                "A new concept. A new connection.",
-              )}
-            </small>
-          </button>
-        </div>
+        <KnowledgeTable
+          entries={dashboard ? results.slice(0, 6) : results}
+          categories={s.categories}
+          onOpen={onOpen}
+          compact={dashboard}
+        />
       ) : (
         <Empty
           title={

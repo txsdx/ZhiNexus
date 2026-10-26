@@ -102,7 +102,7 @@ pub async fn mcp_start(app: tauri::AppHandle, config: StdioConfig) -> Result<Str
     let mut child = command.spawn().map_err(|e| {
         format!(
             "无法启动 MCP（检查程序与参数）/ Cannot start MCP: {}",
-            e.kind()
+            e
         )
     })?;
     let input = child.stdin.take().ok_or("MCP stdin unavailable")?;

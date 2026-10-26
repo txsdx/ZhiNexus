@@ -33,6 +33,10 @@ const schemas = {
   entry: z.object({
     title: text.min(1),
     content: text,
+    summary: text.max(600).optional(),
+    editorDocument: z
+      .object({ schema: z.literal(1), markdown: text, json: z.json() })
+      .optional(),
     category: text,
     tags: z.array(text),
     prerequisites: z.array(text),

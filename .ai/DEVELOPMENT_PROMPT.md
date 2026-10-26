@@ -9,3 +9,6 @@
 交付：运行有意义的测试；报告实际结果、未验证部分与下一项工作。更新 CHANGELOG、STATUS、KNOWN_ISSUES。不要只输出计划或伪实现。
 
 版本：每次实现迭代都运行版本脚本。共享代码改动用 npm run version:bump -- shared；只涉及 Windows/Android/Ubuntu 用对应 windows/android/ubuntu，仅提高该平台 patch。保持所有平台共同 major.minor，不让仓库 tag 导致其余平台无效更新。发布 latest.json 必须保留未构建平台同发布线的 metadata；格式严格为 *_protable.exe、*_setup.exe、.apk、.deb。
+
+
+0.7：只有一个手动 Build and release 入口，默认全平台，前端只编译一次。不要恢复旧平台勾选入口。块编辑须保留 Markdown/JSON 缓存绑定、持久块 ID、聚焦区域外边界；测聚焦全选删除、异步配图和标签切换、保存后立即重启。草稿是设备局部，不能覆盖更新的已保存内容。学习思源交互不等于复制其 AGPL 实现。用户要求历史作者/提交者名 codex，已明确授权本轮强制推送。

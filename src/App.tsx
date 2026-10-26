@@ -26,6 +26,8 @@ import {
   quitDesktop,
   type DesktopAction,
 } from "./services/desktop";
+import { EntryTabs } from "./components/editor/EntryTabs";
+import { useEntryWorkspace } from "./hooks/useEntryWorkspace";
 import { OcrResult } from "./components/OcrResult";
 import { unbase64 } from "./core/crypto";
 import { Locale, useKnowledge, useT, Modal } from "./components/common";
@@ -246,7 +248,6 @@ function Shell() {
   const s = useKnowledge(),
     t = useT(),
     [page, setPage] = useState("home"),
-    [entry, setEntry] = useState(""),
     [chatEntry, setChatEntry] = useState(""),
     [query, setQuery] = useState(""),
     [capture, setCapture] = useState(false),
@@ -256,6 +257,15 @@ function Shell() {
     [ocr, setOcr] = useState<DesktopAction | null>(null),
     [actions, setActions] = useState<DesktopAction[]>([]),
     [toast, setToast] = useState("");
+  const workspace = useEntryWorkspace(),
+    entry = workspace.active;
+  const interacted = useRef(false),
+    restored = useRef(false);
+  useEffect(() => {
+    if (!workspace.ready || restored.current) return;
+    restored.current = true;
+    if (!interacted.current && workspace.active) setPage("entry");
+  }, [workspace.ready, workspace.active]);
   const reminderSignature = s.entries
     .map((e) => e.id + ":" + e.card.due.toISOString())
     .sort()
@@ -266,6 +276,7 @@ function Shell() {
   }, [s.ready, s.device.notifications, reminderSignature]);
   const search = useRef<HTMLInputElement>(null);
   const navigate = (next: string) => {
+    interacted.current = true;
     if (
       window.dispatchEvent(new Event("zhinexus:navigate", { cancelable: true }))
     ) {
@@ -401,7 +412,7 @@ function Shell() {
     return () => clearInterval(timer);
   }, [s.ready, s.device.davUrl, s.device.syncMinutes]);
   const open = (id: string) => {
-    if (navigate("entry")) setEntry(id);
+    if (navigate("entry")) workspace.controller.open(id);
   };
   const nav = [
     { id: "home", name: t("学习概览", "Overview"), icon: Home },
@@ -551,6 +562,15 @@ function Shell() {
               {t("本地已保存", "Saved locally")}
             </span>
           </header>
+          <EntryTabs
+            workspace={workspace}
+            active={page === "entry"}
+            onOpen={open}
+            onClose={(id) => {
+              const next = workspace.controller.close(id);
+              if (page === "entry" && !next) navigate("library");
+            }}
+          />
           {page === "home" && (
             <Library
               dashboard
@@ -577,10 +597,11 @@ function Shell() {
               onReview={() => navigate("review")}
             />
           )}{" "}
-          {page === "entry" && (
+          {workspace.tabs.map((id) => (
             <EntryPage
-              key={entry}
-              id={entry}
+              key={id}
+              id={id}
+              active={page === "entry" && entry === id}
               onBack={() => navigate("library")}
               onOpen={open}
               onChat={(id) => {
@@ -588,7 +609,7 @@ function Shell() {
               }}
               notify={notify}
             />
-          )}{" "}
+          ))}
           {page === "review" && <Review notify={notify} />}{" "}
           {page === "graph" && <Graph onOpen={open} />}{" "}
           {page === "agent" && (

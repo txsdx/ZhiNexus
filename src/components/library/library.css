@@ -1,0 +1,160 @@
+/* Compact taxonomy and memory table; horizontal scrolling keeps every requested column available on phones. */
+:root {
+  --memory-neutral: #222532;
+  --memory-red: #bd243d;
+  --memory-purple: #7424b7;
+}
+:root[data-theme="dark"] {
+  --memory-neutral: #e8e8ee;
+  --memory-red: #ff8a98;
+  --memory-purple: #c79bff;
+}
+.knowledge-table-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  margin: 15px 0;
+}
+.knowledge-table-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.knowledge-table-tools button {
+  font-size: 0.82rem;
+  padding: 5px 8px;
+}
+.memory-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 0 auto;
+  font-size: 0.78rem;
+}
+.memory-legend > span {
+  height: 7px;
+  width: 70px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--memory-neutral),
+    var(--memory-red),
+    var(--memory-purple)
+  );
+}
+.knowledge-table-scroll {
+  overflow: auto;
+}
+.knowledge-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1100px;
+  font-size: 0.89rem;
+}
+.knowledge-table th {
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  padding: 9px 13px;
+  white-space: nowrap;
+}
+.knowledge-table th button {
+  font-size: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  justify-content: start;
+}
+.knowledge-table th:nth-child(1) {
+  width: 25%;
+}
+.knowledge-table th:nth-child(2) {
+  width: 28%;
+}
+.knowledge-table th:nth-child(3),
+.knowledge-table th:nth-child(4) {
+  width: 15%;
+}
+.knowledge-table th:nth-child(5) {
+  width: 17%;
+}
+.knowledge-table td {
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.knowledge-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.entry-row {
+  cursor: pointer;
+}
+.entry-row:hover {
+  background: var(--soft);
+}
+.entry-title-cell button {
+  display: inline;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-weight: 550;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.entry-summary-cell {
+  color: var(--muted);
+}
+.category-row {
+  background: color-mix(in srgb, var(--bg) 55%, var(--surface));
+}
+.knowledge-table .category-row td {
+  padding: 0;
+}
+.category-row button {
+  border: 0;
+  border-radius: 0;
+  width: 100%;
+  justify-content: flex-start;
+  background: transparent;
+  padding-block: 9px;
+  font-size: 0.9rem;
+}
+.memory-cell {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.memory-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 6px;
+}
+.knowledge-table time {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 700px) {
+  .knowledge-table {
+    min-width: 1000px;
+  }
+  .memory-legend {
+    margin-left: 0;
+  }
+  .knowledge-table-tools {
+    gap: 8px;
+  }
+}

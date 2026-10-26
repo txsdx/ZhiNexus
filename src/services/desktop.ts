@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { native } from "../core/database";
 import { store } from "../core/store";
+import { entryWorkspace } from "../core/workspace";
 import type { DesktopPreferences } from "../core/types";
 export const desktopAvailable = native && !/Android/i.test(navigator.userAgent);
 export const defaultDesktop: DesktopPreferences = {
@@ -67,6 +68,8 @@ export async function quitDesktop() {
   )
     return;
   try {
+    await entryWorkspace.init();
+    await entryWorkspace.flush();
     await store.suspend();
     await invoke("quit_desktop");
   } catch (error) {
@@ -91,6 +94,8 @@ export async function migrateStorage(plan: MigrationPlan) {
   )
     return;
   try {
+    await entryWorkspace.init();
+    await entryWorkspace.flush();
     await store.suspend();
     await invoke("launch_storage_migration", { id: plan.id });
   } catch (error) {

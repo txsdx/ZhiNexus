@@ -25,7 +25,7 @@ export async function testNativeOcr({ command, script, click, type, waitFor }) {
     args: [],
   }).catch(() => ({ ok: true }));
   // Destroying the overlay can end its pending WebDriver callback; the result in the surviving main window is authoritative.
-  if (crop.error) throw Error(crop.error);
+  if (crop?.error) throw Error(crop.error);
   await command("POST", "/window", { handle: main });
   await waitFor(() =>
     script(

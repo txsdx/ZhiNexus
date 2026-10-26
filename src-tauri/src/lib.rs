@@ -57,6 +57,11 @@ pub fn run() {
                 let window = tauri::WebviewWindowBuilder::from_config(app, config)?;
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let window = window.data_directory(webview_data.clone());
+                #[cfg(target_os = "windows")]
+                let window = match startup::automation_arguments() {
+                    Some(arguments) => window.additional_browser_args(&arguments),
+                    None => window,
+                };
                 window.build()?;
             }
             Ok(())

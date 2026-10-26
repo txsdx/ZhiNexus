@@ -2,7 +2,7 @@
   "schema": 1,
   "shared": "0.3",
   "platforms": {
-    "windows": "0.3.2",
+    "windows": "0.3.3",
     "android": "0.3.1",
     "ubuntu": "0.3.1"
   }

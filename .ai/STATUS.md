@@ -72,3 +72,6 @@
 - Android 0.3.1 已安装并启动到可调试 WebView；测试连接报 Browser.setDownloadBehavior/context management 不支持，属 Playwright 默认上下文覆盖与 Android WebView 不兼容。使用公开 noDefaults:true 连接选项，Playwright 最低版本明确为 1.64.1（实际锁定已是该版），保留原生状态；增强错误/页面/5000行日志诊断。SDK/原厂镜像缓存改为显式 restore/save，在 UI 测试失败时仍保存已验证完整的 SDK，避免重复下载。纯测试修正不改变二进制版本。
 
 - Windows 0.3.2：新增 GUI 本地 startup/panic 诊断，写入所选普通/portable 数据根；测试采集进程退出状态。直接 release exe 的调试连接仍未通过，继续依据日志排查。
+
+- Windows 实际进程诊断确认 GUI 与 WebView2 renderer 存活，无 panic；浏览器命令行缺少继承调试端口。0.3.3 通过 Tauri builder API 显式设置仅本机、双环境变量 opt-in 的自动化端口，待最终 CI 验证。
+- Android run 40263833893 设备测试步骤成功：实际安装、原生 WebView/SQLite 创建、强制停止重启恢复、独立通知开关和 OS 闹钟登记。job 正在保存 SDK/镜像缓存；不把真机或正式升级标为通过。

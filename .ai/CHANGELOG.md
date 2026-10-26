@@ -1,5 +1,11 @@
 # 更新日志
 
+## Windows 0.3.3 · 2026-10-26
+
+- 确认 GUI/渲染进程正常启动，但 WebView2 忽略继承的调试参数；通过 Tauri 公开 builder API 显式设置调试端口。
+- 只在 TAURI_WEBVIEW_AUTOMATION=true 且额外指定有效端口时启用，绑定127.0.0.1；普通用户启动无调试服务，数据目录规则不变。
+
+
 ## Windows 0.3.2 · 2026-10-26
 
 - GUI 原生启动失败没有控制台时，将 panic/回溯写入实际数据根的 recovery/native-startup.log；不进入同步内容，便携模式仍在 _data。

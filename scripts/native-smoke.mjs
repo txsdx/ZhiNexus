@@ -80,7 +80,7 @@ async function start() {
         ...process.env,
         RUST_BACKTRACE: "1",
         TAURI_WEBVIEW_AUTOMATION: "true",
-        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: "--remote-debugging-port=9222",
+        ZHINEXUS_TEST_DEBUG_PORT: "9222",
       },
     });
     ownedApplication.on("error", (error) =>

@@ -1,6 +1,7 @@
 /** Capture enrichment pipeline: preserve raw material, avoid stale overwrites and link only known concepts. */
 import { z } from "zod";
 import { entryTemplate } from "../core/defaults";
+import { resolveModel } from "../core/ai-config";
 import { store, json } from "../core/store";
 import { runTask, parseJson } from "./ai";
 /** Enrich only configured tasks and report partial success without rolling back the captured note. */
@@ -9,7 +10,7 @@ export async function enrichEntry(id: string): Promise<void> {
     entry = s.entries.find((e) => e.id === id);
   if (!entry || !s.device.apiKey) return;
   const original = entry.content;
-  if (s.ai.tasks.explain.model) {
+  if (resolveModel(s.ai, "explain")) {
     const explanation = await runTask("explain", {
       title: entry.title,
       content: original,
@@ -33,7 +34,7 @@ export async function enrichEntry(id: string): Promise<void> {
   s = store.getSnapshot();
   entry = s.entries.find((e) => e.id === id);
   if (!entry) return;
-  if (s.ai.tasks.relations.model) {
+  if (resolveModel(s.ai, "relations")) {
     const r = z
       .object({
         prerequisites: z.array(z.string()).max(8),
@@ -65,7 +66,7 @@ export async function enrichEntry(id: string): Promise<void> {
           "auto-relations",
         );
   }
-  if (s.ai.tasks.classify.model && s.categories.length) {
+  if (resolveModel(s.ai, "classify") && s.categories.length) {
     const r = z
       .object({
         categories: z.array(z.object({ id: z.string(), parent: z.string() })),

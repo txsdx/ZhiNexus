@@ -18,6 +18,7 @@ import { McpPanel } from "./settings/McpPanel";
 import { ModelsPanel } from "./settings/ModelsPanel";
 import { PromptsPanel } from "./settings/PromptsPanel";
 import { CategoryTree, saveFile } from "./settings/shared";
+import { useConfirmation } from "../hooks/useConfirmation";
 /** Render independent settings panels and reviewable taxonomy/backup confirmations. */
 export function Settings({
   notify,
@@ -43,6 +44,10 @@ export function Settings({
     password,
     setPassword,
   } = context;
+  const confirmation = useConfirmation(notify, {
+    title: t("确认恢复设备设置", "Confirm device settings restore"),
+    confirmLabel: t("恢复设备设置", "Restore device settings"),
+  });
   return (
     <SettingsContext.Provider value={context}>
       <div className="page settings-page">
@@ -181,12 +186,12 @@ export function Settings({
                       )) as { snapshot: unknown; device: unknown };
                       await restoreSnapshot(data.snapshot);
                       if (
-                        window.confirm(
+                        (await confirmation.ask(
                           t(
                             "同时恢复备份中的本机凭证和偏好？这会替换本设备设置。",
                             "Also restore backed-up credentials and device preferences? This replaces this device’s settings.",
                           ),
-                        )
+                        )) === true
                       ) {
                         const { defaultDevice } =
                           await import("../core/defaults");
@@ -210,6 +215,7 @@ export function Settings({
           </Modal>
         )}
       </div>
+      {confirmation.dialog}
     </SettingsContext.Provider>
   );
 }

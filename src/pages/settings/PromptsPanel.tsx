@@ -2,6 +2,7 @@
 import { Save } from "lucide-react";
 import { taskLabels, templates } from "../../core/defaults";
 import { store } from "../../core/store";
+import { resolveModel } from "../../core/ai-config";
 import type { Task } from "../../core/types";
 import { useSettings } from "./context";
 /** PromptsPanel exposes one focused settings workflow. */
@@ -38,10 +39,19 @@ export function PromptsPanel() {
               })
             }
           >
-            <option value="">{t("未配置", "Not configured")}</option>
+            <option value="">
+              {t("默认模型", "Default model")}
+              {ai.defaultModel ? ` (${ai.defaultModel})` : ""}
+            </option>
+            {ai.tasks[task].model &&
+              !ai.models.some((m) => m.id === ai.tasks[task].model) && (
+                <option value={ai.tasks[task].model}>
+                  {ai.tasks[task].model}
+                </option>
+              )}
             {ai.models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.id}
               </option>
             ))}
           </select>
@@ -63,7 +73,7 @@ export function PromptsPanel() {
             {[
               ...new Set([
                 ai.tasks[task].effort,
-                ...(ai.models.find((m) => m.id === ai.tasks[task].model)
+                ...(ai.models.find((m) => m.id === resolveModel(ai, task))
                   ?.efforts ?? []),
               ]),
             ].map((e) => (

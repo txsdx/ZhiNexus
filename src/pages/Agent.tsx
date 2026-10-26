@@ -4,6 +4,8 @@ import { ArrowUp, Bot, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useKnowledge, useT, Busy, Empty, Modal } from "../components/common";
 import { Markdown } from "../components/Markdown";
 import { store } from "../core/store";
+import { resolveModel } from "../core/ai-config";
+import { useConfirmation } from "../hooks/useConfirmation";
 import { chat } from "../services/agent";
 /** Keep all chat scopes independent and preserve conversations across navigation and restarts. */
 export function Agent({
@@ -29,7 +31,8 @@ export function Agent({
     } | null>(null);
   const topic = topics.find((x) => x.id === selected) ?? topics[0],
     entry = s.entries.find((e) => e.id === entryId),
-    actualModel = model || s.ai.tasks.agent.model;
+    actualModel = resolveModel(s.ai, "agent", model);
+  const deletion = useConfirmation(notify);
   const send = async () => {
     if (!text.trim()) return;
     setBusy(true);
@@ -55,7 +58,7 @@ export function Agent({
           new Promise((resolve) =>
             setConfirmation({ text: description, resolve }),
           ),
-        { model: actualModel, effort },
+        { model, effort },
       );
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e));
@@ -115,8 +118,10 @@ export function Agent({
                 disabled={busy}
                 aria-label="Delete topic"
                 onClick={() => {
-                  if (window.confirm(t("删除此对话？", "Delete conversation?")))
-                    void store.patch("topic", x.id, { deleted: true });
+                  void deletion.request(
+                    t("删除此对话？", "Delete conversation?"),
+                    () => store.patch("topic", x.id, { deleted: true }),
+                  );
                 }}
               >
                 <Trash2 size={13} />
@@ -129,15 +134,19 @@ export function Agent({
             <Bot size={18} />
             <select
               aria-label="Chat model"
-              value={actualModel}
+              value={model}
               onChange={(e) => setModel(e.target.value)}
             >
               <option value="">
-                {t("在设置中配置模型", "Configure models in settings")}
+                {t("默认模型", "Default model")}
+                {s.ai.defaultModel ? ` (${s.ai.defaultModel})` : ""}
               </option>
+              {model && !s.ai.models.some((m) => m.id === model) && (
+                <option value={model}>{model}</option>
+              )}
               {s.ai.models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {m.id}
                 </option>
               ))}
             </select>
@@ -228,6 +237,7 @@ export function Agent({
           </small>
         </div>
       </div>
+      {deletion.dialog}
       {confirmation && (
         <Modal
           title={t("确认 Agent 操作", "Confirm agent action")}

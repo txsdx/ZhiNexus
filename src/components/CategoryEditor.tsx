@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Edit3, Trash2, Check, X } from "lucide-react";
 import { useKnowledge, useT } from "./common";
 import { editCategory, removeCategory } from "../services/categories";
+import { useConfirmation } from "../hooks/useConfirmation";
 /** Edit names and hierarchy with explicit destructive confirmation and recoverable operation history. */
 export function CategoryEditor() {
   const s = useKnowledge(),
@@ -11,6 +12,7 @@ export function CategoryEditor() {
     [name, setName] = useState(""),
     [parent, setParent] = useState(""),
     [error, setError] = useState("");
+  const confirmation = useConfirmation(setError);
   return (
     <section className="category-editor">
       <h3>{t("管理分类", "Manage categories")}</h3>
@@ -85,21 +87,17 @@ export function CategoryEditor() {
                 className="icon danger"
                 aria-label={t("删除分类 ", "Remove category ") + c.name}
                 onClick={() => {
-                  if (
-                    window.confirm(
-                      t(
-                        "删除分类「" +
-                          c.name +
-                          "」？词条和子类会移至上一级，不删除知识。",
-                        "Remove " +
-                          c.name +
-                          "? Its entries and child categories move to the parent.",
-                      ),
-                    )
-                  )
-                    void removeCategory(c.id).catch((e) =>
-                      setError(String(e.message)),
-                    );
+                  void confirmation.request(
+                    t(
+                      "删除分类「" +
+                        c.name +
+                        "」？词条和子类会移至上一级，不删除知识。",
+                      "Remove " +
+                        c.name +
+                        "? Its entries and child categories move to the parent.",
+                    ),
+                    () => removeCategory(c.id),
+                  );
                 }}
               >
                 <Trash2 size={16} />
@@ -108,6 +106,7 @@ export function CategoryEditor() {
           )}
         </div>
       ))}
+      {confirmation.dialog}
     </section>
   );
 }

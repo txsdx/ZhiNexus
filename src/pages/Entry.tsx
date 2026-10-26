@@ -1,5 +1,6 @@
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
 import { useEntryDocument } from "../hooks/useEntryDocument";
+import { useConfirmation } from "../hooks/useConfirmation";
 import { BlockEditor } from "../components/editor/BlockEditor";
 import { DocumentOutline } from "../components/editor/DocumentOutline";
 import { entryDocument, documentBlocks } from "../components/editor/document";
@@ -80,6 +81,7 @@ export function EntryPage({
     [busy, setBusy] = useState(""),
     [imagePrompt, setImagePrompt] = useState<string | null>(null),
     [preview, setPreview] = useState<string | null>(null);
+  const confirmation = useConfirmation(notify);
   if (!active) return null;
   if (!entry)
     return (
@@ -493,15 +495,16 @@ export function EntryPage({
             <button
               className="danger full"
               onClick={() => {
-                if (
-                  window.confirm(
-                    t(
-                      "删除此条目？日志将保留，可在数据库管理中恢复。",
-                      "Delete this entry? Its history remains recoverable.",
-                    ),
-                  )
-                )
-                  void store.patch("entry", id, { deleted: true }).then(onBack);
+                void confirmation.request(
+                  t(
+                    "删除此条目？日志将保留，可在数据库管理中恢复。",
+                    "Delete this entry? Its history remains recoverable.",
+                  ),
+                  async () => {
+                    await store.patch("entry", id, { deleted: true });
+                    onBack();
+                  },
+                );
               }}
             >
               <Trash2 size={15} />
@@ -510,6 +513,7 @@ export function EntryPage({
           </section>
         </aside>
       </div>
+      {confirmation.dialog}
       {compareSave && (
         <Modal
           wide

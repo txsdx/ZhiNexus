@@ -1,6 +1,7 @@
 /** Editable knowledge graph using React Flow; relationships and node positions are replicated documents. */
 import dagre from "@dagrejs/dagre";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useConfirmation } from "../hooks/useConfirmation";
 import {
   ReactFlow,
   Background,
@@ -19,6 +20,8 @@ import { store, json } from "../core/store";
 export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
   const s = useKnowledge(),
     t = useT();
+  const [error, setError] = useState("");
+  const confirmation = useConfirmation(setError);
   const positions =
     s.docs.find((d) => d.collection === "setting" && d.id === "graph")
       ?.fields ?? {};
@@ -110,6 +113,7 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
       >
         {t("自动整理布局", "Arrange automatically")}
       </button>
+      {error && <p role="alert">{error}</p>}
       <div className="graph-canvas">
         <ReactFlow
           nodes={nodes}
@@ -117,18 +121,29 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={connect}
+          deleteKeyCode={["Backspace", "Delete"]}
           onNodeDoubleClick={(_, n) => onOpen(n.id)}
           onNodeDragStop={(_, n) =>
             void store.patch("setting", "graph", { [n.id]: json(n.position) })
           }
-          onEdgesDelete={(es) => {
-            void store.batch(
-              es.map((e) => ({
-                collection: "edge",
-                id: e.id,
-                patch: { deleted: true },
-              })),
+          onBeforeDelete={async ({ edges: selectedEdges }) => {
+            if (!selectedEdges.length) return false;
+            await confirmation.request(
+              t(
+                `删除选中的 ${selectedEdges.length} 条知识关系？`,
+                `Delete ${selectedEdges.length} selected relationships?`,
+              ),
+              () =>
+                store.batch(
+                  selectedEdges.map((e) => ({
+                    collection: "edge",
+                    id: e.id,
+                    patch: { deleted: true },
+                  })),
+                ),
             );
+            // The committed store projection updates the controlled edges; React Flow must never remove them optimistically.
+            return false;
           }}
           fitView
         >
@@ -137,6 +152,7 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
           <MiniMap />
         </ReactFlow>
       </div>
+      {confirmation.dialog}
     </div>
   );
 }

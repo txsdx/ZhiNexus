@@ -122,6 +122,8 @@ export interface TaskConfig {
 /** Replicated provider metadata and task configuration without API credentials. */
 export interface AIConfig {
   baseUrl: string;
+  /** Raw model ID inherited by selections whose model is empty. */
+  defaultModel: string;
   models: Model[];
   tasks: Record<Task, TaskConfig>;
 }

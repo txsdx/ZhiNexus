@@ -32,8 +32,17 @@ describe("knowledge table", () => {
       memoryEstimate(e, new Date("2026-01-02"))!,
     );
     expect(memoryColor(1)).toContain("100%");
-    expect(memoryColor(0.5)).toContain("memory-red");
-    expect(memoryColor(0)).toContain("memory-purple");
+    expect(memoryColor(0.5)).toContain("memory-yellow");
+    expect(memoryColor(0)).toBe(
+      "color-mix(in srgb, var(--memory-yellow) 0%, var(--memory-red))",
+    );
+    expect(memoryColor(0.75)).toBe(
+      "color-mix(in srgb, var(--memory-neutral) 50%, var(--memory-yellow))",
+    );
+    expect(memoryColor(0.25)).toBe(
+      "color-mix(in srgb, var(--memory-yellow) 50%, var(--memory-red))",
+    );
+    expect(memoryColor(null)).toBe("var(--memory-neutral)");
   });
   it("extracts the explicit one-line section and accepts an authored override", () => {
     const e = entry("A");

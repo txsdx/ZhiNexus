@@ -64,7 +64,7 @@ A focused section records its outside sibling IDs once. Replacements update only
 
 `core/workspace` persists per-device tab IDs, active entry and local drafts in SQLite metadata. Saved notes and block structure synchronize; uncommitted drafts remain local and are not knowledge snapshots until saved. Tab switching retains draft state and in-flight page tasks while mounting only the visible document UI. Async image results append to the latest draft. Saving commits the note and durably clears its older draft before acknowledging success; a restart does not revive an already-committed or unchanged old buffer. Remote edits are compared before a draft overwrites changed saved fields. Editor undo history is scoped to its current mounted view.
 
-`core/knowledge-view` derives recursive taxonomy rows without hiding orphan/cyclic imported nodes, extracts one-line summaries and uses the same maintained FSRS recall API as scheduling. Unknown first-review probabilities remain explicitly unknown. Estimated forgetting colors titles and memory status from neutral to red to purple, with readable dark-theme variants. The table is sortable within branches and horizontally scrollable on phones.
+`core/knowledge-view` derives recursive taxonomy rows without hiding orphan/cyclic imported nodes, extracts one-line summaries and uses the same maintained FSRS recall API as scheduling. Unknown first-review probabilities remain explicitly unknown. Estimated forgetting colors titles and memory status from black to yellow to red (white at the low-forgetting end in dark mode), with readable dark-theme variants. The table is sortable within branches and horizontally scrollable on phones.
 
 ## Unified build and release
 
@@ -75,3 +75,11 @@ Android caches the pinned, writable NDK and download metadata, plus the factory 
 Mobile block layouts use zero-minimum grid tracks and shrinkable outline items. A long heading must not expand the body beyond the device layout viewport: mobile Chromium otherwise moves fixed navigation outside the usable input coordinates. Regression coverage uses a real mobile browser context, rich editing and reload, not only desktop viewport resizing. Native Android screenshots use ADB display capture instead of full-page CDP emulation.
 
 Android system-bar and cutout insets are applied to the native content root via AndroidX WindowInsetsCompat. Only those inset types are consumed; keyboard dispatch remains intact. The generated Activity keeps Tauri's edge-to-edge and WebView setup, then calls the copied SystemInsets helper. The generator rejects an unrecognized template rather than silently omitting the hook. This Android-only change uses its own patch version.
+
+## Model inheritance and destructive confirmations (0.9)
+
+`core/ai-config.resolveModel` resolves empty task/local model selections to the current shared `defaultModel` at each use, including image generation, OCR capability checks and automatic enrichment gates. Explicit task or local overrides keep their original raw IDs. Model display names are metadata only; the UI always shows IDs. Unknown tool support allows sending tool definitions; explicit false omits them. Reasoning effort still requires an explicit catalog declaration.
+
+`useConfirmation` owns an asynchronous application modal. `core/confirmation.runConfirmed` waits for literal true before executing the mutation. Cancel, close, backdrop, Escape and component unmount resolve false. Rejections do not reach mutation callbacks; failed storage commits leave the committed projection unchanged. Category removal still uses one batch for its tombstone and direct child/entry reassignment.
+
+All seven legacy native-confirm sites use this gate, including draft discard, snapshot/credential restore and updater launch. Tauri dialog overrides `window.confirm` with a Promise while DOM typings still say boolean; runtime source scans forbid calling that API again. React Flow uses `onBeforeDelete` and the committed store projection rather than optimistic edge removal. MCP configuration removal is confirmed before changing the local draft and still requires its existing Save action. See DELETION_AUDIT.md.

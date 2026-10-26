@@ -17,7 +17,7 @@
 }
 .block-toolbar button[aria-pressed="true"] {
   background: var(--soft);
-  color: var(--accent);
+  color: var(--text);
 }
 .rich-editor {
   padding: 25px 34px;
@@ -145,7 +145,7 @@
   font-size: 0.83rem;
 }
 .editor-mode .active {
-  color: var(--accent);
+  color: var(--text);
   background: var(--soft);
 }
 .editor-mode > small {
@@ -173,7 +173,7 @@
   flex-shrink: 0;
 }
 .entry-tab.active {
-  border-color: var(--accent);
+  border-color: var(--text);
   background: var(--soft);
 }
 .entry-tab > button {

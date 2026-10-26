@@ -16,6 +16,583 @@ async function repository<T>(page: Page, fn: string): Promise<T> {
     );
   }, fn);
 }
+
+/** Reproduce Tauri's async confirm override so legacy synchronous guards fail this regression. */
+async function asyncNativeConfirmation(page: Page) {
+  await page.addInitScript(() => {
+    window.confirm = (() =>
+      Promise.resolve(false)) as unknown as typeof window.confirm;
+  });
+}
+
+/** Every dismissal must leave both the visible entity and its complete committed state intact. */
+async function assertDismissals(
+  page: Page,
+  open: () => Promise<unknown>,
+  state: () => Promise<unknown>,
+  title = "确认删除",
+) {
+  const before = await state();
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  for (const dismissal of ["cancel", "close", "escape", "backdrop"] as const) {
+    await open();
+    await expect(dialog).toBeVisible();
+    expect(await state()).toEqual(before);
+    if (dismissal === "cancel")
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    else if (dismissal === "close")
+      await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    else if (dismissal === "escape") await page.keyboard.press("Escape");
+    else
+      await page
+        .locator(".modal-backdrop")
+        .last()
+        .click({ position: { x: 2, y: 2 } });
+    await expect(dialog).toHaveCount(0);
+    expect(await state()).toEqual(before);
+  }
+}
+
+for (const scope of ["global", "entry"] as const) {
+  test(`${scope} conversation deletion never runs before consent, on dismissal or storage failure`, async ({
+    page,
+  }) => {
+    await asyncNativeConfirmation(page);
+    await page.goto("/");
+    await repository(
+      page,
+      `const entry=await store.createEntry('对话词条','unchanged');await store.patch('topic','topic-fixture',{entryId:${scope === "entry" ? "entry" : "''"},title:'保留这段对话',messages:[{role:'user',content:'原有问题'},{role:'assistant',content:'原有回答'}],updatedAt:new Date().toISOString()});`,
+    );
+    if (scope === "entry") {
+      await page.locator(".entry-title-cell button").click();
+      await page.getByRole("button", { name: /^打开词条助手/ }).click();
+    } else
+      await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
+    const trigger = page.getByRole("button", {
+      name: "Delete topic",
+      exact: true,
+    });
+    const state = () =>
+      repository(
+        page,
+        "return {docs:store.getSnapshot().docs,events:store.getSnapshot().events}",
+      );
+    await assertDismissals(page, () => trigger.click(), state);
+    await expect(page.locator(".messages")).toContainText("原有回答");
+    const before = await state();
+    await repository(
+      page,
+      "store.db.originalAppend=store.db.append;store.db.append=async()=>{throw Error('topic storage failure')}",
+    );
+    await trigger.click();
+    await page
+      .getByRole("dialog", { name: "确认删除" })
+      .getByRole("button", { name: "确认删除", exact: true })
+      .click();
+    await expect(page.locator(".toast")).toContainText("topic storage failure");
+    expect(await state()).toEqual(before);
+    await expect(trigger).toBeVisible();
+    await repository(
+      page,
+      "store.db.append=store.db.originalAppend;delete store.db.originalAppend",
+    );
+    // Unmount while the confirmation is pending also cancels instead of leaking consent.
+    await trigger.click();
+    await expect(page.getByRole("dialog", { name: "确认删除" })).toBeVisible();
+    await page
+      .getByRole("button", { name: "我的知识库", exact: true })
+      .evaluate((button) => (button as HTMLButtonElement).click());
+    await expect(page.getByRole("dialog", { name: "确认删除" })).toHaveCount(0);
+    expect(await state()).toEqual(before);
+    await page.reload();
+    expect(await state()).toEqual(before);
+    if (scope === "entry") {
+      await page
+        .getByRole("button", { name: "我的知识库", exact: true })
+        .click();
+      await page.locator(".entry-title-cell button").click();
+      await page.getByRole("button", { name: /^打开词条助手/ }).click();
+    } else
+      await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
+    await trigger.click();
+    await page
+      .getByRole("dialog", { name: "确认删除" })
+      .getByRole("button", { name: "确认删除", exact: true })
+      .click();
+    await expect(trigger).toHaveCount(0);
+    expect(
+      await repository(
+        page,
+        "return store.getSnapshot().docs.find(d=>d.id==='topic-fixture').fields.deleted",
+      ),
+    ).toBe(true);
+    await page.reload();
+    expect(
+      await repository(
+        page,
+        "return store.getSnapshot().docs.find(d=>d.id==='topic-fixture').fields.deleted",
+      ),
+    ).toBe(true);
+  });
+}
+
+test("graph relationship deletion waits before removing its rendered edge and survives cancellation/failure", async ({
+  page,
+}) => {
+  await asyncNativeConfirmation(page);
+  await page.goto("/");
+  await repository(
+    page,
+    `const a=await store.createEntry('节点A','A');const b=await store.createEntry('节点B','B');await store.patch('edge','edge-fixture',{source:a,target:b,label:'related'});`,
+  );
+  await page.getByRole("button", { name: "知识星图", exact: true }).click();
+  const edge = page.locator(".react-flow__edge");
+  const open = async () => {
+    await edge.locator(".react-flow__edge-interaction").click({ force: true });
+    await page.keyboard.press("Delete");
+  };
+  const state = async () => ({
+    stored: await repository(
+      page,
+      "return {docs:store.getSnapshot().docs,events:store.getSnapshot().events}",
+    ),
+    edges: await edge.count(),
+  });
+  await expect(edge).toHaveCount(1);
+  await assertDismissals(page, open, state);
+  const before = await state();
+  await repository(
+    page,
+    "store.db.originalAppend=store.db.append;store.db.append=async()=>{throw Error('edge storage failure')}",
+  );
+  await open();
+  await page
+    .getByRole("dialog", { name: "确认删除" })
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("edge storage failure");
+  expect(await state()).toEqual(before);
+  await repository(
+    page,
+    "store.db.append=store.db.originalAppend;delete store.db.originalAppend",
+  );
+  await open();
+  await page
+    .getByRole("dialog", { name: "确认删除" })
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
+  await expect(edge).toHaveCount(0);
+  expect(
+    await repository(
+      page,
+      "return store.getSnapshot().docs.find(d=>d.id==='edge-fixture').fields.deleted",
+    ),
+  ).toBe(true);
+});
+
+test("closing a dirty tab preserves its unsaved draft until explicit discard", async ({
+  page,
+}) => {
+  await asyncNativeConfirmation(page);
+  await page.goto("/");
+  await repository(
+    page,
+    "await store.createEntry('草稿词条','saved-original');",
+  );
+  await page.locator(".entry-title-cell button").click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.locator('[data-editor-mode="source"]').click();
+  await page
+    .getByRole("textbox", { name: "Markdown", exact: true })
+    .fill("unsaved-important-draft");
+  const trigger = page.getByRole("button", {
+    name: "关闭标签：草稿词条",
+    exact: true,
+  });
+  const state = () =>
+    page.evaluate(async () => {
+      const { entryWorkspace } = await import(
+        "/src/core/workspace.ts" as string
+      );
+      await entryWorkspace.flush();
+      const { pending, error, ...data } = entryWorkspace.getSnapshot();
+      return data;
+    });
+  await assertDismissals(page, () => trigger.click(), state, "确认丢弃草稿");
+  await page.reload();
+  await page.getByRole("tab", { name: /草稿词条/ }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Markdown", exact: true }),
+  ).toHaveValue("unsaved-important-draft");
+  await trigger.click();
+  await page
+    .getByRole("dialog", { name: "确认丢弃草稿" })
+    .getByRole("button", { name: "丢弃并关闭", exact: true })
+    .click();
+  await expect(trigger).toHaveCount(0);
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].content"),
+  ).toBe("saved-original");
+});
+
+test("MCP removal cannot change draft or saved configuration before confirmation", async ({
+  page,
+}) => {
+  await asyncNativeConfirmation(page);
+  await page.goto("/");
+  await repository(
+    page,
+    "await store.updateDevice({mcp:[{id:'mcp-fixture',name:'保留配置',transport:'http',url:'https://mcp.example',token:'',enabled:false}]});",
+  );
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await page.getByRole("button", { name: "MCP", exact: true }).click();
+  const trigger = page.getByRole("button", { name: "移除", exact: true });
+  const state = async () => ({
+    saved: await repository(page, "return store.getSnapshot().device.mcp"),
+    draft: await page
+      .getByRole("textbox", { name: "MCP name", exact: true })
+      .inputValue(),
+  });
+  await assertDismissals(page, () => trigger.click(), state);
+  await trigger.click();
+  await page
+    .getByRole("dialog", { name: "确认删除" })
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
+  await expect(page.locator(".mcp-card")).toHaveCount(0);
+  expect(
+    await repository(page, "return store.getSnapshot().device.mcp.length"),
+  ).toBe(1);
+  await page
+    .getByRole("button", { name: "保存 MCP 配置", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      repository(page, "return store.getSnapshot().device.mcp.length"),
+    )
+    .toBe(0);
+});
+
+test("cloud snapshot recovery makes no requests until explicitly confirmed", async ({
+  page,
+  context,
+}) => {
+  const files = new Map<string, string>();
+  await mockDav(context, files);
+  let requests = 0;
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://dav.example/")) requests++;
+  });
+  await asyncNativeConfirmation(page);
+  await page.goto("/");
+  await repository(
+    page,
+    "await store.updateDevice({davUrl:'https://dav.example/knowledge/',davUser:'fixture',davPassword:'fixture',syncMinutes:0});await store.createEntry('保留知识','unchanged');",
+  );
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await page
+    .getByRole("button", { name: "数据库与云同步", exact: true })
+    .click();
+  const trigger = page.getByRole("button", {
+    name: "从云端快照恢复",
+    exact: true,
+  });
+  await assertDismissals(
+    page,
+    () => trigger.click(),
+    async () => ({
+      requests,
+      events: await repository(page, "return store.getSnapshot().events"),
+    }),
+    "确认恢复云端快照",
+  );
+  expect(requests).toBe(0);
+  await trigger.click();
+  await page
+    .getByRole("dialog", { name: "确认恢复云端快照" })
+    .getByRole("button", { name: "确认恢复", exact: true })
+    .click();
+  await expect.poll(() => requests).toBeGreaterThan(0);
+});
+
+test("raw model IDs and live global defaults persist without overwriting task or chat overrides", async ({
+  page,
+  browser,
+}) => {
+  const requests: { model: string; tools?: unknown[] }[] = [];
+  await page.route("https://ai.example/**", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: {
+          models: [
+            {
+              slug: "gpt-6.1-sol",
+              display_name: "GPT 6.1 Sol",
+              supported_reasoning_levels: ["low", "medium"],
+            },
+            {
+              slug: "gpt-6.1-sol-fast",
+              display_name: "GPT 6.1 Sol",
+              supported_reasoning_levels: ["high", "ultra"],
+            },
+          ],
+        },
+      });
+    } else {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: { choices: [{ message: { content: "完成" } }] },
+      });
+    }
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await page.getByRole("button", { name: "AI 与模型", exact: true }).click();
+  await page.getByLabel("API Base URL").fill("https://ai.example/v1");
+  await page
+    .getByLabel("API Key（加密保存与同步）", { exact: true })
+    .fill("fixture-key");
+  await page.getByRole("button", { name: "读取模型与能力" }).click();
+  await expect(page.locator(".model-list strong")).toHaveText([
+    "gpt-6.1-sol",
+    "gpt-6.1-sol-fast",
+  ]);
+  await expect(page.locator(".model-list")).toContainText("Tools: ?");
+  await page.getByLabel("全局默认模型").selectOption("gpt-6.1-sol-fast");
+  await page.getByRole("button", { name: "保存 AI 配置" }).click();
+  await expect(page.locator(".toast")).toContainText("AI 配置已保存");
+  await page.getByRole("button", { name: "任务与提示词", exact: true }).click();
+  await expect(page.getByLabel("任务模型")).toHaveValue("");
+  await expect(page.getByLabel("任务模型").locator("option")).toHaveText([
+    "默认模型 (gpt-6.1-sol-fast)",
+    "gpt-6.1-sol",
+    "gpt-6.1-sol-fast",
+  ]);
+  await expect(page.getByLabel("思考深度").locator("option")).toContainText([
+    "medium",
+    "high",
+    "ultra",
+  ]);
+  await page.getByLabel("任务模型").selectOption("gpt-6.1-sol");
+  await page.getByRole("button", { name: "保存全部任务" }).click();
+  await expect
+    .poll(() =>
+      repository(page, "return store.getSnapshot().ai.tasks.explain.model"),
+    )
+    .toBe("gpt-6.1-sol");
+  await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
+  const model = page.getByRole("combobox", { name: "Chat model", exact: true });
+  await expect(model).toHaveValue("");
+  await expect(model.locator("option")).toHaveText([
+    "默认模型 (gpt-6.1-sol-fast)",
+    "gpt-6.1-sol",
+    "gpt-6.1-sol-fast",
+  ]);
+  const send = async (expected: string) => {
+    await page.locator(".chat-input textarea").fill("你好");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Send", exact: true }),
+    ).toBeDisabled();
+    await expect.poll(() => requests.at(-1)?.model).toBe(expected);
+    await expect(page.locator(".busy")).toHaveCount(0);
+    expect(requests.at(-1)?.tools?.length).toBeGreaterThan(0);
+  };
+  await send("gpt-6.1-sol-fast");
+  await repository(
+    page,
+    `const ai=structuredClone(store.getSnapshot().ai);ai.defaultModel='gpt-6.1-sol';await store.saveAI(ai);`,
+  );
+  await expect(model.locator("option").first()).toHaveText(
+    "默认模型 (gpt-6.1-sol)",
+  );
+  await send("gpt-6.1-sol");
+  await model.selectOption("gpt-6.1-sol-fast");
+  await send("gpt-6.1-sol-fast");
+  await model.selectOption("");
+  await send("gpt-6.1-sol");
+  await repository(
+    page,
+    `const ai=structuredClone(store.getSnapshot().ai);ai.defaultModel='gpt-6.1-sol-fast';await store.saveAI(ai);`,
+  );
+  await send("gpt-6.1-sol-fast");
+  const ai = await repository(page, "return store.getSnapshot().ai");
+  const events = await repository<unknown[]>(
+    page,
+    "return store.getSnapshot().events",
+  );
+  await page.reload();
+  expect(await repository(page, "return store.getSnapshot().ai")).toEqual(ai);
+  const context = await browser.newContext({ locale: "zh-CN" });
+  try {
+    const other = await context.newPage();
+    await other.goto("/");
+    await repository(other, `await store.ingest(${JSON.stringify(events)});`);
+    expect(await repository(other, "return store.getSnapshot().ai")).toEqual(
+      ai,
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+for (const target of ["大类", "子类", "词条"] as const) {
+  test(`deleting ${target} waits for consent; every dismissal and storage failure preserves the entire taxonomy and entries`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const id = await repository<string>(
+      page,
+      `
+      await store.patch('category','parent',{name:'大类',parent:''});
+      await store.patch('category','child',{name:'子类',parent:'parent'});
+      await store.patch('category','grandchild',{name:'孙类',parent:'child'});
+      await store.createEntry('父级知识','parent-content','test','parent');
+      return await store.createEntry('子级知识','child-content','test','child');
+    `,
+    );
+    const baseline = await repository(
+      page,
+      "return {events:store.getSnapshot().events,docs:store.getSnapshot().docs}",
+    );
+    if (target === "词条") {
+      await page
+        .locator(".entry-row")
+        .filter({ hasText: "子级知识" })
+        .getByRole("button", { name: "子级知识", exact: true })
+        .click();
+    } else {
+      await page.getByRole("button", { name: "设置与偏好" }).click();
+      await page.getByRole("button", { name: "知识分类", exact: true }).click();
+    }
+    const trigger = page.getByRole("button", {
+      name: target === "词条" ? "删除词条" : `删除分类 ${target}`,
+      exact: true,
+    });
+    const dialog = page.getByRole("dialog", { name: "确认删除", exact: true });
+    for (const dismissal of [
+      "cancel",
+      "close",
+      "escape",
+      "backdrop",
+    ] as const) {
+      await trigger.click();
+      await expect(dialog).toBeVisible();
+      expect(
+        await repository(
+          page,
+          "return {events:store.getSnapshot().events,docs:store.getSnapshot().docs}",
+        ),
+      ).toEqual(baseline);
+      if (dismissal === "cancel")
+        await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      else if (dismissal === "close")
+        await dialog
+          .getByRole("button", { name: "Close", exact: true })
+          .click();
+      else if (dismissal === "escape") await page.keyboard.press("Escape");
+      else
+        await page
+          .locator(".modal-backdrop")
+          .click({ position: { x: 2, y: 2 } });
+      await expect(dialog).toHaveCount(0);
+      expect(
+        await repository(
+          page,
+          "return {events:store.getSnapshot().events,docs:store.getSnapshot().docs}",
+        ),
+      ).toEqual(baseline);
+    }
+    await repository(
+      page,
+      "store.db.originalAppend=store.db.append;store.db.append=async()=>{throw Error('fixture storage failure')}",
+    );
+    await trigger.click();
+    await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    await expect(
+      target === "词条" ? page.locator(".toast") : page.getByRole("alert"),
+    ).toContainText("fixture storage failure");
+    expect(
+      await repository(
+        page,
+        "return {events:store.getSnapshot().events,docs:store.getSnapshot().docs}",
+      ),
+    ).toEqual(baseline);
+    await repository(
+      page,
+      "store.db.append=store.db.originalAppend;delete store.db.originalAppend",
+    );
+    await trigger.click();
+    await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    const category = target === "大类" ? "parent" : "child";
+    await expect
+      .poll(() =>
+        repository(
+          page,
+          `return store.getSnapshot().docs.find(d=>d.id==='${target === "词条" ? id : category}').fields.deleted`,
+        ),
+      )
+      .toBe(true);
+    const result = await repository<{
+      entries: { id: string; category: string }[];
+      categories: { id: string; parent: string }[];
+      events: unknown[];
+    }>(
+      page,
+      "return {entries:store.getSnapshot().entries,categories:store.getSnapshot().categories,events:store.getSnapshot().events}",
+    );
+    if (target === "词条") {
+      expect(result.entries.some((e) => e.id === id)).toBe(false);
+      expect(result.categories).toHaveLength(3);
+    } else {
+      expect(result.entries).toHaveLength(2);
+      expect(
+        result.categories.find(
+          (c) => c.id === (target === "大类" ? "child" : "grandchild"),
+        )?.parent,
+      ).toBe(target === "大类" ? "" : "parent");
+      expect(result.entries.find((e) => e.id === id)?.category).toBe(
+        target === "大类" ? "child" : "parent",
+      );
+    }
+    expect(result.events.length).toBeGreaterThan(
+      (baseline as { events: unknown[] }).events.length,
+    );
+    await page.reload();
+    expect(
+      await repository(
+        page,
+        `return store.getSnapshot().docs.find(d=>d.id==='${target === "词条" ? id : category}').fields.deleted`,
+      ),
+    ).toBe(true);
+  });
+}
+
+test("ordinary UI text, secondary labels and placeholders are black in day and warm themes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  for (const theme of ["light", "sepia", "dark"]) {
+    await repository(
+      page,
+      `await store.patch('setting','appearance',{theme:'${theme}'});`,
+    );
+    const color = theme === "dark" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)";
+    await expect(
+      page.getByRole("heading", { name: "一个舒适的思考空间" }),
+    ).toHaveCSS("color", color);
+    await expect(page.locator(".brand small")).toHaveCSS("color", color);
+    await expect(
+      page.getByRole("button", { name: "任务与提示词", exact: true }),
+    ).toHaveCSS("color", color);
+    expect(
+      await page
+        .getByRole("textbox", { name: "搜索知识" })
+        .evaluate((el) => getComputedStyle(el, "::placeholder").color),
+    ).toBe(color);
+  }
+});
 /** Provide a shared HTTPS WebDAV endpoint while preserving real client serialization and hash verification. */
 async function mockDav(context: BrowserContext, files: Map<string, string>) {
   await context.route("https://dav.example/**", async (route) => {
@@ -285,10 +862,11 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
   expect(await readFile(path, "utf8")).not.toContain("根据证据");
   const context = await browser.newContext({ locale: "zh-CN" }),
     other = await context.newPage();
+  await asyncNativeConfirmation(other);
   await other.goto("/");
   await repository(
     other,
-    `await store.createEntry('本地不能丢失','local only');`,
+    `await store.createEntry('本地不能丢失','local only');await store.updateDevice({davUser:'local-preference-sentinel',syncMinutes:0});`,
   );
   await other.getByRole("button", { name: "设置与偏好" }).click();
   await other
@@ -303,8 +881,21 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
     .getByRole("dialog")
     .locator("input[type=password]")
     .fill("knowledge-backup-test-pass");
-  other.on("dialog", (d) => d.dismiss());
   await other.getByRole("button", { name: "解密验证并合并" }).click();
+  const settingsConfirmation = other.getByRole("dialog", {
+    name: "确认恢复设备设置",
+    exact: true,
+  });
+  await expect(settingsConfirmation).toBeVisible();
+  expect(
+    await repository(other, "return store.getSnapshot().device.davUser"),
+  ).toBe("local-preference-sentinel");
+  await settingsConfirmation
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  expect(
+    await repository(other, "return store.getSnapshot().device.davUser"),
+  ).toBe("local-preference-sentinel");
   await expect(other.getByRole("dialog")).toHaveCount(0);
   expect(
     await repository(
@@ -592,8 +1183,11 @@ test("category rename, move and removal preserve entries and reject cycles", asy
   await expect(
     page.getByRole("button", { name: "编辑分类 新子类" }),
   ).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "删除分类 新子类" }).click();
+  await page
+    .getByRole("dialog", { name: "确认删除" })
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "编辑分类 新子类" }),
   ).toHaveCount(0);
@@ -981,7 +1575,7 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
  const first=await store.createEntry('熟悉概念','# 熟悉概念\\n\\n## 一句话解释\\n可显示的一句话。','test','parent');
  const old=await store.createEntry('易忘概念','older material','test','child');
  const {schedule}=await import('/src/core/review.ts');
- for(const[id,time]of [[first,new Date()],[old,new Date('2020-01-01T12:00:00Z')]]){const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify(schedule(e.card,95,time)))});}
+ for(const[id,time]of [[first,new Date()],[old,new Date('2020-01-01T12:00:00Z')]]){const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify({...schedule(e.card,95,time),...(id===old?{stability:0.000001}:{})}))});}
  await store.createEntry('首次复习的概念','new material');`,
   );
   await page.getByRole("button", { name: "我的知识库", exact: true }).click();
@@ -1005,6 +1599,46 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
     Number(color.find((x) => x.title === "易忘概念")!.r),
   );
   expect(color.find((x) => x.title === "首次复习的概念")!.r).toBe("unknown");
+  await expect(page.locator(".memory-legend")).toHaveText(
+    "遗忘程度：黑 → 黄 → 红",
+  );
+  await expect(page.locator(".memory-legend > span")).toHaveCSS(
+    "background-image",
+    "linear-gradient(90deg, rgb(0, 0, 0), rgb(148, 111, 0), rgb(198, 40, 40))",
+  );
+  // Inspect the rendered title pixels' CSS color, not just the legend text or data attributes.
+  const pixels = await page.locator(".entry-row").evaluateAll((rows) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d")!;
+    return rows.map((row) => {
+      const title = row.querySelector(".entry-title-cell button")!;
+      context.fillStyle = getComputedStyle(title).color;
+      context.fillRect(0, 0, 1, 1);
+      return {
+        title: title.textContent,
+        rgb: [...context.getImageData(0, 0, 1, 1).data].slice(0, 3),
+      };
+    });
+  });
+  expect(pixels.find((x) => x.title === "首次复习的概念")!.rgb).toEqual([
+    0, 0, 0,
+  ]);
+  const stale = pixels.find((x) => x.title === "易忘概念")!.rgb;
+  expect(stale[0]).toBeGreaterThan(stale[1] * 2);
+  expect(stale[0]).toBeGreaterThan(stale[2] * 2);
+  await repository(
+    page,
+    "await store.patch('setting','appearance',{theme:'dark'});",
+  );
+  await expect(page.locator(".memory-legend > span")).toHaveCSS(
+    "background-image",
+    "linear-gradient(90deg, rgb(255, 255, 255), rgb(255, 213, 79), rgb(255, 138, 128))",
+  );
+  await repository(
+    page,
+    "await store.patch('setting','appearance',{theme:'light'});",
+  );
   await page
     .locator(".category-row")
     .filter({ hasText: "父分类" })

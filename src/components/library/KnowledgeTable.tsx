@@ -220,7 +220,7 @@ export function KnowledgeTable({
         )}
         <label className="memory-legend">
           <span />
-          {t("遗忘程度：黑 → 红 → 紫", "Forgetting: neutral → red → purple")}
+          {t("遗忘程度：黑 → 黄 → 红", "Forgetting: black → yellow → red")}
         </label>
       </div>
       <div className="knowledge-table-scroll">

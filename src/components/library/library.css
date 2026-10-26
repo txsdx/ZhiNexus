@@ -1,13 +1,13 @@
 /* Compact taxonomy and memory table; horizontal scrolling keeps every requested column available on phones. */
 :root {
-  --memory-neutral: #222532;
-  --memory-red: #bd243d;
-  --memory-purple: #7424b7;
+  --memory-neutral: #000;
+  --memory-yellow: #946f00;
+  --memory-red: #c62828;
 }
 :root[data-theme="dark"] {
-  --memory-neutral: #e8e8ee;
-  --memory-red: #ff8a98;
-  --memory-purple: #c79bff;
+  --memory-neutral: #fff;
+  --memory-yellow: #ffd54f;
+  --memory-red: #ff8a80;
 }
 .knowledge-table-section {
   border: 1px solid var(--border);
@@ -44,8 +44,8 @@
   background: linear-gradient(
     90deg,
     var(--memory-neutral),
-    var(--memory-red),
-    var(--memory-purple)
+    var(--memory-yellow),
+    var(--memory-red)
   );
 }
 .knowledge-table-scroll {

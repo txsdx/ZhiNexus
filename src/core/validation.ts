@@ -76,6 +76,7 @@ const schemas = {
 const task = z.object({ model: text, effort: text, prompt: text });
 const ai = z.object({
   baseUrl: text,
+  defaultModel: text.optional(),
   models: z.array(
     z.object({
       id: text,

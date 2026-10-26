@@ -563,6 +563,7 @@ function Shell() {
             </span>
           </header>
           <EntryTabs
+            notify={notify}
             workspace={workspace}
             active={page === "entry"}
             onOpen={open}

@@ -15,13 +15,13 @@ export function memoryEstimate(entry: Entry, now = new Date()): number | null {
     ? Math.min(1, Math.max(0, retention))
     : null;
 }
-/** Interpolate neutral → red → purple using the estimated forgotten proportion, keeping theme colors accessible. */
+/** Interpolate neutral → yellow → red using the estimated forgotten proportion, keeping theme colors accessible. */
 export function memoryColor(retention: number | null): string {
   if (retention === null) return "var(--memory-neutral)";
   const risk = 1 - retention;
   return risk <= 0.5
-    ? `color-mix(in srgb, var(--memory-neutral) ${100 - risk * 200}%, var(--memory-red))`
-    : `color-mix(in srgb, var(--memory-red) ${(1 - risk) * 200}%, var(--memory-purple))`;
+    ? `color-mix(in srgb, var(--memory-neutral) ${100 - risk * 200}%, var(--memory-yellow))`
+    : `color-mix(in srgb, var(--memory-yellow) ${(1 - risk) * 200}%, var(--memory-red))`;
 }
 /** Strip presentation markup for a single plain-text sentence; never execute imported Markdown. */
 function plain(text: string): string {

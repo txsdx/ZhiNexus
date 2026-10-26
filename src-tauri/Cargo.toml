@@ -1,7 +1,7 @@
 # Native runtime and platform plugins; domain workflows live in the TypeScript layer.
 [package]
 name = "zhinexus"
-version = "0.8.1"
+version = "0.9.0"
 description = "Local-first learning workspace"
 authors = ["ZhiNexus contributors"]
 edition = "2021"

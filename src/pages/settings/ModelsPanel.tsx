@@ -66,6 +66,30 @@ export function ModelsPanel() {
         )}
       </p>
       {keyStatus.message && <p role="status">{keyStatus.message}</p>}
+      <label>
+        {t("全局默认模型", "Global default model")}
+        <select
+          value={ai.defaultModel}
+          onChange={(e) => setAI({ ...ai, defaultModel: e.target.value })}
+        >
+          <option value="">{t("未配置", "Not configured")}</option>
+          {ai.defaultModel &&
+            !ai.models.some((m) => m.id === ai.defaultModel) && (
+              <option value={ai.defaultModel}>{ai.defaultModel}</option>
+            )}
+          {ai.models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.id}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted">
+        {t(
+          "任务和助手选择“默认模型”时，动态使用此模型；单独指定的模型保持不变。",
+          "Tasks and assistants set to Default model follow this setting dynamically; explicit selections stay unchanged.",
+        )}
+      </p>
       <div className="actions">
         <button
           disabled={!!busy}
@@ -102,8 +126,7 @@ export function ModelsPanel() {
       <div className="model-list">
         {ai.models.map((m) => (
           <div key={m.id}>
-            <strong>{m.name}</strong>
-            <small>{m.id}</small>
+            <strong>{m.id}</strong>
             <div className="tags">
               <span>Tools: {m.tools === null ? "?" : m.tools ? "✓" : "—"}</span>
               <span>
@@ -117,8 +140,8 @@ export function ModelsPanel() {
       </div>
       <div className="notice">
         {t(
-          "? 表示服务端未声明能力。不会根据模型名称猜测，也不会发送未声明的 reasoning_effort。",
-          "? means the server did not declare a capability. Undeclared reasoning_effort is never sent.",
+          "? 表示服务端未声明能力。Tools 未知时允许尝试，仅明确不支持时禁用；不会发送未声明的 reasoning_effort。",
+          "? means the server did not declare a capability. Unknown tool support allows an attempt; only explicit lack of support disables tools. Undeclared reasoning_effort is never sent.",
         )}
       </div>
     </>

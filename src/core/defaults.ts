@@ -41,6 +41,7 @@ export function defaultAI(): AIConfig {
   };
   return {
     baseUrl: "https://api.openai.com/v1",
+    defaultModel: "",
     models: [],
     tasks: Object.fromEntries(
       Object.keys(templates).map((k) => [

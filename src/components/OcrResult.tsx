@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, useT } from "./common";
 import { store } from "../core/store";
+import { resolveModel } from "../core/ai-config";
 import { complete, renderPrompt } from "../services/ai";
 import { notifyCompletion } from "../services/notifications";
 /** Review text and image provenance before starting the standard duplicate-aware entry capture flow. */
@@ -30,7 +31,10 @@ export function OcrResult({
       if (ai) {
         const s = store.getSnapshot(),
           task = s.ai.tasks.ocr;
-        if (s.ai.models.find((m) => m.id === task.model)?.vision === false)
+        if (
+          s.ai.models.find((m) => m.id === resolveModel(s.ai, "ocr"))
+            ?.vision === false
+        )
           throw Error(
             t(
               "此模型不支持图片，请为 OCR 选择视觉模型",

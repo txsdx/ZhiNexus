@@ -10,11 +10,16 @@ import {
 import { Markdown } from "../../components/Markdown";
 import { useSettings } from "./context";
 import versions from "../../../versions.json";
+import { useConfirmation } from "../../hooks/useConfirmation";
 /** Show only the running platform's patch changes; installers retain normal operating-system consent prompts. */
 export function AboutPanel() {
   const { t, busy, act, notify } = useSettings(),
     [update, setUpdate] = useState<UpdateInfo | null>(null),
     [current, setCurrent] = useState(versions.platforms.windows);
+  const confirmation = useConfirmation(notify, {
+    title: t("确认更新", "Confirm update"),
+    confirmLabel: t("下载并安装", "Download and install"),
+  });
   useEffect(() => {
     if (native)
       void import("@tauri-apps/api/core")
@@ -60,22 +65,22 @@ export function AboutPanel() {
           className="primary"
           disabled={!!busy || !native || !update?.available}
           onClick={() => {
-            if (
-              update &&
-              window.confirm(
-                t(
-                  "下载并校验更新，然后打开安装程序？系统可能要求确认权限。",
-                  "Download and verify the update, then open its installer? The OS may require consent.",
-                ),
-              )
-            )
-              void act(
-                t("下载并校验…", "Downloading and verifying…"),
-                async () => {
-                  await applyUpdate(update);
-                  notify(t("已启动更新安装程序", "Update installer started"));
-                },
-              );
+            if (!update) return;
+            void confirmation.request(
+              t(
+                "下载并校验更新，然后打开安装程序？系统可能要求确认权限。",
+                "Download and verify the update, then open its installer? The OS may require consent.",
+              ),
+              async () => {
+                await act(
+                  t("下载并校验…", "Downloading and verifying…"),
+                  async () => {
+                    await applyUpdate(update);
+                    notify(t("已启动更新安装程序", "Update installer started"));
+                  },
+                );
+              },
+            );
           }}
         >
           <Download size={16} />
@@ -103,6 +108,7 @@ export function AboutPanel() {
       >
         GitHub ↗
       </a>
+      {confirmation.dialog}
     </>
   );
 }

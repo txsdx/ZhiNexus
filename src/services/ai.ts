@@ -2,6 +2,7 @@
 import { notifyCompletion } from "./notifications";
 import { z } from "zod";
 import { store } from "../core/store";
+import { resolveModel } from "../core/ai-config";
 import type { Message, Task, ToolCall } from "../core/types";
 import {
   request,
@@ -34,7 +35,11 @@ export async function complete(
   image?: string,
 ): Promise<{ content: string; calls: ToolCall[] }> {
   const { ai, device } = store.getSnapshot(),
-    config = { ...ai.tasks[task], ...override };
+    config = {
+      ...ai.tasks[task],
+      ...override,
+      model: resolveModel(ai, task, override?.model),
+    };
   if (!config.model) throw Error("请先在设置中为此功能选择模型");
   if (!device.apiKey) throw Error("请在本设备配置 API Key");
   if (
@@ -67,7 +72,7 @@ export async function complete(
   }
   if (model?.efforts.includes(config.effort))
     body.reasoning_effort = config.effort;
-  if (tools?.length && model?.tools === true) body.tools = tools;
+  if (tools?.length && model?.tools !== false) body.tools = tools;
   const res = await request(
     apiBaseUrl(ai.baseUrl) + "/chat/completions",
     {
@@ -136,8 +141,8 @@ export function parseJson(text: string): unknown {
 /** Generate an image and import bytes into the same content-addressed attachment store. */
 export async function generateImage(prompt: string): Promise<string> {
   const { ai, device } = store.getSnapshot();
-  if (!ai.tasks.image.model || !device.apiKey)
-    throw Error("请先配置图片模型和 API Key");
+  const model = resolveModel(ai, "image");
+  if (!model || !device.apiKey) throw Error("请先配置图片模型和 API Key");
   if (
     device.apiKeyEndpoint &&
     apiBaseUrl(device.apiKeyEndpoint) !== apiBaseUrl(ai.baseUrl)
@@ -154,7 +159,7 @@ export async function generateImage(prompt: string): Promise<string> {
         Authorization: "Bearer " + normalizeApiKey(device.apiKey),
       },
       body: JSON.stringify({
-        model: ai.tasks.image.model,
+        model,
         prompt,
         n: 1,
       }),

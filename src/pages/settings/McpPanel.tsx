@@ -6,9 +6,11 @@ import type { McpConfig } from "../../core/types";
 import { connectMcp } from "../../services/mcp";
 import { serviceUrl } from "../../services/network";
 import { useSettings } from "./context";
+import { useConfirmation } from "../../hooks/useConfirmation";
 /** Configure SDK HTTP/SSE or directly owned desktop stdio processes without shell command parsing. */
 export function McpPanel() {
   const { t, device, setDevice, act, busy, notify } = useSettings();
+  const confirmation = useConfirmation(notify);
   const [drafts, setDrafts] = useState<
     Record<string, { args?: string; env?: string }>
   >({});
@@ -180,10 +182,17 @@ export function McpPanel() {
             <button
               className="danger"
               onClick={() =>
-                setDevice({
-                  ...device,
-                  mcp: device.mcp.filter((x) => x.id !== m.id),
-                })
+                void confirmation.request(
+                  t(
+                    `移除 MCP 配置「${m.name}」？保存后生效。`,
+                    `Remove MCP configuration "${m.name}"? Save to apply.`,
+                  ),
+                  async () =>
+                    setDevice((current) => ({
+                      ...current,
+                      mcp: current.mcp.filter((x) => x.id !== m.id),
+                    })),
+                )
               }
             >
               {t("移除", "Remove")}
@@ -226,6 +235,7 @@ export function McpPanel() {
           {t("保存 MCP 配置", "Save MCP configuration")}
         </button>
       </div>
+      {confirmation.dialog}
     </>
   );
 }

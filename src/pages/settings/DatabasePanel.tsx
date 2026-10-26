@@ -10,6 +10,7 @@ import { Database, Download, ShieldCheck, Upload } from "lucide-react";
 import { store } from "../../core/store";
 import { uploadSnapshot } from "../../services/sync";
 import { useSettings } from "./context";
+import { useConfirmation } from "../../hooks/useConfirmation";
 /** DatabasePanel exposes one focused settings workflow. */
 export function DatabasePanel() {
   const {
@@ -25,6 +26,10 @@ export function DatabasePanel() {
     setPassword,
     setArchive,
   } = useSettings();
+  const confirmation = useConfirmation(notify, {
+    title: t("确认恢复云端快照", "Confirm cloud snapshot recovery"),
+    confirmLabel: t("确认恢复", "Recover snapshots"),
+  });
   return (
     <>
       <h2>{t("数据库与云同步", "Database & cloud sync")}</h2>
@@ -95,21 +100,21 @@ export function DatabasePanel() {
         <button
           disabled={!!busy}
           onClick={() => {
-            if (
-              window.confirm(
-                t(
-                  "验证并合并云端全部完整快照？本地修改会保留。",
-                  "Verify and merge cloud snapshots? Local edits will be retained.",
-                ),
-              )
-            )
-              void act(
-                t("恢复云快照…", "Recovering cloud snapshots…"),
-                async () =>
-                  setReport(
-                    JSON.stringify(await recoverCloudSnapshots(), null, 2),
-                  ),
-              );
+            void confirmation.request(
+              t(
+                "验证并合并云端全部完整快照？本地修改会保留。",
+                "Verify and merge cloud snapshots? Local edits will be retained.",
+              ),
+              async () => {
+                await act(
+                  t("恢复云快照…", "Recovering cloud snapshots…"),
+                  async () =>
+                    setReport(
+                      JSON.stringify(await recoverCloudSnapshots(), null, 2),
+                    ),
+                );
+              },
+            );
           }}
         >
           {t("从云端快照恢复", "Recover cloud snapshots")}
@@ -185,6 +190,7 @@ export function DatabasePanel() {
           "Cleanup removes recovery journal copies covered by all three verified checkpoints and pending files older than 24 hours. Sync history, historical assets, trash, conflicts and damaged originals are retained to protect offline devices.",
         )}
       </p>
+      {confirmation.dialog}
     </>
   );
 }

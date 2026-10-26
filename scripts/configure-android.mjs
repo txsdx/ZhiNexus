@@ -12,6 +12,17 @@ export function configureAndroid(text, minSdk) {
     compileSdk: sdk,
   };
 }
+/** Preserve Tauri's generated activity and attach native safe areas exactly once after its WebView setup. */
+export function configureActivity(text) {
+  const call = "io.github.txsdx.zhinexus.ui.SystemInsets.apply(this)";
+  if (text.includes(call)) return text;
+  const anchor = "super.onCreate(savedInstanceState)";
+  if (!text.includes(anchor))
+    throw Error(
+      "Unsupported Android activity template; review system inset initialization",
+    );
+  return text.replace(anchor, anchor + "\n    " + call);
+}
 /** Modify only Tauri's ignored generated project, keeping source requirements and CI metadata synchronized. */
 export function run() {
   const file = "src-tauri/gen/android/app/build.gradle.kts";
@@ -23,6 +34,19 @@ export function run() {
       config.bundle.android.minSdkVersion,
     );
   fs.writeFileSync(file, result.text);
+  const activity =
+    "src-tauri/gen/android/app/src/main/java/io/github/txsdx/zhinexus/MainActivity.kt";
+  fs.writeFileSync(
+    activity,
+    configureActivity(fs.readFileSync(activity, "utf8")),
+  );
+  const uiDir =
+    "src-tauri/gen/android/app/src/main/java/io/github/txsdx/zhinexus/ui";
+  fs.mkdirSync(uiDir, { recursive: true });
+  fs.copyFileSync(
+    "src-tauri/mobile/android/SystemInsets.kt",
+    uiDir + "/SystemInsets.kt",
+  );
   const props = "src-tauri/gen/android/gradle.properties";
   const current = fs.existsSync(props) ? fs.readFileSync(props, "utf8") : "";
   if (!current.includes("org.gradle.caching="))

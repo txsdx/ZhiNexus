@@ -122,7 +122,7 @@ sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev \
 ```bash
 rustup target add aarch64-linux-android
 npm run tauri -- android init --ci
-node scripts/configure-android.mjs  # 最低 Android 15，安装器桥接与生成目录配置
+node scripts/configure-android.mjs  # 最低 Android 15，安装器桥接、系统安全区域与生成目录配置
 npm run tauri -- android dev
 npm run tauri -- android build --apk --target aarch64
 ```

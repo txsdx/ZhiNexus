@@ -76,6 +76,23 @@ async function connect() {
   connected = { browser, page };
   await page.waitForSelector(".app-shell", { timeout: 60000 });
   assert.equal(await page.evaluate(() => !!window.__TAURI_INTERNALS__), true);
+  const display = device("shell", "wm", "size").match(
+    /Physical size:\s*(\d+)x(\d+)/,
+  );
+  assert.ok(display, "The emulator must report its physical display size");
+  const viewport = await page.evaluate(() => ({
+    width: document.documentElement.clientWidth,
+    height: document.documentElement.clientHeight,
+    dpr: devicePixelRatio,
+  }));
+  fs.writeFileSync(
+    "android-test-results/viewport.json",
+    JSON.stringify(viewport, null, 2),
+  );
+  assert.ok(
+    viewport.height * viewport.dpr <= Number(display[2]) - 24,
+    "The native WebView must leave room for system bars instead of drawing underneath them",
+  );
   return { browser, page };
 }
 fs.mkdirSync("android-test-results", { recursive: true });

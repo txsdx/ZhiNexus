@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 const base = process.env.TAURI_DRIVER_URL || "http://127.0.0.1:4444",
   application = path.resolve(
     process.env.TAURI_APPLICATION || "src-tauri/target/debug/zhinexus",
@@ -257,6 +257,53 @@ try {
     "native-test-results/error.txt",
     String(error.stack || error),
   );
+  if (process.platform === "win32") {
+    fs.writeFileSync(
+      "native-test-results/application-status.json",
+      JSON.stringify(
+        {
+          pid: ownedApplication?.pid,
+          exitCode: ownedApplication?.exitCode,
+          signal: ownedApplication?.signalCode,
+        },
+        null,
+        2,
+      ),
+    );
+    const config = JSON.parse(
+      fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    );
+    for (const root of [
+      path.join(process.env.APPDATA, config.identifier),
+      path.join(path.dirname(application), "_data"),
+    ]) {
+      const diagnostic = path.join(root, "recovery", "native-startup.log");
+      if (fs.existsSync(diagnostic))
+        fs.copyFileSync(
+          diagnostic,
+          path.join(
+            "native-test-results",
+            root.endsWith("_data")
+              ? "portable-native-startup.log"
+              : "system-native-startup.log",
+          ),
+        );
+    }
+    try {
+      fs.writeFileSync(
+        "native-test-results/processes.json",
+        execFileSync(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'ZhiNexus|msedgewebview2' } | Select-Object Name,ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Depth 3",
+          ],
+          { encoding: "utf8", timeout: 15000 },
+        ),
+      );
+    } catch {}
+  }
   try {
     fs.writeFileSync(
       "native-test-results/native-failure.txt",

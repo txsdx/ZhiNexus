@@ -1,5 +1,11 @@
 # 更新日志
 
+## Windows 0.3.2 · 2026-10-26
+
+- GUI 原生启动失败没有控制台时，将 panic/回溯写入实际数据根的 recovery/native-startup.log；不进入同步内容，便携模式仍在 _data。
+- CI 收集独立进程退出状态和 native startup 日志，用于定位 release exe 尚不能建立调试连接的问题，不将编译成功视为运行通过。
+
+
 ## Android 0.3.1 · 2026-10-26
 
 - GitHub 已完成 arm64 发布 APK/签名及 x86_64 调试 APK 编译；设备测试首次因 runner 磁盘不足、无法解压 API35 镜像中止，尚未进入应用。

@@ -4,6 +4,8 @@
 mod android_updates;
 mod capture;
 mod paths;
+#[cfg(target_os = "windows")]
+mod startup;
 mod storage;
 pub mod updates;
 use tauri::Manager;
@@ -46,6 +48,8 @@ pub fn run() {
     builder
         .setup(|app| {
             let location = paths::initialize(app.handle())?;
+            #[cfg(target_os = "windows")]
+            startup::install_diagnostics(&location.root);
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let webview_data = location.root.join("webview");
             app.manage(location);

@@ -12,7 +12,11 @@ const adb = path.join(
   pkg = "io.github.txsdx.zhinexus";
 /** Execute bounded device operations without invoking a host shell or exposing credentials. */
 const device = (...args) =>
-  execFileSync(adb, args, { encoding: "utf8", timeout: 30000 });
+  execFileSync(adb, args, {
+    encoding: "utf8",
+    timeout: 30000,
+    maxBuffer: 16 * 1024 * 1024,
+  });
 /** Wait for a remote WebView or a persisted UI transition. */
 async function waitFor(fn, timeout = 60000) {
   const end = Date.now() + timeout;
@@ -39,9 +43,10 @@ async function connect() {
   );
   device("forward", "tcp:9223", "localabstract:webview_devtools_remote_" + pid);
   const browser = await waitFor(() =>
-    chromium.connectOverCDP("http://127.0.0.1:9223"),
+    chromium.connectOverCDP("http://127.0.0.1:9223", { noDefaults: true }),
   );
   const page = await waitFor(() => browser.contexts()[0]?.pages()[0]);
+  connected = { browser, page };
   await page.waitForSelector(".app-shell", { timeout: 60000 });
   assert.equal(await page.evaluate(() => !!window.__TAURI_INTERNALS__), true);
   return { browser, page };
@@ -104,14 +109,26 @@ try {
     "PASS: Android native storage, restart and OS notification scheduling",
   );
 } catch (error) {
+  fs.writeFileSync(
+    "android-test-results/error.txt",
+    String(error.stack || error),
+  );
   if (connected)
     await connected.page
       .screenshot({ path: "android-test-results/failure.png", fullPage: true })
       .catch(() => {});
+  if (connected)
+    fs.writeFileSync(
+      "android-test-results/page.txt",
+      await connected.page
+        .locator("body")
+        .innerText()
+        .catch(() => "WebView disconnected"),
+    );
   try {
     fs.writeFileSync(
       "android-test-results/logcat.txt",
-      device("logcat", "-d", "-t", "500"),
+      device("logcat", "-d", "-t", "5000"),
     );
   } catch {}
   throw error;

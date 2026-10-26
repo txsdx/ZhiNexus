@@ -68,3 +68,5 @@
 - Android run 40259812214：arm64 release、APK签名、x86_64 debug 全部成功；安装 API35 测试镜像时 runner 磁盘满，尚未安装/运行应用。0.3.1 CI 已释放无关预装工具空间并缓存原厂系统镜像，等待复跑。
 
 - Windows EdgeDriver 仍无法发现其默认 DevToolsActivePort 文件。测试改为直接启动原始 release exe、捕获应用 stdout/stderr，并通过固定本机调试端口附加 WebView2；不改动产品 portable/data_directory 实现。等待真实 CI 结果，未降低任何数据断言。
+
+- Android 0.3.1 已安装并启动到可调试 WebView；测试连接报 Browser.setDownloadBehavior/context management 不支持，属 Playwright 默认上下文覆盖与 Android WebView 不兼容。使用公开 noDefaults:true 连接选项，Playwright 最低版本明确为 1.64.1（实际锁定已是该版），保留原生状态；增强错误/页面/5000行日志诊断。SDK/原厂镜像缓存改为显式 restore/save，在 UI 测试失败时仍保存已验证完整的 SDK，避免重复下载。纯测试修正不改变二进制版本。

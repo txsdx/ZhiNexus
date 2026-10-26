@@ -54,7 +54,8 @@ jobs:
           cache-read-only: false
       - name: Resolve SDK cache directory
         run: echo "ANDROID_CACHE_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: sdk-cache
         with:
           path: |
             ~/.android/cache
@@ -90,6 +91,7 @@ jobs:
         id: project
         run: node scripts/configure-android.mjs
       - name: Install the SDK required by the current Tauri template
+        id: sdk-template
         run: sdkmanager "${{ steps.project.outputs.platform_package }}" "build-tools;${{ steps.project.outputs.compile_sdk }}.0.0"
       - run: npm run tauri -- android build --apk --target aarch64
       - name: Sign installable APK (custom release key optional)
@@ -110,11 +112,13 @@ jobs:
         run: |
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: image-cache
         with:
           path: ${{ env.ANDROID_CACHE_ROOT }}/system-images/android-35/google_apis/x86_64
           key: android-test-image-api35-google-apis-x86_64-v1
       - name: Test installed app on Android 15
+        id: device-test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -126,6 +130,26 @@ jobs:
           script: |
             adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
             node scripts/android-smoke.mjs
+      - name: Verify factory image is complete before caching
+        id: image-ready
+        if: always()
+        run: |
+          test -s "$ANDROID_HOME/system-images/android-35/google_apis/x86_64/package.xml"
+          test -s "$ANDROID_HOME/system-images/android-35/google_apis/x86_64/system.img"
+      - uses: actions/cache/save@v4
+        if: always() && steps.image-ready.outcome == 'success' && steps.image-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.ANDROID_CACHE_ROOT }}/system-images/android-35/google_apis/x86_64
+          key: ${{ steps.image-cache.outputs.cache-primary-key }}
+      - uses: actions/cache/save@v4
+        if: always() && steps.sdk-template.outcome == 'success' && steps.sdk-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.android/cache
+            ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
+            ${{ env.ANDROID_CACHE_ROOT }}/platforms
+            ${{ env.ANDROID_CACHE_ROOT }}/build-tools
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

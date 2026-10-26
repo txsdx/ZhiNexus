@@ -145,7 +145,7 @@ Windows 输出 `ZhiNexus_windows_x64_<version>_protable.exe` 和 `*_setup.exe`�
 
 入口只有 **Publish Release**（默认关闭）和 **Save Release as draft**（默认开启，发布时生效）两个选项。旧平台选择入口及转发 workflow 已删除；push/PR 保留自动 Validate。
 
-前端在共享任务中只编译一次，以提交版本和 SHA-256 清单校验后交给三个原生目标。Windows、Linux、Android 的 Rust/系统工具链按各自 ABI 并行构建，不能共用原生二进制。npm、Rust、Gradle、SDK/NDK 和打包工具继续缓存；实际加速幅度取决于链接、下载和设备测试时间。
+前端在共享任务中只编译一次，以提交版本和 SHA-256 清单校验后交给三个原生目标。Windows、Linux、Android 的 Rust/系统工具链按各自 ABI 并行构建，不能共用原生二进制。npm、Rust、Gradle、指定版本 NDK、模拟器镜像和打包工具继续缓存；runner 预装 SDK 不再整包恢复，避免权限错误与重复传输。实际加速幅度取决于链接、下载和设备测试时间。
 
 Release 使用 GitHub 自动 `GITHUB_TOKEN`，无需自行配置上传密钥；只有全部原生任务成功后才按所选发布/草稿参数上传。Android 会额外构建测试 APK，在 API35 模拟器测试原生块编辑、重启、SQLite 与通知；桌面测试验证真实 exe/DEB、块编辑、快捷键、OCR、便携隔离、清理及数据库/快照损坏恢复。
 

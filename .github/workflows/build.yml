@@ -156,21 +156,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: Resolve SDK cache identity
-        id: toolchain
+      - name: Prepare writable NDK cache
         run: |
           echo "ANDROID_CACHE_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          node -e 'const p=require("./package-lock.json");require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT,"cli="+p.packages["node_modules/@tauri-apps/cli"].version+"\n")'
+          if [ -d "$ANDROID_HOME/ndk/27.2.12479018" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME/ndk/27.2.12479018"
+          fi
       - uses: actions/cache/restore@v4
         id: sdk-cache
         with:
           path: |
             ~/.android/cache
             ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
-            ${{ env.ANDROID_CACHE_ROOT }}/platforms
-            ${{ env.ANDROID_CACHE_ROOT }}/build-tools
-          key: android-sdk-${{ runner.os }}-ndk-27.2.12479018-api35-cli-${{ steps.toolchain.outputs.cli }}-v2
-          restore-keys: android-sdk-${{ runner.os }}-ndk-27.2.12479018-api35-
+          # Avoid restoring the runner's root-owned SDK or the old full-SDK cache.
+          key: android-ndk-${{ runner.os }}-27.2.12479018-v3
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,x86_64-linux-android
@@ -259,8 +258,6 @@ jobs:
           path: |
             ~/.android/cache
             ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
-            ${{ env.ANDROID_CACHE_ROOT }}/platforms
-            ${{ env.ANDROID_CACHE_ROOT }}/build-tools
           key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         if: always()

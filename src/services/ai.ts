@@ -138,6 +138,13 @@ export async function generateImage(prompt: string): Promise<string> {
   const { ai, device } = store.getSnapshot();
   if (!ai.tasks.image.model || !device.apiKey)
     throw Error("请先配置图片模型和 API Key");
+  if (
+    device.apiKeyEndpoint &&
+    apiBaseUrl(device.apiKeyEndpoint) !== apiBaseUrl(ai.baseUrl)
+  )
+    throw Error(
+      "API Key 属于另一接口，请重新保存 AI 配置 / API key belongs to another endpoint",
+    );
   const res = await request(
     apiBaseUrl(ai.baseUrl) + "/images/generations",
     {

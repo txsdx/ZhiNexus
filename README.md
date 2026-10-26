@@ -6,7 +6,7 @@
   <p><a href="#快速开始">快速开始</a> · <a href="#功能">功能</a> · <a href="#数据与同步">数据与同步</a> · <a href="#构建原生应用">原生构建</a> · <a href=".ai/STATUS.md">完成情况</a></p>
 </div>
 
-> **0.4 开发版 / Early development.** 加入桌面后台/快捷键/OCR、数据目录迁移、全局代理、无密码 API Key 加密同步及独立通知设置。上一版 Windows、Ubuntu 实际安装产物测试和 Android 15 模拟器测试均通过；本次平台复验记录见 [需求状态](.ai/STATUS.md)。真实提供商与正式安装升级尚需验证。
+> **0.5 开发版 / Early development.** 加入桌面后台/快捷键/OCR、数据目录迁移、全局代理、无密码 API Key 加密同步及独立通知设置。上一版 Windows、Ubuntu 实际安装产物测试和 Android 15 模拟器测试均通过；本次平台复验记录见 [需求状态](.ai/STATUS.md)。真实提供商与正式安装升级尚需验证。
 
 ## 功能
 

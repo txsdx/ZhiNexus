@@ -1,6 +1,6 @@
 # 待解决的问题与验证边界
 
-1. 0.3 的 Windows/Ubuntu 实际产物测试和 Android15 模拟器测试均已通过（见 STATUS）；0.4 新后台/OCR/迁移/网络边界仍需本轮最终平台验证。没有 Android 实体手机可供本机测试。
+1. 0.3 的 Windows/Ubuntu 实际产物测试和 Android15 模拟器测试均已通过（见 STATUS）；本轮已验证 Linux 原生 OCR/代理/stdio/迁移和 Android15 通知/重启；Windows 截图回调及最终 0.5.0 平台版本仍需最终 CI。没有 Android 实体手机可供本机测试。
 2. 没有用户真实 CPA/OpenAI 图片/WebDAV/MCP 账号。当前使用协议 fixture，不能据此保证某个私有服务兼容；仅支持 Chat Completions，尚无 Responses-only/Anthropic 原生协议。
 3. Windows OCR 依赖已安装系统语言；Ubuntu 依赖 Tesseract 中/英文包。截图须遵循系统录屏权限；Wayland 桌面策略可能限制全局快捷键/截图。Windows 提权/受保护窗口可能阻止普通 Ctrl+C；未知来源如实标记。
 4. 桌面完全退出后不发送通知；开启后台常驻才会继续运行。Android 强停、权限/省电策略会影响排程，重开会重建。
@@ -17,4 +17,4 @@
 
 ## 依赖审计
 
-上一轮 npm audit 为 0；cargo-audit 仅剩锁文件未启用的 rsa 上游公告及 GTK 维护/unsoundness notices，未忽略条目。Windows updater 可选 ZIP 已关闭，不处理 ZIP 更新包。本次加入平台集成依赖后应重新记录启用目标图与审计结果，不能把未运行的审计标为通过。
+本轮 npm audit --omit=dev 为 0；cargo-audit 仍仅有未启用 rsa 的 RUSTSEC-2023-0071，以及 4 条 unmaintained/1 条 unsound 上游 notices，未忽略条目。Windows updater 可选 ZIP 已关闭，不处理 ZIP 更新包。本次加入平台集成依赖后应重新记录启用目标图与审计结果，不能把未运行的审计标为通过。

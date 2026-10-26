@@ -1,6 +1,6 @@
 # 待解决的问题与验证边界
 
-1. 0.6 Windows/Ubuntu 实际安装产物与原生 OCR/代理/stdio/重启/恢复测试、Android15 模拟器原生存储/通知测试均通过（见 STATUS）。没有 Android 实体手机测试；不能据此保证所有硬件、驱动与系统策略。
+1. Windows/Ubuntu 0.8.0 实际安装产物与原生 OCR/代理/stdio/重启/恢复测试、Android 0.8.1 的 API35 模拟器富文本/标签/触控导航/安全区域/存储/通知测试均通过（见 STATUS）。没有 Android 实体手机测试；不能据此保证所有硬件、驱动与系统策略。
 2. 没有用户真实 CPA/OpenAI 图片/WebDAV/MCP 账号。当前使用协议 fixture，不能据此保证某个私有服务兼容；仅支持 Chat Completions，尚无 Responses-only/Anthropic 原生协议。
 3. Windows OCR 依赖已安装系统语言；Ubuntu 依赖 Tesseract 中/英文包。截图须遵循系统录屏权限；Wayland 桌面策略可能限制全局快捷键/截图。Windows 提权/受保护窗口可能阻止普通 Ctrl+C；未知来源如实标记。
 4. 桌面完全退出后不发送通知；开启后台常驻才会继续运行。Android 强停、权限/省电策略会影响排程，重开会重建。

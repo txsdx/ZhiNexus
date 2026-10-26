@@ -2,7 +2,7 @@
 
 ## Android 0.8.1 · 2026-10-26
 
-- 通过 AndroidX WindowInsetsCompat 为系统栏和刘海保留原生空间，避免 Android 15+ 边到边显示覆盖顶栏与底部导航；保留键盘 insets 分发。
+- 通过 AndroidX WindowInsetsCompat 为系统栏和刘海保留原生空间，避免 Android 15+ 边到边显示覆盖顶栏与底部导航；保留键盘 insets 分发。三平台构建与原生测试最终通过，记录见 STATUS。
 - 在生成的 Activity 中仅追加初始化调用，保留 Tauri 模板逻辑，模板改变时显式报错；增加幂等/模板守卫测试及设备视口高度检查。Windows/Ubuntu 保持 0.8.0。
 
 ## 0.8.0 · 2026-10-26

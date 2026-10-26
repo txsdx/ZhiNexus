@@ -25,15 +25,19 @@
 | 预留 | 对象存储/专属服务端 SyncTransport，按要求尚不完整实现 |
 | 大库 | 一事件一文件、全名字发现和全日志投影；日志块/增量 Merkle 子树与规模测试尚未完成 |
 
-## 0.8 本轮验证（包含 0.7 新功能）
+## 0.8 最终验证（2026-10-26）
 
-- 本地 0.8 的 48 单元、23 发布/工作流脚本、25 Chromium 浏览器集成、TypeScript/前端构建与 locked Rust check 通过。新增真实移动视口回归先复现 83px 溢出与底栏点击失败，再验证修复后的触控导航、保存和重启。0.8.0 三平台最终构建与测试已通过，见下；Android 0.8.1 安全区域补丁仍待设备 CI 验证。
-- **0.8.0 三平台全部成功**：[run 40326093484](https://github.com/txsdx/ZhiNexus/actions/runs/40326093484)，源码 commit `49de962`。Windows job `121583565081`、Ubuntu job `121583565305`、Android job `121583565083`，含缓存收尾完成。Validate [40326077599](https://github.com/txsdx/ZhiNexus/actions/runs/40326077599) 也全部通过。
-- Android 0.8.0 已在 API35 KVM 模拟器通过富文本编辑、恢复标签/内容、移动页面宽度与导航、设备通知和 OS 排程；0.8.1 新增系统栏/刘海原生留白，Kotlin 本地离线编译通过，脚本用例增加到 25 项。仅 Android patch 更新，其他平台保持原版本。
-- Rust 核心 8 单元和 0.7 本地原生全流程此前已通过；0.8 没有改变 Rust 核心逻辑，最终原生产物仍由三平台 CI 再验证。
-- 新增浏览器场景覆盖树表格/FSRS 着色、聚焦后重复替换保护外部章节、标签/重启恢复、公式/图/图片保真、保存前外部修改比较、脚注/HTML 源码保留、后台配图与继续输入并发。
-- 按用户要求统一历史作者/提交者名称为 `codex`，保留各次邮箱、时间、消息与文件树，已使用显式远端预期 SHA 的 force-with-lease 推送；GitHub API 复核包含首次提交。后续提交继续使用 codex。
-- 原生测试使用实际键盘选择和 Return 换行，并核对输入结果；标题按钮作为表格导航目标，兼容 WebKit WebDriver。重复测试识别自己的旧草稿和多个模糊匹配。云端 rootless PRoot 驱动使用 `PROOT_NO_SECCOMP=1` 避免子进程启动的 EFAULT；GitHub 原生 runner 无此 PRoot 层。
+- **最终三平台构建与原生测试全部成功**：[run 40351587726](https://github.com/txsdx/ZhiNexus/actions/runs/40351587726)，源码/工作流 commit `3e0a655`。Windows `0.8.0` job `121673241120`、Ubuntu `0.8.0` job `121673241150`、Android `0.8.1` job `121673241234`，含缓存收尾全部完成；前端共享 job `121672794573` 成功。发布按本次输入跳过，未创建公开 Release。
+- **自动 Validate 全部成功**：[run 40351498612](https://github.com/txsdx/ZhiNexus/actions/runs/40351498612)：48 单元、7 个脚本测试文件（25 个用例）、25 Chromium 浏览器集成、TypeScript/前端构建和 locked Rust check。此前本地 Rust 核心 8 单元通过；0.8 系列未改变这些核心逻辑。
+- Windows/Ubuntu 真实打包程序覆盖快捷键实体按键录制、截图/本地 OCR 识别、非默认端口代理/模型请求、MCP stdio、富文本与源码编辑、系统/portable 隔离、清理后重启不重建恢复日志；再写入新条目并损坏主库/WAL/最新快照，从旧快照与新日志恢复全部新旧知识。
+- Android 编译 arm64 发布 APK 与 x86_64 调试 APK，在 Android15/API35 KVM 模拟器实际安装并验证 SQLite 创建、富文本编辑、标签和内容强停重启恢复、页面宽度/底部导航、通知设置与 OS 排程。安全区域视口为 `412×842 CSS px @ 2.625`，系统栏/刘海留白由原生 WindowInsets 管理，截图通过 ADB 物理屏幕核对。没有 Android 实体机测试。
+- 移动浏览器回归先复现长章节大纲造成的 83px 页面溢出和底栏点击失败，再验证修复后的触控导航、保存和重启。其余新增场景覆盖分类树/FSRS 着色、聚焦重复替换不删除外部章节、标签/草稿恢复、公式/图/本地图片保真、外部修改比较、脚注/HTML 源码保留、后台配图不覆盖后续输入。
+- 手动入口只有 Build and release，全平台构建、可选发布/草稿。生产前端仅编译一次，各原生任务验证并复用相同提交的 344 个文件；npm/Rust/Gradle/NDK/镜像/打包器缓存启用。Android 不再恢复整套 root 所有权 SDK，最终日志权限警告为 0；模拟器启动前清理重复分区配置与不再需要的项目静态副本，保留 APK/SO 和依赖缓存。
+- Ubuntu 源修复同时处理直接 URL 和 runner 的 mirror+file 清单引用。最终日志实际 URI 为 `https://archive.ubuntu.com/ubuntu`，Azure 下载为 0；本轮 103 MB 依赖下载用时 11 秒。下载和链接耗时仍受 runner 与网络影响。
+- 按用户授权统一 main 历史的作者/提交者名称为 `codex`，保留原有邮箱、日期、消息与文件树，并使用显式远端预期 SHA 的 force-with-lease 推送；GitHub API 复核包含首次提交。后续提交也继续使用 codex。
+- 本地 Kotlin Universal Debug 编译通过。原生自动化使用真实键盘选择/Return 换行并核对结果，点击标题按钮；重复运行识别自己的旧草稿与多个模糊匹配。云端 rootless PRoot 驱动使用 `PROOT_NO_SECCOMP=1` 避免子进程 EFAULT；GitHub 原生 runner 无该层。
+- 安装包在本轮 Actions Artifacts：Windows `*_protable.exe` / `*_setup.exe`、Ubuntu `.deb`、Android arm64 `.apk`。未发布公开 Release；没有用户真实 AI/WebDAV/MCP 账号、正式安装升级或大型库验证。详细边界见 KNOWN_ISSUES。
+- 0.8.0 完整通过记录保留于 [40326093484](https://github.com/txsdx/ZhiNexus/actions/runs/40326093484)，Android 安全区域补丁首次全组通过记录为 [40347026314](https://github.com/txsdx/ZhiNexus/actions/runs/40347026314)。最终以上方最新运行作为交付证据。
 
 ## 0.6 最终验证（2026-10-26）
 

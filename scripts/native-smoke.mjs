@@ -69,8 +69,30 @@ async function start() {
     const r = await fetch(base + "/status");
     return (await r.json()).value.ready;
   });
+  let options = { "tauri:options": { application } };
+  if (process.platform === "win32") {
+    const config = JSON.parse(
+      fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    );
+    const dataRoot = fs.existsSync(
+      path.join(path.dirname(application), "portable"),
+    )
+      ? path.join(path.dirname(application), "_data")
+      : path.join(process.env.APPDATA, config.identifier);
+    const profile = path.join(dataRoot, "webview");
+    fs.mkdirSync(profile, { recursive: true });
+    options = {
+      browserName: "webview2",
+      "ms:edgeChromium": true,
+      "ms:edgeOptions": {
+        binary: application,
+        args: [],
+        webviewOptions: { userDataFolder: profile },
+      },
+    };
+  }
   const data = await command("POST", "/session", {
-    capabilities: { alwaysMatch: { "tauri:options": { application } } },
+    capabilities: { alwaysMatch: options },
   });
   session = data.sessionId;
   await waitFor(() => script('return !!document.querySelector(".app-shell")'));
@@ -89,17 +111,22 @@ assert.ok(
   "Test requires no pre-existing portable marker",
 );
 try {
-  // Keep the Windows driver in the same test-process lifetime instead of relying on a previous PowerShell step's background console.
+  // Microsoft EdgeDriver directly supports WebView2; owning it here also preserves verbose startup diagnostics.
   if (process.env.TAURI_NATIVE_DRIVER) {
     fs.mkdirSync("native-test-results", { recursive: true });
     driverOutput = fs.openSync("native-test-results/tauri-driver.log", "w");
     driverError = fs.openSync("native-test-results/tauri-driver.err.log", "w");
     ownedDriver = spawn(
-      "tauri-driver",
-      ["--native-driver", process.env.TAURI_NATIVE_DRIVER, "--port", "4444"],
+      process.env.TAURI_NATIVE_DRIVER,
+      [
+        "--port=4444",
+        "--verbose",
+        "--log-path=" + path.resolve("native-test-results/edgedriver.log"),
+      ],
       {
         stdio: ["ignore", driverOutput, driverError],
         windowsHide: true,
+        env: { ...process.env, TAURI_WEBVIEW_AUTOMATION: "true" },
       },
     );
     ownedDriver.on("error", (error) =>

@@ -22,8 +22,6 @@ catch {
 }
 $driverRoot = "$env:RUNNER_TEMP/edgedriver"
 Expand-Archive -Force $archive $driverRoot
-cargo install tauri-driver --locked
-if ($LASTEXITCODE -ne 0) { throw 'tauri-driver installation failed' }
 "TAURI_NATIVE_DRIVER=$driverRoot/msedgedriver.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 $app = (Get-ChildItem 'release-files/*_protable.exe' | Select-Object -First 1).FullName
 "TAURI_APPLICATION=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV

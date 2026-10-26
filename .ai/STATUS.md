@@ -61,3 +61,6 @@
 - Windows 0.3.1：Rust 依赖审计后明确禁用 updater 的 ZIP 默认 feature，保留 TLS/代理，避免当前直接安装包格式引入无用解压器；Android 仍 0.3.0、Ubuntu 0.3.1。
 
 - Windows 0.3.1 依赖修复：cargo check --locked 通过，Windows 目标树不再包含 zip，Cargo.lock 已移除 zip/相关包；cargo-audit 仅剩未启用 rsa 的上游公告。
+
+- Ubuntu 0.3.1 GitHub run 40260563816 全部成功，包含实际 Deb 原生编辑、普通/portable 隔离、主库+WAL 损坏后检查点/日志恢复。
+- Windows 驱动生命周期已修正；下一失败为 EdgeDriver 的 DevToolsActivePort，驱动已启动但 profile 目录与自定义 webview 根不一致。测试使用 Microsoft 原生 WebView2 驱动并显式指定实际普通/portable 的 userDataFolder，启用详细启动日志，避免改变产品目录规则。待 CI 复验。

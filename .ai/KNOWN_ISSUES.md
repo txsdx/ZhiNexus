@@ -27,3 +27,7 @@
 17. AI 全库分类仍受上下文限制，未实现大库批处理。分类改名/移动/删除及行差异 UI 已补齐。
 18. 设备更新必须有有效 latest.json 和对应资产；正式端到端安装流程尚未验证。系统安装仍需正常 OS 授权，不等同静默替换一切文件。
 19. 项目无作者指定许可证，不擅自决定；发行前仍需完整第三方许可证/NOTICE 汇总。
+
+## 已核查的依赖审计范围
+
+npm audit 在安全依赖升级后为 0 项。cargo-audit 0.22.2（RustSec 数据库 2026-10-24）报告锁文件中的 rsa 0.9.10（RUSTSEC-2023-0071，无上游修复）和 zip 4.6.1（三项 2026 提取相关 advisory，修复要求 zip>=9）。rsa 在本工程启用的目标特性图中不出现。zip 来自 Tauri updater 的可选 Windows ZIP 功能，已在 Windows 0.3.1 显式禁用该默认 feature，保留 TLS/系统代理，并由 Cargo 重算移除了 zip 锁项；三平台更新只处理 exe/apk/deb。需要通过 cargo tree 的实际 Windows 目标检查，不能因 Linux 默认树不出现就推定所有平台不使用。更新后的 cargo-audit 仅剩未启用 rsa 的 advisory，不能称整个锁文件零 advisory；没有忽略审计条目。GTK 3/glib 等上游链另有维护/unsoundness notice，应用未直接使用被指出的 VariantStrIter API。GitHub Dependabot 剩余 1 moderate 的详情读取权限为 403，不能推定准确归因。

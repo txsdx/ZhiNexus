@@ -55,3 +55,9 @@
 - Windows 0.2.0 的编译和 portable/setup 打包已通过，新增原生测试失败，等待 job 完成后读取日志定位，尚不记运行通过。
 
 - Windows 首次原生测试失败为测试驱动 4444 端口拒绝连接，未进入应用 UI，并非编译失败。改为由同一 Node 测试进程拥有并清理 tauri-driver，不依赖上一步 PowerShell 后台进程存活，日志写入测试 artifact。本机外部 Linux 驱动路径回归通过；Windows 等待新 CI 验证。
+
+- 依赖审计边界：npm audit 0；另运行 cargo-audit 并记录未启用 rsa、可选 Windows updater zip 及 GTK 上游 advisory，详情见 KNOWN_ISSUES。没有忽略/隐藏 Rust advisory。GitHub 剩余 1 moderate 详情权限为 403。
+
+- Windows 0.3.1：Rust 依赖审计后明确禁用 updater 的 ZIP 默认 feature，保留 TLS/代理，避免当前直接安装包格式引入无用解压器；Android 仍 0.3.0、Ubuntu 0.3.1。
+
+- Windows 0.3.1 依赖修复：cargo check --locked 通过，Windows 目标树不再包含 zip，Cargo.lock 已移除 zip/相关包；cargo-audit 仅剩未启用 rsa 的上游公告。

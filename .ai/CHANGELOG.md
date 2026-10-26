@@ -1,5 +1,11 @@
 # 更新日志
 
+## Windows 0.3.1 · 2026-10-26
+
+- 禁用更新插件可选 ZIP 解压依赖，保留 Rustls TLS/系统代理；项目仅处理直接 exe/apk/deb 更新，不启用 zip 格式。
+- 修正 Windows 原生测试驱动生命周期和独立 WAL 损坏注入；纯测试修正不改变 Android/Ubuntu 二进制版本。
+
+
 ## Ubuntu 0.3.1 · 2026-10-26
 
 - 仅上传 .deb/.sig，去除打包中间目录；实际检查 Deb 为 amd64、ASCII 包名、正确版本及系统依赖。

@@ -797,6 +797,9 @@ pre.report,
   grid-template-columns: minmax(0, 1fr) 270px;
   gap: 25px;
 }
+.entry-columns > * {
+  min-width: 0;
+}
 .paper {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1577,7 +1580,7 @@ details pre {
     padding: 0 28px;
   }
   .entry-columns {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .entry-aside {
     display: grid;
@@ -1783,7 +1786,7 @@ details pre {
     font-size: 0.8rem;
   }
   .entry-aside {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .paper > .markdown {
     padding: 22px;

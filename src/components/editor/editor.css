@@ -91,13 +91,16 @@
 .document-outline {
   position: sticky;
   top: 10px;
+  min-width: 0;
 }
 .outline-row {
   display: flex;
   gap: 3px;
+  min-width: 0;
 }
 .outline-row > button:first-child {
   flex: 1;
+  min-width: 0;
   justify-content: start;
   text-align: left;
   display: block;

@@ -1,5 +1,11 @@
 /** End-to-end contracts: persistence, rendering, AI review, incremental replication and backup recovery. */
-import { test, expect, type Page, type BrowserContext } from "@playwright/test";
+import {
+  test,
+  expect,
+  devices,
+  type Page,
+  type BrowserContext,
+} from "@playwright/test";
 /** Import the running development repository without exposing testing hooks in production. */
 async function repository<T>(page: Page, fn: string): Promise<T> {
   await expect(page.locator(".app-shell")).toBeVisible();
@@ -1246,5 +1252,64 @@ test("an image finishing in a background tab appends to the newest draft without
     expect(body).toContain("asset:");
   } finally {
     finishImage();
+  }
+});
+
+test("mobile rich headings keep the viewport and bottom navigation reachable after restart", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    ...devices["Pixel 5"],
+    baseURL,
+    locale: "zh-CN",
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.locator(".page-heading .primary").click();
+    await page.locator(".modal input").fill("移动块编辑导航");
+    await page.locator(".modal textarea").fill("# 初始章节\n\n初始内容。");
+    await page.locator(".modal .primary").click();
+    await page.locator(".entry-heading h1").waitFor();
+    await page.locator(".entry-heading .actions button:nth-child(2)").click();
+    await page.locator('[data-editor-mode="rich"]').click();
+    const body =
+      "SQLite content survives a native restart. Rich blocks were edited on Android.";
+    await page.locator('.block-document[contenteditable="true"]').fill(body);
+    await page.locator(".entry-heading .primary").click();
+    await page.locator(".entry-heading h1").waitFor();
+    await expect(page.locator(".entry-tabs-status")).toContainText(
+      "本机草稿已保存",
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.body.scrollWidth - document.documentElement.clientWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
+    await page.screenshot({ path: "test-results/rich-editor-mobile.png" });
+    await page.reload();
+    await page.locator('.entry-tabs [role="tab"]').waitFor();
+    await expect(page.locator(".paper .markdown")).toContainText(body);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.body.scrollWidth - document.documentElement.clientWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
+    await page.locator(".sidebar nav button:nth-child(2)").tap();
+    await expect(page.locator(".entry-row")).toHaveCount(1);
+    await page.locator(".mobile-settings").tap();
+    await page.locator('[data-settings-tab="notifications"]').tap();
+    await expect(
+      page.locator(".settings-content input[type=checkbox]").first(),
+    ).toBeVisible();
+  } finally {
+    await context.close();
   }
 });

@@ -12,3 +12,5 @@
 
 
 0.7：只有一个手动 Build and release 入口，默认全平台，前端只编译一次。不要恢复旧平台勾选入口。块编辑须保留 Markdown/JSON 缓存绑定、持久块 ID、聚焦区域外边界；测聚焦全选删除、异步配图和标签切换、保存后立即重启。草稿是设备局部，不能覆盖更新的已保存内容。学习思源交互不等于复制其 AGPL 实现。用户要求历史作者/提交者名 codex，已明确授权本轮强制推送。
+
+0.8：移动布局回归须使用带 isMobile/hasTouch 的真实移动浏览器上下文，检查 body.scrollWidth 不超过 documentElement.clientWidth，并点击底部导航。长大纲在自动最小尺寸的 1fr 网格中曾撑宽页面；保持 minmax(0, 1fr) 与子项 min-width:0。Android 使用 ADB 截屏，避免全页截图改变 WebView 视口。

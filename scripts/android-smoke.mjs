@@ -17,6 +17,16 @@ const device = (...args) =>
     timeout: 30000,
     maxBuffer: 16 * 1024 * 1024,
   });
+/** Capture the actual display without changing WebView layout metrics to emulate a full-page screenshot. */
+function captureScreen(name) {
+  fs.writeFileSync(
+    "android-test-results/" + name + ".png",
+    execFileSync(adb, ["exec-out", "screencap", "-p"], {
+      timeout: 30000,
+      maxBuffer: 16 * 1024 * 1024,
+    }),
+  );
+}
 /** Wait for a remote WebView or a persisted UI transition. */
 async function waitFor(fn, timeout = 60000) {
   const end = Date.now() + timeout;
@@ -105,10 +115,7 @@ try {
       .textContent()
       .then((text) => /Local drafts saved|本机草稿已保存/.test(text ?? "")),
   );
-  await page.screenshot({
-    path: "android-test-results/entry.png",
-    fullPage: true,
-  });
+  captureScreen("entry");
   await connected.browser.close();
   connected = null;
   device("forward", "--remove", "tcp:9223");
@@ -124,6 +131,18 @@ try {
   connected = await connect();
   page = connected.page;
   await page.locator('.entry-tabs [role="tab"]').waitFor();
+  assert.ok(
+    await page.evaluate(
+      () =>
+        document.body.scrollWidth <= document.documentElement.clientWidth + 1,
+    ),
+    "Restored blocks must not widen the mobile viewport or move fixed navigation outside it",
+  );
+  assert.ok(
+    (await page.locator(".paper .markdown").innerText()).includes(
+      "Rich blocks were edited on Android.",
+    ),
+  );
   await page.locator(".sidebar nav button:nth-child(2)").click();
   await page.locator(".search-box input").fill("Android native memory");
   await page.locator(".entry-title-cell button").click();
@@ -140,13 +159,10 @@ try {
   await toggle.check();
   await page.locator(".settings-content .primary").click();
   await waitFor(() => device("shell", "dumpsys", "alarm").includes(pkg));
-  await page.screenshot({
-    path: "android-test-results/sync-reminders.png",
-    fullPage: true,
-  });
+  captureScreen("sync-reminders");
   fs.writeFileSync(
     "android-test-results/result.txt",
-    "PASS: Android native WebView, SQLite capture, process restart, per-device reminder and OS alarm registration.\n",
+    "PASS: Android native WebView, SQLite capture, rich blocks, restored tabs, mobile navigation, process restart, per-device reminder and OS alarm registration.\n",
   );
   console.log(
     "PASS: Android native storage, restart and OS notification scheduling",
@@ -156,9 +172,42 @@ try {
     "android-test-results/error.txt",
     String(error.stack || error),
   );
+  try {
+    captureScreen("failure");
+  } catch {}
   if (connected)
     await connected.page
-      .screenshot({ path: "android-test-results/failure.png", fullPage: true })
+      .evaluate(() => {
+        const button = document.querySelector(
+          ".sidebar nav button:nth-child(2)",
+        );
+        const bounds = button?.getBoundingClientRect();
+        return {
+          width: innerWidth,
+          height: innerHeight,
+          bodyWidth: document.body.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+          dpr: devicePixelRatio,
+          viewport: visualViewport && {
+            width: visualViewport.width,
+            height: visualViewport.height,
+            scale: visualViewport.scale,
+          },
+          navigation: bounds?.toJSON(),
+          hit:
+            bounds &&
+            document.elementFromPoint(
+              bounds.x + bounds.width / 2,
+              bounds.y + bounds.height / 2,
+            )?.tagName,
+        };
+      })
+      .then((value) =>
+        fs.writeFileSync(
+          "android-test-results/layout.json",
+          JSON.stringify(value, null, 2),
+        ),
+      )
       .catch(() => {});
   if (connected)
     fs.writeFileSync(

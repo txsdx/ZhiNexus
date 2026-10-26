@@ -63,8 +63,15 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
     await click(".settings-content .actions button");
     await waitFor(() =>
       script(
-        'return document.querySelector(".model-list")?.innerText.includes("Native network fixture")',
+        'const models=[...document.querySelectorAll(".model-list strong")].map(e=>e.textContent);return models.length===1&&models[0]==="native-model-fixture";',
       ),
+    );
+    assert.equal(
+      await script(
+        'return document.querySelector(".model-list").innerText.includes("Native network fixture")',
+      ),
+      false,
+      "Model catalog must show the raw ID instead of the provider display name",
     );
     assert.equal(requests, 1);
   } finally {

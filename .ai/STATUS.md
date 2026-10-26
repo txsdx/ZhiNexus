@@ -27,6 +27,8 @@
 
 ## 0.9 本轮验证（2026-10-27）
 
+- 已推送应用实现 `42ed542`；自动 Validate [40363335936](https://github.com/txsdx/ZhiNexus/actions/runs/40363335936) 全部通过。首轮编译 [40363350765](https://github.com/txsdx/ZhiNexus/actions/runs/40363350765) 的 Ubuntu 编译/DEB 打包成功，但原生网络测试仍等待旧 display_name，和本轮“原始 ID”要求冲突；已修正为检查精确原始 ID 并断言不展示 display_name。该次仅修改测试，不改变 0.9.0 应用实现；三平台重新验证结果待记录。
+
 - `npm test` **60 项通过**，`npm run test:release` **26 项通过**；`npm run build`、Prettier 检查及 `git diff --check` 通过。构建仍有已有的大 chunk/混合静态动态 import 提示。
 - `npx playwright test` **36 项全量通过**。新增原始模型 ID/全局默认动态继承、任务及助手显式覆盖、同步到另一副本与重启恢复；大类/子类/条目删除在等待、取消、关闭、Esc、遮罩及存储失败时核对完整文档和日志均不变，再验证明确确认后的原子迁移/删除与重启持久化。
 - Tools true/null/false/目录缺失均检查实际请求参数；聊天、图片、OCR 的全局继承与思考等级经过单元回归。FSRS 黑→黄→红验证图例、实际词条渲染色、插值端点/中点和夜间配色，未复习保持未知。

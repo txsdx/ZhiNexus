@@ -23,22 +23,18 @@
 | 预留 | 对象存储/专属服务端 SyncTransport，按要求尚不完整实现 |
 | 大库 | 一事件一文件、全名字发现和全日志投影；日志块/增量 Merkle 子树与规模测试尚未完成 |
 
-## 验证证据
+## 最终验证（2026-10-26）
 
-- 上一版 Windows 0.3.3：GitHub run 40265584233，真实 exe 编辑、普通/portable 隔离、重启和主库+WAL 损坏恢复均成功。
-- 上一版 Ubuntu 0.3.1：GitHub run 40260563816，实际 Deb 解包后的同组原生测试成功。
-- 上一版 Android 0.3.1：GitHub run 40263833893，arm64 APK、x86_64 debug APK、API35 模拟器安装/原生 SQLite/强停重启/设备通知和系统排程均成功。
-- 0.4 当前本地：36 单元测试、16 发布脚本、Rust cargo check --locked 通过。新增通知持久化/设备隔离、API Key 默认/自定义加密跨设备同步、原保险箱设备偏好保护等集成测试通过。
-- 0.4 全部 15 浏览器测试成功；本地真实 WebKit：原生代理/模型读取、官方 MCP SDK stdio、屏幕捕获/框选、本地 OCR/图片入库、SQLite/目录隔离/损坏恢复均成功；Rust 5 项迁移/锁/帧边界测试成功。
-- Validate run 40273100222 两 job 成功。全平台 run 40273123305：Windows/Ubuntu 编译和打包成功，Ubuntu 原生测试成功；Windows 原生测试发现短窗口设置按钮被裁切（已修正）；Android 原生创建成功、强停后 CDP 已连却尚无页面目标（测试等待/重连已修正），等待复跑。后续结果见追加记录。
-- 没有用户真实 AI/WebDAV/MCP 账号；不声称生产提供商、低端手机/大型库、正式安装升级或所有断电故障已验证。
+- **0.5.0 三平台全组成功**：[run 40277188343](https://github.com/txsdx/ZhiNexus/actions/runs/40277188343)，应用实现 commit `a5fe2856`。Windows job 121422345765、Ubuntu job 121422345746、Android job 121422345633 均成功；全部缓存收尾也已完成。
+- Windows：真实 `*_protable.exe` / `*_setup.exe` 编译打包；短窗口设置可达、原生代理模型目录、官方 MCP SDK stdio、截图叠层/框选、系统 OCR（确实识别出文本）和图片入库、SQLite 编辑、普通/portable 隔离、重启、主库+WAL 损坏恢复全部成功。
+- Ubuntu：真实 `.deb` 解包运行，同组原生代理/stdio/截图/Tesseract OCR/入库/恢复测试成功。
+- Android：arm64 发布 `.apk` 与 x86_64 调试 APK 编译；Android15/API35 KVM 模拟器实际安装、原生 WebView/SQLite 创建、强停重启恢复、设备通知设置与 OS 排程成功。没有 Android 实体手机测试。
+- 最新 Validate [run 40278495229](https://github.com/txsdx/ZhiNexus/actions/runs/40278495229) 全部成功：**37 单元、22 发布脚本、16 浏览器测试**及前端构建、Linux Rust check。该 commit `00c03271` 的额外改动仅为发布脚本/文档，应用实现与全平台测试版本相同。
 
-- 数据迁移补充实测：本地真实 UI 执行冻结/关闭/辅助进程切换到 `_data`，反向辅助进程迁回系统目录成功；源、原目标备份与日志集合均保留。故障注入：源仍被另一个运行进程占用时拒绝切换，不覆盖数据。该测试使用隔离的本机学习 fixture。
+- 本地 Rust 5 项测试覆盖双向目录迁移、保留源与旧目标、坏库不切换、嵌套路径拒绝和 stdio 帧限制；实际 UI/进程交接迁到 `_data`、原生辅助进程迁回系统目录成功，并验证占用源目录时拒绝切换。
+- npm 运行时依赖 audit 0；cargo-audit 只剩未启用 rsa 的 RUSTSEC-2023-0071 与既有 GTK 上游 notices，没有忽略条目。具体范围见 KNOWN_ISSUES。
+- 没有用户真实 AI/WebDAV/MCP 账号；模拟服务/本地 MCP/代理测试不等于生产账号、正式 Release 安装升级或大型库验证。**没有创建公开 Release。**
 
-- 0.4.1 run 40275174905：Ubuntu 原生 OCR/网络/stdio/恢复全组成功；Windows 已通过新短窗口布局、原生模型代理与 stdio，截图裁剪销毁窗口后 EdgeDriver 返回 null，测试错误读取 crop.error（已修正为允许预期窗口销毁，仍必须验证主窗口 OCR 结果及入库图片）。Validate 全部成功。
+## 环境复用
 
-- 0.4 Android 15 的强停/重启、SQLite、设备通知和系统排程复验已成功，Ubuntu 0.4.1 全组原生测试成功。Windows 裁剪窗口关闭的测试回调修正后在 run 40276389536 复验。
-- 最终共享修正 0.5.0：图片请求也校验已绑定接口，避免配置同步期间使用旧接口的 Key；37 单元测试通过，准备三平台最终复验。
-
-- 发布脚本补充：递归收集 Windows/DEB 的嵌套 Artifact 路径；缺失任一平台安装包时拒绝发布，默认保持草稿。22 项发布脚本测试成功；未执行公开 Release 发布。
-- 云环境复用 install_script/start_skill 已更新并保存，完整刷新脚本成功（npm ci、37 单元、发布脚本、前端构建、Rust check、中/英 OCR 数据可用）。保存为草稿，不等同于环境快照已经发布。
+install_script/start_skill 已更新并保存为云环境草稿；完整刷新脚本（npm ci、测试、构建、Rust check）成功，截图编译依赖与中/英文 OCR 数据可用。当前机器已验证；草稿保存不等于环境快照已发布，后续任务复用前需用户在环境设置中发布。

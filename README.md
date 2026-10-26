@@ -100,6 +100,11 @@ MCP 使用官方 SDK，支持 **Streamable HTTP、SSE、桌面 stdio**。配置�
 ```bash
 npm ci
 npm run tauri -- dev
+```
+
+打包前，Windows 执行 `node scripts/versions.mjs prepare windows`，Ubuntu 执行 `node scripts/versions.mjs prepare ubuntu`，将 `versions.json` 中本平台版本写入构建清单，然后运行：
+
+```bash
 npm run tauri -- build
 ```
 
@@ -121,6 +126,7 @@ sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev \
 
 ```bash
 rustup target add aarch64-linux-android
+node scripts/versions.mjs prepare android
 npm run tauri -- android init --ci
 node scripts/configure-android.mjs  # 最低 Android 15，安装器桥接、系统安全区域与生成目录配置
 npm run tauri -- android dev

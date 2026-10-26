@@ -9,8 +9,11 @@ const base = process.env.TAURI_DRIVER_URL || "http://127.0.0.1:4444",
   );
 let session = "";
 let ownedDriver;
+let ownedApplication;
 let driverOutput;
 let driverError;
+let applicationOutput;
+let applicationError;
 /** Submit one WebDriver command and preserve protocol failures. */
 async function command(method, suffix, body) {
   const res = await fetch(
@@ -71,24 +74,29 @@ async function start() {
   });
   let options = { "tauri:options": { application } };
   if (process.platform === "win32") {
-    const config = JSON.parse(
-      fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    ownedApplication = spawn(application, [], {
+      stdio: ["ignore", applicationOutput, applicationError],
+      env: {
+        ...process.env,
+        RUST_BACKTRACE: "1",
+        TAURI_WEBVIEW_AUTOMATION: "true",
+        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: "--remote-debugging-port=9222",
+      },
+    });
+    ownedApplication.on("error", (error) =>
+      fs.appendFileSync(
+        "native-test-results/application.err.log",
+        String(error),
+      ),
     );
-    const dataRoot = fs.existsSync(
-      path.join(path.dirname(application), "portable"),
-    )
-      ? path.join(path.dirname(application), "_data")
-      : path.join(process.env.APPDATA, config.identifier);
-    const profile = path.join(dataRoot, "webview");
-    fs.mkdirSync(profile, { recursive: true });
+    await waitFor(async () => {
+      const res = await fetch("http://127.0.0.1:9222/json/version");
+      return res.ok;
+    });
     options = {
       browserName: "webview2",
       "ms:edgeChromium": true,
-      "ms:edgeOptions": {
-        binary: application,
-        args: [],
-        webviewOptions: { userDataFolder: profile },
-      },
+      "ms:edgeOptions": { debuggerAddress: "127.0.0.1:9222" },
     };
   }
   const data = await command("POST", "/session", {
@@ -104,6 +112,23 @@ async function stop() {
     await command("DELETE", "");
     session = "";
   }
+  if (ownedApplication) {
+    const child = ownedApplication;
+    ownedApplication = undefined;
+    child.kill();
+    await waitFor(
+      () => child.exitCode !== null || child.signalCode !== null,
+      10000,
+    );
+    await waitFor(async () => {
+      try {
+        await fetch("http://127.0.0.1:9222/json/version");
+        return false;
+      } catch {
+        return true;
+      }
+    }, 10000);
+  }
 }
 const marker = path.join(path.dirname(application), "portable");
 assert.ok(
@@ -116,6 +141,11 @@ try {
     fs.mkdirSync("native-test-results", { recursive: true });
     driverOutput = fs.openSync("native-test-results/tauri-driver.log", "w");
     driverError = fs.openSync("native-test-results/tauri-driver.err.log", "w");
+    applicationOutput = fs.openSync("native-test-results/application.log", "w");
+    applicationError = fs.openSync(
+      "native-test-results/application.err.log",
+      "w",
+    );
     ownedDriver = spawn(
       process.env.TAURI_NATIVE_DRIVER,
       [
@@ -242,5 +272,7 @@ try {
   ownedDriver?.kill();
   if (driverOutput !== undefined) fs.closeSync(driverOutput);
   if (driverError !== undefined) fs.closeSync(driverError);
+  if (applicationOutput !== undefined) fs.closeSync(applicationOutput);
+  if (applicationError !== undefined) fs.closeSync(applicationError);
   if (fs.existsSync(marker)) fs.unlinkSync(marker);
 }

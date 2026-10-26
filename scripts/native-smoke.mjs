@@ -2,11 +2,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 const base = process.env.TAURI_DRIVER_URL || "http://127.0.0.1:4444",
   application = path.resolve(
     process.env.TAURI_APPLICATION || "src-tauri/target/debug/zhinexus",
   );
 let session = "";
+let ownedDriver;
+let driverOutput;
+let driverError;
 /** Submit one WebDriver command and preserve protocol failures. */
 async function command(method, suffix, body) {
   const res = await fetch(
@@ -85,6 +89,26 @@ assert.ok(
   "Test requires no pre-existing portable marker",
 );
 try {
+  // Keep the Windows driver in the same test-process lifetime instead of relying on a previous PowerShell step's background console.
+  if (process.env.TAURI_NATIVE_DRIVER) {
+    fs.mkdirSync("native-test-results", { recursive: true });
+    driverOutput = fs.openSync("native-test-results/tauri-driver.log", "w");
+    driverError = fs.openSync("native-test-results/tauri-driver.err.log", "w");
+    ownedDriver = spawn(
+      "tauri-driver",
+      ["--native-driver", process.env.TAURI_NATIVE_DRIVER, "--port", "4444"],
+      {
+        stdio: ["ignore", driverOutput, driverError],
+        windowsHide: true,
+      },
+    );
+    ownedDriver.on("error", (error) =>
+      fs.appendFileSync(
+        "native-test-results/tauri-driver.err.log",
+        String(error),
+      ),
+    );
+  }
   await start();
   await click(".sidebar-bottom>button");
   await click(".settings-tabs button:nth-child(7)");
@@ -188,5 +212,8 @@ try {
   throw error;
 } finally {
   await stop().catch(() => {});
+  ownedDriver?.kill();
+  if (driverOutput !== undefined) fs.closeSync(driverOutput);
+  if (driverError !== undefined) fs.closeSync(driverError);
   if (fs.existsSync(marker)) fs.unlinkSync(marker);
 }

@@ -144,6 +144,13 @@ jobs:
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
+          if [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME/ndk" ]; then
+            for ndk_dir in "$ANDROID_HOME"/ndk/*; do
+              if [ -d "$ndk_dir" ] && [ "${ndk_dir##*/}" != '27.2.12479018' ]; then
+                sudo rm -rf -- "$ndk_dir"
+              fi
+            done
+          fi
           df -h /
       - uses: actions/setup-node@v5
         with:
@@ -240,9 +247,18 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          avd-name: zhinexus-ci
           # The default Pixel data partition exceeds available space after compiling both Rust ABIs.
           disk-size: 2048M
+          emulator-boot-timeout: 180
           disable-animations: true
+          pre-emulator-launch-script: |
+            # AVD profiles and the action append duplicate keys; keep one authoritative data-partition setting.
+            sed -i '/^[[:space:]]*disk\.dataPartition\.size[[:space:]]*=/d' "$HOME/.android/avd/zhinexus-ci.avd/config.ini"
+            printf '\ndisk.dataPartition.size=2048M\n' >> "$HOME/.android/avd/zhinexus-ci.avd/config.ini"
+            # APKs already contain the shared library. These workspace archives are not retained by rust-cache.
+            find src-tauri/target/aarch64-linux-android src-tauri/target/x86_64-linux-android -type f \( -name 'libzhinexus_lib*.a' -o -name 'libzhinexus_lib*.rlib' \) -delete
+            df -h /
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -feature -Vulkan
           script: |
             adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk

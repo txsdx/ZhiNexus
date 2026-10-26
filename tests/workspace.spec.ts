@@ -256,6 +256,7 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
     ),
   });
   await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".content-editor")).toHaveCount(0);
   await expect(page.locator(".markdown img")).toBeVisible();
   await page.getByRole("button", { name: "设置与偏好" }).click();
   await page.getByRole("button", { name: "数据库与备份", exact: true }).click();
@@ -479,7 +480,7 @@ test("encrypted credential vault replicates secrets without exposing them or rep
     `await store.saveDevice({...store.getSnapshot().device,apiKey:'secret-api-sentinel',davUrl:'https://dav.example/knowledge/',davUser:'private-user',davPassword:'secret-dav-sentinel',mcp:[{id:'mcp1',name:'Private MCP',url:'https://mcp.example/rpc',token:'secret-mcp-sentinel',enabled:false}]});`,
   );
   await page.getByRole("button", { name: "设置与偏好" }).click();
-  await page.getByRole("button", { name: "同步与通知", exact: true }).click();
+  await page.getByRole("button", { name: "数据同步", exact: true }).click();
   await page
     .getByLabel("保险箱密码（不保存）")
     .fill("a unique vault test passphrase");
@@ -504,7 +505,7 @@ test("encrypted credential vault replicates secrets without exposing them or rep
     `await store.ingest(${serialized});await store.saveDevice({...store.getSnapshot().device,notifications:true,syncMinutes:0});`,
   );
   await other.getByRole("button", { name: "设置与偏好" }).click();
-  await other.getByRole("button", { name: "同步与通知", exact: true }).click();
+  await other.getByRole("button", { name: "数据同步", exact: true }).click();
   await other
     .getByLabel("保险箱密码（不保存）")
     .fill("a unique vault test passphrase");
@@ -672,4 +673,117 @@ test("agent write receipts prevent duplicate operations after delivery retries",
   expect(
     await repository(page, "return store.getSnapshot().entries.length;"),
   ).toBe(1);
+});
+
+test("notification settings are independent, persistent and per device", async ({
+  page,
+  browser,
+}) => {
+  await page.context().grantPermissions(["notifications"]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await expect(page.locator('[data-settings-tab="mcp"]')).toBeVisible();
+  const order = await page
+    .locator("[data-settings-tab]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-settings-tab")),
+    );
+  expect(order.indexOf("mcp")).toBe(order.indexOf("prompts") + 1);
+  await page.locator('[data-settings-tab="notifications"]').click();
+  await expect(
+    page.getByRole("heading", { name: "按你的节奏提醒" }),
+  ).toBeVisible();
+  await page.getByLabel("主窗口失去焦点后，AI 响应结束时通知").uncheck();
+  await page.getByLabel("自动同步失败时通知").check();
+  await page.getByRole("button", { name: "保存通知设置", exact: true }).click();
+  await expect(page.locator(".toast")).toContainText("通知设置已保存");
+  await page.reload();
+  expect(
+    await repository(
+      page,
+      "return store.getSnapshot().device.notificationOptions",
+    ),
+  ).toMatchObject({ aiWhenUnfocused: false, syncFailures: true });
+  const other = await browser.newContext();
+  try {
+    const p = await other.newPage();
+    await p.goto("/");
+    expect(
+      await repository(
+        p,
+        "return store.getSnapshot().device.notificationOptions ?? null",
+      ),
+    ).toBeNull();
+  } finally {
+    await other.close();
+  }
+});
+
+test("API keys synchronize automatically as ciphertext, with optional custom keys", async ({
+  browser,
+}) => {
+  const a = await browser.newContext(),
+    b = await browser.newContext(),
+    files = new Map<string, string>();
+  try {
+    await mockDav(a, files);
+    await mockDav(b, files);
+    const pa = await a.newPage(),
+      pb = await b.newPage();
+    await pa.goto("/");
+    await pb.goto("/");
+    const setup =
+      'await store.saveDevice({...store.getSnapshot().device,davUrl:"https://dav.example/knowledge",davUser:"fixture",davPassword:"fixture",syncMinutes:0});';
+    await repository(pa, setup);
+    await repository(pb, setup);
+    await repository(
+      pa,
+      'const {saveAIAndKey}=await import("/src/services/key-sync.ts");await saveAIAndKey({...store.getSnapshot().ai,baseUrl:"http://localhost:8317/v1/chat/completions"},"Bearer synced-fixture-key","");const {synchronize}=await import("/src/services/sync.ts");await synchronize();',
+    );
+    await repository(
+      pb,
+      'const {synchronize}=await import("/src/services/sync.ts");await synchronize();',
+    );
+    await expect
+      .poll(() => repository(pb, "return store.getSnapshot().device.apiKey"))
+      .toBe("synced-fixture-key");
+    expect([...files.values()].join("\n")).not.toContain("synced-fixture-key");
+    await pb.reload();
+    expect(
+      await repository(pb, "return store.getSnapshot().device.apiKey"),
+    ).toBe("synced-fixture-key");
+    await repository(
+      pa,
+      'const {saveAIAndKey}=await import("/src/services/key-sync.ts");await saveAIAndKey(store.getSnapshot().ai,"custom-fixture-key","optional-private-key");const {synchronize}=await import("/src/services/sync.ts");await synchronize();',
+    );
+    await repository(
+      pb,
+      'const {synchronize}=await import("/src/services/sync.ts");await synchronize();',
+    );
+    await expect
+      .poll(() =>
+        repository(
+          pb,
+          'const {keySyncStatus}=await import("/src/services/key-sync.ts");return keySyncStatus.getSnapshot().status;',
+        ),
+      )
+      .toBe("locked");
+    expect(
+      await repository(pb, "return store.getSnapshot().device.apiKey"),
+    ).toBe("synced-fixture-key");
+    await repository(
+      pb,
+      'await store.saveDevice({...store.getSnapshot().device,apiKeySyncKey:"optional-private-key"});',
+    );
+    await expect
+      .poll(() => repository(pb, "return store.getSnapshot().device.apiKey"))
+      .toBe("custom-fixture-key");
+    expect([...files.values()].join("\n")).not.toContain("custom-fixture-key");
+    expect([...files.values()].join("\n")).not.toContain(
+      "optional-private-key",
+    );
+  } finally {
+    await a.close();
+    await b.close();
+  }
 });

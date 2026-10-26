@@ -3,7 +3,7 @@
 @import "@fontsource-variable/noto-serif-sc";
 :root {
   font-family: "Noto Sans SC Variable", sans-serif;
-  font-size: calc(14px * var(--scale, 1));
+  font-size: calc(16px * var(--scale, 1));
   color: var(--text);
   background: var(--bg);
   --bg: #f7f8fc;
@@ -36,13 +36,13 @@ button,
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 15px;
+  padding: 8px 13px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  font-size: 0.91rem;
+  font-size: 0.95rem;
   line-height: 1.4;
   transition:
     background 0.15s,
@@ -206,7 +206,7 @@ input[type="checkbox"] {
   line-height: 1.4;
 }
 .brand small {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   color: var(--muted);
   letter-spacing: 1.4px;
 }
@@ -221,14 +221,14 @@ input[type="checkbox"] {
 .capture-button kbd {
   margin-left: auto;
   opacity: 0.6;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
 }
 kbd {
   font-family: inherit;
 }
 .nav-caption {
   color: #adafbe;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   letter-spacing: 1.4px;
   margin: 31px 15px 13px;
 }
@@ -255,7 +255,7 @@ kbd {
 }
 .sidebar nav button b {
   margin-left: auto;
-  font-size: 0.73rem;
+  font-size: 0.8rem;
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   padding: 1px 7px;
   border-radius: 5px;
@@ -275,12 +275,12 @@ kbd {
   margin-bottom: 15px;
 }
 .local-card strong {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 500;
   display: block;
 }
 .local-card small {
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   color: var(--muted);
   display: block;
   margin-top: 5px;
@@ -321,7 +321,7 @@ kbd {
   font-weight: 500;
 }
 .profile small {
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   color: var(--muted);
   display: block;
   margin-top: 5px;
@@ -379,14 +379,14 @@ kbd {
   box-shadow: none;
   padding: 10px 0;
   width: 100%;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 .search-box kbd {
   display: flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 4px;
@@ -396,7 +396,7 @@ kbd {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 .page {
@@ -417,7 +417,7 @@ kbd {
   margin-bottom: 0;
 }
 .eyebrow {
-  font-size: 0.64rem;
+  font-size: 0.8rem;
   color: var(--accent);
   letter-spacing: 1.8px;
   font-weight: 550;
@@ -466,7 +466,7 @@ kbd {
 .stats small {
   display: block;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 .stats strong {
@@ -477,7 +477,7 @@ kbd {
   margin-top: 8px;
 }
 .stats em {
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   font-style: normal;
   color: #a3a5b3;
   font-weight: 400;
@@ -506,7 +506,7 @@ kbd {
   flex-shrink: 0;
 }
 .review-banner .eyebrow {
-  font-size: 0.58rem;
+  font-size: 0.8rem;
   margin-bottom: 9px;
   color: #9a8ac7;
 }
@@ -544,7 +544,7 @@ kbd {
   margin: 0;
 }
 .section-heading select {
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   padding: 7px 10px;
   color: var(--muted);
   background: transparent;
@@ -554,7 +554,7 @@ kbd {
   border-radius: 5px;
   background: #eeedf5;
   color: #9990b2;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   min-width: 23px;
   text-align: center;
   padding: 2px 6px;
@@ -566,7 +566,7 @@ kbd {
   margin: 0 0 23px;
 }
 .filter-row button {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   padding: 7px 12px;
   border-color: transparent;
   background: transparent;
@@ -578,7 +578,7 @@ kbd {
   border-color: color-mix(in srgb, var(--accent) 15%, var(--border));
 }
 .filter-row span {
-  font-size: 0.66rem;
+  font-size: 0.8rem;
   color: #a5a3b7;
 }
 .entry-grid {
@@ -611,7 +611,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.67rem;
+  font-size: 0.8rem;
   color: #9c8bc0;
   background: #f5f1fb;
   border-radius: 5px;
@@ -634,7 +634,7 @@ kbd {
   line-height: 1.5;
 }
 .entry-card > p {
-  font-size: 0.77rem;
+  font-size: 0.8rem;
   color: var(--muted);
   line-height: 1.9;
   height: 44px;
@@ -651,7 +651,7 @@ kbd {
   gap: 8px;
   border-top: 1px solid var(--border);
   padding-top: 14px;
-  font-size: 0.64rem;
+  font-size: 0.8rem;
   color: #a3a6b6;
 }
 .entry-card footer span {
@@ -686,7 +686,7 @@ kbd {
   font-weight: 450;
 }
 .new-card small {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: #b6b8c6;
 }
 .page-note {
@@ -695,7 +695,7 @@ kbd {
   align-items: center;
   justify-content: center;
   color: #aeb1c0;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   margin-top: 35px;
 }
 .empty {
@@ -764,7 +764,7 @@ pre.report,
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   background: var(--bg);
   padding: 15px;
   border: 1px solid var(--border);
@@ -864,7 +864,7 @@ pre.report,
   margin-top: 12px;
 }
 .entry-heading p {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 .title-input {
@@ -894,7 +894,7 @@ pre.report,
 }
 .editor-toolbar button,
 .editor-toolbar .button {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   border: 0;
   padding: 7px 9px;
   background: transparent;
@@ -995,14 +995,14 @@ pre.report,
   font-size: 0.9rem;
 }
 .entry-aside p {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 .entry-aside button {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 .entry-aside label {
-  font-size: 0.76rem;
+  font-size: 0.8rem;
 }
 .prereq {
   width: 100%;
@@ -1146,7 +1146,7 @@ pre.report,
   white-space: nowrap;
   text-overflow: ellipsis;
   padding: 12px 8px;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   flex: 1;
   min-width: 0;
 }
@@ -1174,7 +1174,7 @@ pre.report,
   padding: 5px 7px;
   border: 0;
   max-width: 60%;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 .messages {
   padding: 25px;
@@ -1189,7 +1189,7 @@ pre.report,
 .message small {
   display: block;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   margin-bottom: 8px;
 }
 .message.user .markdown {
@@ -1216,7 +1216,7 @@ pre.report,
 }
 .chat-disclaimer {
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: 0.8rem;
   text-align: center;
   margin: 0 12px 15px;
 }
@@ -1362,7 +1362,7 @@ pre.report,
   flex-wrap: wrap;
 }
 .tags span {
-  font-size: 0.67rem;
+  font-size: 0.8rem;
   color: var(--accent);
   background: var(--soft);
   padding: 4px 8px;
@@ -1685,7 +1685,7 @@ details pre {
     flex-wrap: wrap;
   }
   .settings-tabs button {
-    font-size: 0.76rem;
+    font-size: 0.8rem;
     padding: 10px;
   }
   .settings-content {
@@ -1699,7 +1699,7 @@ details pre {
   }
   .review-banner button {
     padding: 10px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
 }
 @media (max-width: 600px) {
@@ -1746,7 +1746,7 @@ details pre {
   .sidebar nav button span,
   [data-layout="compact"] .sidebar nav button span {
     display: block;
-    font-size: 0.58rem;
+    font-size: 0.8rem;
   }
   .sidebar nav button svg {
     width: 18px;
@@ -1767,7 +1767,7 @@ details pre {
     gap: 12px;
   }
   .breadcrumb {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     gap: 6px;
   }
   .breadcrumb > span {
@@ -1779,7 +1779,7 @@ details pre {
     gap: 5px;
   }
   .search-box input {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
   }
   .search-box kbd {
     display: none;
@@ -1796,15 +1796,15 @@ details pre {
     font-size: 1.65rem;
   }
   .page-heading p {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
   }
   .page-heading > button {
     padding: 9px 10px;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
     white-space: nowrap;
   }
   .eyebrow {
-    font-size: 0.54rem;
+    font-size: 0.8rem;
     letter-spacing: 1.5px;
     margin-bottom: 10px;
   }
@@ -1821,11 +1821,11 @@ details pre {
   }
   .stats em {
     display: inline;
-    font-size: 0.58rem;
+    font-size: 0.8rem;
     margin-left: 6px;
   }
   .stats small {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
   }
   .stat-icon {
     width: 34px;
@@ -1842,11 +1842,11 @@ details pre {
     margin-bottom: 27px;
   }
   .review-banner p {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
   .review-banner button {
     margin-top: 16px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
   .entry-grid {
     grid-template-columns: 1fr;
@@ -1866,22 +1866,22 @@ details pre {
     margin-bottom: 15px;
   }
   .entry-card footer {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
   }
   .category-dot {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
   .filter-row {
     gap: 4px;
   }
   .filter-row button {
-    font-size: 0.73rem;
+    font-size: 0.8rem;
   }
   .new-card {
     min-height: 155px;
   }
   .page-note {
-    font-size: 0.62rem;
+    font-size: 0.8rem;
   }
   .entry-heading {
     display: block;
@@ -1890,7 +1890,7 @@ details pre {
     margin-top: 15px;
   }
   .entry-heading p {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
   }
   .entry-aside {
     grid-template-columns: 1fr;
@@ -1916,7 +1916,7 @@ details pre {
   }
   .theme-preview {
     padding: 7px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
   .theme-preview > div {
     height: 50px;
@@ -1931,7 +1931,7 @@ details pre {
   }
   .settings-tabs button {
     padding: 9px;
-    font-size: 0.73rem;
+    font-size: 0.8rem;
     gap: 5px;
   }
   .settings-tabs button svg {
@@ -1963,7 +1963,7 @@ details pre {
     width: auto;
     white-space: nowrap;
     flex-shrink: 0;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
   }
   .topic {
     margin: 0;
@@ -1971,7 +1971,7 @@ details pre {
     flex-shrink: 0;
   }
   .topic > button:first-child {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
   }
   .messages {
     padding: 18px;
@@ -1995,7 +1995,7 @@ details pre {
     gap: 12px;
   }
   .queue p {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
   }
   [data-mobile="top"] .sidebar {
     top: 62px;
@@ -2075,7 +2075,7 @@ details pre {
 }
 .category-edit-row small {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
 }
 .category-edit-row input,
 .category-edit-row select {
@@ -2087,7 +2087,7 @@ details pre {
 }
 .revision-diff pre {
   white-space: pre-wrap;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   line-height: 1.8;
   background: var(--bg);
   padding: 12px;
@@ -2105,4 +2105,61 @@ details pre {
 }
 .graph-page > .primary {
   margin-bottom: 18px;
+}
+
+/* Keep touch targets usable while desktop controls use more of their space for text. */
+@media (pointer: coarse) {
+  button,
+  .button,
+  input,
+  select {
+    min-height: 44px;
+  }
+}
+
+/* Transient screenshot selection uses viewport geometry, independent of user UI font scaling. */
+.ocr-overlay {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  background: #000;
+  touch-action: none;
+  user-select: none;
+}
+.ocr-overlay > img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  display: block;
+}
+.ocr-region {
+  position: absolute;
+  border: 2px solid #a99aff;
+  background: transparent;
+  box-shadow: 0 0 0 100vmax #0007;
+  pointer-events: none;
+}
+.ocr-guide {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #202032ee;
+  color: #fff;
+  font-size: 16px;
+  cursor: default;
+}
+.ocr-guide button {
+  margin-left: 12px;
+}
+.ocr-preview {
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--surface);
 }

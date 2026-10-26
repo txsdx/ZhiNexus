@@ -5,6 +5,9 @@ import { json, store } from "../core/store";
 import type { DeviceConfig } from "../core/types";
 import { applyClassification } from "../services/classification";
 import { restoreSnapshot, snapshot } from "../services/sync";
+import { DesktopPanel } from "./settings/DesktopPanel";
+import { NetworkPanel } from "./settings/NetworkPanel";
+import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { AboutPanel } from "./settings/AboutPanel";
 import { AppearancePanel } from "./settings/AppearancePanel";
 import { CategoriesPanel } from "./settings/CategoriesPanel";
@@ -62,6 +65,7 @@ export function Settings({
             {tabs.map((x) => (
               <button
                 key={x.id}
+                data-settings-tab={x.id}
                 className={tab === x.id ? "active" : ""}
                 onClick={() => setTab(x.id)}
               >
@@ -77,6 +81,9 @@ export function Settings({
             {tab === "categories" && <CategoriesPanel />}
             {tab === "sync" && <SynchronizationPanel />}
             {tab === "mcp" && <McpPanel />}
+            {tab === "network" && <NetworkPanel />}
+            {tab === "desktop" && <DesktopPanel />}
+            {tab === "notifications" && <NotificationsPanel />}
             {tab === "database" && <DatabasePanel />}
             {tab === "about" && <AboutPanel />}
             {report && <pre className="report">{report}</pre>}

@@ -1,7 +1,8 @@
 /** Platform-aware update discovery: one Release JSON, independent patch versions and verified installation requests. */
 import { z } from "zod";
 import { native } from "../core/database";
-import { boundedText } from "./network";
+import { boundedText, nativeFetch } from "./network";
+import { ensureNativeProxy } from "./proxy";
 import versions from "../../versions.json";
 const artifact = z.object({
   url: z.string().url(),
@@ -108,12 +109,14 @@ export async function checkUpdates(): Promise<UpdateInfo | null> {
     "https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json";
   let res: Response;
   if (native) {
-    const { fetch } = await import("@tauri-apps/plugin-http");
-    res = await fetch(url, {
-      redirect: "follow",
-      maxRedirections: 5,
-      signal: AbortSignal.timeout(60000),
-    });
+    res = await nativeFetch(
+      url,
+      {
+        redirect: "follow",
+        signal: AbortSignal.timeout(60000),
+      },
+      5,
+    );
   } else
     res = await fetch(url, {
       redirect: "follow",
@@ -140,6 +143,7 @@ export async function applyUpdate(info: UpdateInfo) {
   if (!native) throw Error("请在原生应用中更新 / Native app required");
   if (!info.available) throw Error("没有更新 / Already current");
   validateReleaseAsset(info.url);
+  await ensureNativeProxy();
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke("install_platform_update", {
     update: {

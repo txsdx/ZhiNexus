@@ -3,6 +3,15 @@
 #[cfg(target_os = "android")]
 mod android_updates;
 mod capture;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod desktop;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod mcp;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod migration;
+mod network;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod ocr;
 mod paths;
 #[cfg(target_os = "windows")]
 mod startup;
@@ -14,17 +23,6 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            capture::capture_knowledge,
-            updates::update_identity,
-            updates::install_platform_update,
-            paths::storage_configuration,
-            storage::prepare_storage,
-            storage::recover_storage,
-            storage::journal_storage,
-            storage::read_storage_journal,
-            storage::checkpoint_storage
-        ])
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
@@ -34,11 +32,64 @@ pub fn run() {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder
+        .manage(desktop::DesktopState::default())
+        .manage(mcp::Sessions::default())
+        .manage(ocr::CaptureState::default())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            if !args.iter().any(|arg| arg == "--background") {
+                desktop::show(app);
+            }
+        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, key, event| desktop::shortcut(app, key, event.state))
+                .build(),
+        )
         .plugin(tauri_plugin_clipboard_manager::init());
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        capture::capture_knowledge,
+        network::configure_network,
+        updates::update_identity,
+        updates::install_platform_update,
+        paths::storage_configuration,
+        storage::prepare_storage,
+        storage::recover_storage,
+        storage::journal_storage,
+        storage::read_storage_journal,
+        storage::checkpoint_storage,
+        desktop::desktop_configuration,
+        desktop::configure_desktop,
+        desktop::take_desktop_actions,
+        desktop::quit_desktop,
+        migration::storage_migration_plan,
+        migration::launch_storage_migration,
+        ocr::begin_ocr_capture,
+        ocr::ocr_frame,
+        ocr::finish_ocr_capture,
+        ocr::cancel_ocr_capture,
+        ocr::recognize_ocr,
+        mcp::mcp_start,
+        mcp::mcp_send,
+        mcp::mcp_next,
+        mcp::mcp_close
+    ]);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        capture::capture_knowledge,
+        network::configure_network,
+        updates::update_identity,
+        updates::install_platform_update,
+        paths::storage_configuration,
+        storage::prepare_storage,
+        storage::recover_storage,
+        storage::journal_storage,
+        storage::read_storage_journal,
+        storage::checkpoint_storage
+    ]);
     #[cfg(target_os = "android")]
     let builder = builder.plugin(android_updates::init());
     let mut context = tauri::generate_context!();
@@ -64,8 +115,18 @@ pub fn run() {
                 };
                 window.build()?;
             }
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            desktop::initialize(app.handle())?;
             Ok(())
         })
-        .run(context)
-        .expect("ZhiNexus native runtime failed to start");
+        .build(context)
+        .expect("ZhiNexus native runtime failed to start")
+        .run(|_app, event| {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if matches!(event, tauri::RunEvent::Exit) {
+                mcp::shutdown(_app);
+            }
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let _ = event;
+        });
 }

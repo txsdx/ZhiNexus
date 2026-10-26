@@ -7,7 +7,7 @@
 - `core/crdt`, `crypto`: field multi-value registers, causal vectors, canonical SHA-256, binary Merkle root, authenticated backup encryption.
 - `core/store`: repository, command serialization, auditable operations and React external-store projections.
 - `core/review`: maintained `ts-fsrs` scheduler, structured question and grade contracts.
-- `services`: strict HTTPS providers, CPA catalog, templates, bounded agent tool loop, official MCP SDK, WebDAV transport, OS capture/notifications/updates.
+- `services`: HTTP(S) AI/MCP providers, strict HTTPS WebDAV, CPA catalog, templates, bounded agent tool loop, official MCP SDK, WebDAV transport, OS capture/notifications/updates.
 - `pages`, `components`: React presentation. Rust owns app-root selection, verified SQLite checkpoints/journal replay, explicit OS selection capture and verified update/install boundaries in separate modules. Native SQL does not expose an arbitrary shell.
 
 ## Replica protocol v1
@@ -26,7 +26,13 @@ Merkle leaves are operation hashes and blob hashes. Logical-state digest is deri
 
 WebDAV is a user-controlled replication target, not the live database. Never PUT a working SQLite file over another device. Object-storage and dedicated-server adapters are reserved through SyncTransport but not implemented. No schema compatibility layer is maintained during early development.
 
-Knowledge, categories, reviews, topics, graph positions, prompts, task/model configuration and appearance replicate. API keys, WebDAV credentials and MCP tokens/config default to device-local. An optional password-encrypted credential vault replicates the complete credential bundle as a CRDT setting containing only AES-GCM ciphertext; another device syncs and explicitly unlocks it. The passphrase is never persisted. Notification/sync scheduling preferences remain device-local. Automatic key distribution, revocation and key rotation UI remain future work. Local device credentials are currently stored in SQLite and protected by OS profile permissions, not an OS keychain. File backups use AES-256-GCM, 96-bit random IV, random 128-bit salt and PBKDF2-SHA256 (310000 iterations, minimum 12-character passphrase).
+Knowledge, categories, reviews, topics, graph positions, prompts, model configuration and appearance replicate. API keys now replicate automatically as endpoint-bound `ai-key-vault` AES-GCM ciphertext. `core/secrets` uses domain-separated SHA-256 keys and fresh 96-bit IVs; the built-in convenience key is deliberately public by user request, with an optional custom key. Local API/custom keys are separately wrapped before SQL/journal writes. This is not a claim that an embedded key protects against someone who has the app. The optional PBKDF2 password vault still packages WebDAV/MCP credentials explicitly. Imported stdio configurations never become enabled unless identical to an already locally enabled configuration. Device notifications, proxy and synchronization schedule remain local. `store.updateDevice` applies partial updates inside its command queue so remote key decryption cannot overwrite concurrent notification changes.
+
+Native networking retains system certificate roots. AI endpoints accept pasted standard paths and HTTP(S); WebDAV remains HTTPS-only. `services/network` preserves Request bodies/headers/abort, blocks cross-origin credential redirects, redacts diagnostic secrets and shares per-device proxy options with SDK HTTP/SSE, assets and update discovery. `network.rs` applies the same proxy to native installer downloads. Stdio programs are user-configured child processes, use bounded newline JSON-RPC and are closed/killed with their owned sessions. Their own networking follows their environment.
+
+Desktop callbacks and tray actions run in Rust and queue payloads before focusing the webview. The OCR overlay skips database initialization, captures once before appearing, maps logical pointer bounds to physical image pixels, and discards its frame on cancel/finish. Local OCR is the default; vision uploads require the explicit result-dialog action. DPI is observed but not multiplied onto already-scaled WebView CSS.
+
+Storage relocation is constrained to the current executable's two app roots. Frontend freezes commands, drains SQLite writes and checkpoints/closes it; a post-exit helper waits for the source-root lease, holds a transition lock, verifies streamed copies and SQLite, preserves the existing target, then switches the marker and restarts. Failure never clears the source. Filesystem locks and helper plans are not replicated. File backups remain AES-GCM/PBKDF2 (310000 iterations, minimum 12-character passphrase).
 
 ## Scalability and recovery limits
 

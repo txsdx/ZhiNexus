@@ -10,6 +10,9 @@
     "dialog:default",
     "fs:allow-write-text-file",
     "notification:default",
-    { "identifier": "http:default", "allow": [{ "url": "https://**" }] }
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://**" }, { "url": "http://**" }]
+    }
   ]
 }

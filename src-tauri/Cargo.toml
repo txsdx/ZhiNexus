@@ -1,11 +1,11 @@
 # Native runtime and platform plugins; domain workflows live in the TypeScript layer.
 [package]
 name = "zhinexus"
-version = "0.3.3"
+version = "0.4.0"
 description = "Local-first learning workspace"
 authors = ["ZhiNexus contributors"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [lib]
 name = "zhinexus_lib"
@@ -16,18 +16,21 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 serde_json = "1"
+tokio = { version = "1", features = ["sync", "process", "io-util", "time"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "6"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 base64 = "0.22"
 semver = "1"
 minisign-verify = "0.3"
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "stream", "socks", "system-proxy"] }
 tauri-plugin-opener = "2"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls", "http2", "charset", "system-proxy"] }
+tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls-native-roots", "http2", "charset", "system-proxy", "socks", "gzip", "brotli", "deflate"] }
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -47,3 +50,21 @@ x11rb = "0.13"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_DataExchange", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.fs2]
+version = "0.4"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.xcap]
+version = "0.9.8"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.image]
+version = "0.25"
+default-features = false
+features = ["png"]
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.tauri-plugin-single-instance]
+version = "2"
+
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+version = "0.62"
+features = ["Foundation", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_Foundation", "Win32_System_Com", "Win32_System_WinRT", "Win32_UI_Shell"]

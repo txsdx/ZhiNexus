@@ -20,7 +20,14 @@ import Fuse from "fuse.js";
 import { reconcileReminders } from "./services/reminders";
 import { enrichEntry } from "./services/enrichment";
 import { native } from "./core/database";
-import { registerCapture } from "./services/capture";
+import {
+  listenDesktop,
+  observeSystemScale,
+  quitDesktop,
+  type DesktopAction,
+} from "./services/desktop";
+import { OcrResult } from "./components/OcrResult";
+import { unbase64 } from "./core/crypto";
 import { Locale, useKnowledge, useT, Modal } from "./components/common";
 import { Library } from "./pages/Library";
 const EntryPage = lazy(() =>
@@ -40,6 +47,7 @@ const Settings = lazy(() =>
 );
 import { store } from "./core/store";
 import { synchronize } from "./services/sync";
+import { notifyCompletion } from "./services/notifications";
 import { remind } from "./services/device";
 /** Collect new concepts while treating fuzzy duplicates as a request to revisit existing knowledge. */
 function Capture({
@@ -48,10 +56,12 @@ function Capture({
   initial = "",
   notify,
   source = "manual-capture",
+  image = "",
 }: {
   onClose: () => void;
   onOpen: (id: string) => void;
   initial?: string;
+  image?: string;
   source?: string;
   notify: (text: string) => void;
 }) {
@@ -88,7 +98,19 @@ function Capture({
           );
           const action = exact
             ? Promise.resolve(exact.id)
-            : store.createEntry(title, content || undefined, source);
+            : (async () => {
+                let material = content;
+                if (image) {
+                  const hash = await store.db.putBlob(
+                    unbase64(image.split(",")[1]),
+                    "image/png",
+                  );
+                  material += `
+
+![截图 / Screenshot](asset:${hash})`;
+                }
+                return store.createEntry(title, material || undefined, source);
+              })();
           void action
             .then((id) => {
               onClose();
@@ -230,6 +252,9 @@ function Shell() {
     [capture, setCapture] = useState(false),
     [captureText, setCaptureText] = useState(""),
     [captureSource, setCaptureSource] = useState("manual-capture"),
+    [captureImage, setCaptureImage] = useState(""),
+    [ocr, setOcr] = useState<DesktopAction | null>(null),
+    [actions, setActions] = useState<DesktopAction[]>([]),
     [toast, setToast] = useState("");
   const reminderSignature = s.entries
     .map((e) => e.id + ":" + e.card.due.toISOString())
@@ -252,11 +277,9 @@ function Shell() {
   useEffect(() => {
     let cleanup: undefined | (() => void),
       live = true;
-    void registerCapture((captured) => {
-      setCaptureSource(captured.source);
-      setCaptureText(captured.text);
-      setCapture(true);
-    })
+    void listenDesktop((action) =>
+      setActions((previous) => [...previous, action]),
+    )
       .then((fn) => {
         if (live) cleanup = fn;
         else fn();
@@ -267,6 +290,41 @@ function Shell() {
       cleanup?.();
     };
   }, []);
+  useEffect(() => {
+    let stop: (() => void) | undefined,
+      live = true;
+    void observeSystemScale()
+      .then((fn) => {
+        if (live) stop = fn;
+        else fn();
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      stop?.();
+    };
+  }, []);
+  useEffect(() => {
+    if (capture || ocr || !actions.length) return;
+    const action = actions[0];
+    setActions((previous) => previous.slice(1));
+    if (action.kind === "quit") {
+      void quitDesktop().catch((e) => setToast(String(e)));
+      return;
+    }
+    if (action.kind === "error") {
+      setToast(action.text);
+      return;
+    }
+    if (action.kind === "ocr") {
+      setOcr(action);
+      return;
+    }
+    setCaptureSource(action.source);
+    setCaptureText(action.text);
+    setCaptureImage("");
+    setCapture(true);
+  }, [actions, capture, ocr]);
   const notify = (text: string) => setToast(text);
   useEffect(() => {
     if (store.db.recoveryNotice)
@@ -333,7 +391,10 @@ function Shell() {
       () => {
         void synchronize()
           .then(() => notify(t("增量同步完成", "Incremental sync complete")))
-          .catch((e) => notify(String(e.message)));
+          .catch((e) => {
+            notify(String(e.message));
+            void notifyCompletion("sync", String(e.message)).catch(() => {});
+          });
       },
       Math.max(1, s.device.syncMinutes) * 60000,
     );
@@ -375,6 +436,7 @@ function Shell() {
           className="capture-button"
           onClick={() => {
             setCaptureSource("manual-capture");
+            setCaptureImage("");
             setCaptureText("");
             setCapture(true);
           }}
@@ -496,6 +558,7 @@ function Shell() {
               onCreate={() => {
                 setCaptureText("");
                 setCaptureSource("manual-capture");
+                setCaptureImage("");
                 setCapture(true);
               }}
               onReview={() => navigate("review")}
@@ -508,6 +571,7 @@ function Shell() {
               onCreate={() => {
                 setCaptureText("");
                 setCaptureSource("manual-capture");
+                setCaptureImage("");
                 setCapture(true);
               }}
               onReview={() => navigate("review")}
@@ -533,9 +597,24 @@ function Shell() {
           {page === "settings" && <Settings notify={notify} />}
         </Suspense>
       </main>
+      {ocr?.image && (
+        <OcrResult
+          image={ocr.image}
+          source={ocr.source}
+          onClose={() => setOcr(null)}
+          onUse={(text, image) => {
+            setCaptureText(text);
+            setCaptureSource(ocr.source);
+            setCaptureImage(image);
+            setOcr(null);
+            setCapture(true);
+          }}
+        />
+      )}
       {capture && (
         <Capture
           notify={notify}
+          image={captureImage}
           source={captureSource}
           initial={captureText}
           onClose={() => setCapture(false)}

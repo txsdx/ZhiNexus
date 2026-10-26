@@ -91,6 +91,7 @@ const ai = z.object({
     classify: task,
     relations: task,
     agent: task,
+    ocr: task.optional(),
     image: task,
   }),
 });

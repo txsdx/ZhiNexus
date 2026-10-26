@@ -1,8 +1,15 @@
 /** Task-specific OpenAI-compatible chat and image execution with capability-aware parameters. */
+import { notifyCompletion } from "./notifications";
 import { z } from "zod";
 import { store } from "../core/store";
 import type { Message, Task, ToolCall } from "../core/types";
-import { request, responseJson, secureUrl } from "./network";
+import {
+  request,
+  responseJson,
+  secureUrl,
+  apiBaseUrl,
+  normalizeApiKey,
+} from "./network";
 /** Substitute named variables literally; unknown variables are left visible to the user. */
 export function renderPrompt(
   template: string,
@@ -24,23 +31,50 @@ export async function complete(
   messages: Message[],
   tools?: ToolSpec[],
   override?: { model: string; effort: string },
+  image?: string,
 ): Promise<{ content: string; calls: ToolCall[] }> {
   const { ai, device } = store.getSnapshot(),
     config = { ...ai.tasks[task], ...override };
   if (!config.model) throw Error("请先在设置中为此功能选择模型");
   if (!device.apiKey) throw Error("请在本设备配置 API Key");
+  if (
+    device.apiKeyEndpoint &&
+    apiBaseUrl(device.apiKeyEndpoint) !== apiBaseUrl(ai.baseUrl)
+  )
+    throw Error(
+      "API Key 属于另一接口，请重新保存 AI 配置 / API key belongs to another endpoint",
+    );
   const model = ai.models.find((m) => m.id === config.model);
   const body: Record<string, unknown> = { model: config.model, messages };
+  if (image) {
+    if (
+      task !== "ocr" ||
+      !image.startsWith("data:image/png;base64,") ||
+      image.length > 32 * 1024 * 1024
+    )
+      throw Error("Invalid OCR image");
+    body.messages = messages.map((message, i) =>
+      i === messages.length - 1 && message.role === "user"
+        ? {
+            ...message,
+            content: [
+              { type: "text", text: message.content },
+              { type: "image_url", image_url: { url: image } },
+            ],
+          }
+        : message,
+    );
+  }
   if (model?.efforts.includes(config.effort))
     body.reasoning_effort = config.effort;
   if (tools?.length && model?.tools === true) body.tools = tools;
   const res = await request(
-    secureUrl(ai.baseUrl).href.replace(/\/$/, "") + "/chat/completions",
+    apiBaseUrl(ai.baseUrl) + "/chat/completions",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer " + device.apiKey,
+        Authorization: "Bearer " + normalizeApiKey(device.apiKey),
       },
       body: JSON.stringify(body),
     },
@@ -82,11 +116,13 @@ export async function runTask(
   vars: Record<string, string>,
 ): Promise<string> {
   const prompt = store.getSnapshot().ai.tasks[task].prompt;
-  return (
+  const result = (
     await complete(task, [
       { role: "user", content: renderPrompt(prompt, vars) },
     ])
   ).content;
+  void notifyCompletion("ai", result).catch(() => {});
+  return result;
 }
 /** Accept a single optional JSON fence, but never try to salvage malformed partial model output. */
 export function parseJson(text: string): unknown {
@@ -103,12 +139,12 @@ export async function generateImage(prompt: string): Promise<string> {
   if (!ai.tasks.image.model || !device.apiKey)
     throw Error("请先配置图片模型和 API Key");
   const res = await request(
-    secureUrl(ai.baseUrl).href.replace(/\/$/, "") + "/images/generations",
+    apiBaseUrl(ai.baseUrl) + "/images/generations",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer " + device.apiKey,
+        Authorization: "Bearer " + normalizeApiKey(device.apiKey),
       },
       body: JSON.stringify({
         model: ai.tasks.image.model,
@@ -143,5 +179,9 @@ export async function generateImage(prompt: string): Promise<string> {
     if (b.size > 20 * 1024 * 1024) throw Error("图片过大");
     bytes = new Uint8Array(await b.arrayBuffer());
   } else throw Error("图片响应为空");
-  return store.db.putBlob(bytes, "image/png");
+  const hash = await store.db.putBlob(bytes, "image/png");
+  void notifyCompletion("ai", "配图已生成 / Illustration ready").catch(
+    () => {},
+  );
+  return hash;
 }

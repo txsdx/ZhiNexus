@@ -2,6 +2,8 @@
 import { Component, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { OcrOverlay } from "./components/OcrOverlay";
+import { startKeySync } from "./services/key-sync";
 import { store } from "./core/store";
 import "./styles.css";
 /** Keep storage and rendering failures visible without clearing user data. */
@@ -33,22 +35,30 @@ const root = createRoot(document.getElementById("root")!);
 root.render(
   <div className="boot-error">知枢 · ZhiNexus · 正在打开本地知识库…</div>,
 );
-store
-  .init()
-  .then(() =>
-    root.render(
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>,
-    ),
-  )
-  .catch((e) =>
-    root.render(
-      <div className="boot-error">
-        <h1>无法打开本地数据库 / Storage unavailable</h1>
-        <p>请检查浏览器存储权限与可用空间。不会自动清除任何数据。</p>
-        <pre>{String(e)}</pre>
-        <button onClick={() => location.reload()}>重试 / Retry</button>
-      </div>,
-    ),
+if (new URLSearchParams(location.search).has("ocr-overlay")) {
+  root.render(
+    <ErrorBoundary>
+      <OcrOverlay />
+    </ErrorBoundary>,
   );
+} else
+  store
+    .init()
+    .then(() => {
+      startKeySync();
+      root.render(
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>,
+      );
+    })
+    .catch((e) =>
+      root.render(
+        <div className="boot-error">
+          <h1>无法打开本地数据库 / Storage unavailable</h1>
+          <p>请检查浏览器存储权限与可用空间。不会自动清除任何数据。</p>
+          <pre>{String(e)}</pre>
+          <button onClick={() => location.reload()}>重试 / Retry</button>
+        </div>,
+      ),
+    );

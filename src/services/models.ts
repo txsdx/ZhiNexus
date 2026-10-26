@@ -1,7 +1,7 @@
 /** CPA model discovery ported from the uploaded reference: at most two ordinary catalog requests. */
 import { z } from "zod";
 import type { Model } from "../core/types";
-import { request, responseJson, secureUrl } from "./network";
+import { request, responseJson, apiBaseUrl, normalizeApiKey } from "./network";
 const record = z.record(z.string(), z.unknown());
 /** Extract only declared reasoning levels, including CPA effort objects; unknown stays unknown. */
 function levels(raw: unknown): string[] {
@@ -104,9 +104,12 @@ export async function discoverModels(
   base: string,
   key: string,
 ): Promise<Model[]> {
-  const url = secureUrl(base).href.replace(/\/$/, "") + "/models";
+  const url = apiBaseUrl(base) + "/models";
   const options = {
-    headers: { Authorization: "Bearer " + key, Accept: "application/json" },
+    headers: {
+      Authorization: "Bearer " + normalizeApiKey(key),
+      Accept: "application/json",
+    },
   };
   let res = await request(url + "?client_version=cpa", options);
   if ([400, 404, 405, 422, 501].includes(res.status))

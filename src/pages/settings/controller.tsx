@@ -1,5 +1,6 @@
 /** Typed settings state, draft edits and action feedback shared by independent configuration panels. */
 import {
+  Bell,
   Cloud,
   Database,
   FolderTree,
@@ -62,9 +63,16 @@ export function useSettingsState(
       label: t("任务与提示词", "Tasks & prompts"),
       icon: Settings2,
     },
-    { id: "categories", label: t("知识分类", "Categories"), icon: FolderTree },
-    { id: "sync", label: t("同步与通知", "Sync & reminders"), icon: Cloud },
     { id: "mcp", label: "MCP", icon: Plug },
+    { id: "categories", label: t("知识分类", "Categories"), icon: FolderTree },
+    { id: "sync", label: t("数据同步", "Data synchronization"), icon: Cloud },
+    { id: "network", label: t("网络与代理", "Network & proxy"), icon: Globe },
+    { id: "notifications", label: t("通知设置", "Notifications"), icon: Bell },
+    {
+      id: "desktop",
+      label: t("后台与快捷键", "Background & shortcuts"),
+      icon: Settings2,
+    },
     {
       id: "database",
       label: t("数据库与备份", "Database & backup"),

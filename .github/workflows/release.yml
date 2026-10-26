@@ -1,0 +1,56 @@
+# Build and validate every supported platform before optional publication.
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: Create Release
+        type: boolean
+        default: true
+      draft:
+        description: Save as draft
+        type: boolean
+        default: true
+permissions:
+  contents: write
+jobs:
+  windows:
+    uses: ./.github/workflows/windows.yml
+    secrets: inherit
+  android:
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+  ubuntu:
+    uses: ./.github/workflows/ubuntu.yml
+    secrets: inherit
+  publish:
+    needs: [windows, android, ubuntu]
+    if: inputs.create_release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ZhiNexus-*
+          merge-multiple: true
+          path: release-artifacts
+      - name: Preserve metadata for unchanged platforms
+        run: curl --fail --silent --show-error --location 'https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json' -o previous-latest.json || rm -f previous-latest.json
+      - name: Build platform-specific update manifest
+        run: node scripts/updater-manifest.mjs release-artifacts
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_DRAFT: ${{ inputs.draft }}
+        run: |
+          expected_tag="v$(node scripts/versions.mjs release)"
+          release_tag="${RELEASE_TAG:-$expected_tag}"
+          test "$release_tag" = "$expected_tag"
+          if ! gh release view "$release_tag"; then
+            draft_args=()
+            if [ "$RELEASE_DRAFT" = true ]; then draft_args+=(--draft); fi
+            gh release create "$release_tag" "${draft_args[@]}" --target "$GITHUB_SHA" --title "知枢 ZhiNexus $release_tag" --notes-file .ai/CHANGELOG.md
+          fi
+          mapfile -d '' assets < <(find release-artifacts -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.apk' -o -name '*.sig' -o -name 'latest.json' \) -print0)
+          test "${#assets[@]}" -gt 0
+          gh release upload "$release_tag" "${assets[@]}" --clobber

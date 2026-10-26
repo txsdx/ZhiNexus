@@ -6,7 +6,7 @@
   <p><a href="#快速开始">快速开始</a> · <a href="#功能">功能</a> · <a href="#数据与同步">数据与同步</a> · <a href="#构建原生应用">原生构建</a> · <a href=".ai/STATUS.md">完成情况</a></p>
 </div>
 
-> **0.3 系列开发版 / Early development.** 核心学习流程、数据库滚动备份/日志恢复、便携目录与三平台更新协议已实现。Linux 原生恢复测试和 Android 编译通过；Windows、Android 设备测试与正式安装升级尚需 CI/真机验证。真实 AI/WebDAV 与大库性能未完成验证。完整边界见 [已知问题](.ai/KNOWN_ISSUES.md)。
+> **0.4 开发版 / Early development.** 加入桌面后台/快捷键/OCR、数据目录迁移、全局代理、无密码 API Key 加密同步及独立通知设置。上一版 Windows、Ubuntu 实际安装产物测试和 Android 15 模拟器测试均通过；本次平台复验记录见 [需求状态](.ai/STATUS.md)。真实提供商与正式安装升级尚需验证。
 
 ## 功能
 
@@ -53,7 +53,17 @@ Playwright 默认使用本机 Chromium；没有 `/usr/bin/chromium` 时先 `npx 
 
 模型发现首先读取 `/models?client_version=cpa`；只有 `400/404/405/422/501` 才回退一次到 `/models`。兼容 `models/slug` 和 `data/id`。401/403 不重试，不访问管理接口，不按模型名推断能力。预算型 thinking 元数据不会被擅自映射成 reasoning_effort。暂不支持 Responses-only 提供商或 Anthropic 原生协议。
 
-MCP 支持官方 SDK 的 **HTTPS Streamable HTTP**；手动添加、默认关闭，Token 仅本设备保存。不运行本地 stdio 命令。启用的服务在对话时进行协议初始化及列出工具，每次实际执行均确认。
+MCP 使用官方 SDK，支持 **Streamable HTTP、SSE、桌面 stdio**。配置协议、URL/令牌，或程序、JSON 参数数组、环境变量与工作目录。新服务默认关闭；从保险箱导入另一设备的 stdio 命令也默认关闭，需本机手动启用。每次 Agent 执行外部工具均确认。
+
+## 桌面与通知
+
+- “后台与快捷键”控制关闭窗口后常驻托盘、登录自启与三个全局快捷键。Windows 自启为当前用户 Startup 文件夹中的 `ZhiNexus.lnk`；Ubuntu 使用 XDG autostart。
+- 默认 `Ctrl+Shift+N` 捕获选中文本，`Ctrl+Shift+O` 框选截图 OCR，`Ctrl+Shift+Space` 显示主窗口。可修改，留空禁用；冲突时保留原有配置。
+- OCR 默认使用 Windows 系统已安装语言或 Ubuntu Tesseract，结果可编辑；点击“AI 识别（上传截图）”才发送到所选视觉模型，OCR 模板可在任务设置修改。
+- “通知设置”独立配置复习、失焦后的 AI/OCR 完成、同步失败、预览和最小间隔；各设备独立。Android 提醒由系统排程。
+- “网络与代理”选择系统、HTTP(S)、SOCKS5，统一应用于 AI、MCP 网络协议、同步、图片与更新；stdio 子程序的网络由其自身环境变量配置。
+- 启动读取系统 DPI 并跟随显示器变化；WebView 已处理缩放，不重复乘 DPI。默认文字增大，外观页可另调字体和系数。
+- “数据库与备份”可迁移到程序旁 `_data` 或系统目录。预览确认后退出、逐文件 SHA-256 验证、SQLite 完整性检查，再切换 `portable` 标记并重启。保留源和旧目标备份；目录不可写时明确报错。
 
 ## 数据与同步
 
@@ -70,7 +80,7 @@ MCP 支持官方 SDK 的 **HTTPS Streamable HTTP**；手动添加、默认关闭
 
 离线编辑后交换新增日志；同字段并发修改保留所有版本，可在词条历史中选择并合并。删除保留日志，数据库管理可恢复词条。同步不删除历史或远端附件。每次同步检查收到的数据及附件，并计算本地全库摘要；这不是一个跨所有设备的原子云端事务，设备需完成后续交换以收敛。
 
-**同步的是学习数据与非敏感配置。** API Key、WebDAV 密码、MCP Token 默认留在本机；如需跨设备同步，可在“同步与通知”中设置独立保险箱密码，将已保存的全部凭证和 MCP 配置封装为 AES-GCM 密文，再执行同步。另一台设备同步后输入同一密码解锁；密码不会保存，忘记无法恢复。通知和同步周期仍是设备偏好。完整文件备份也会将凭证一起加密，可选择是否恢复。本机凭证目前保存在 SQLite，尚未接入系统钥匙串。WebDAV 上的知识正文和普通日志不做端到端加密，TLS 只保护传输；存储服务管理员仍可能读取内容。需要保密的用户应选择可信存储，并等待 E2EE vault 里程碑。
+**API Key 默认自动加密并同步，无需设置密码。** 默认 AES-GCM 使用程序内置的固定便捷密钥（随程序分发，不是保密密钥）；也可在“AI 与模型”填写自定义同步密钥，各设备使用相同值。API Key 与接口地址绑定，本地 SQLite 和恢复日志也保存密文。WebDAV 密码、MCP 配置可通过“数据同步”的独立密码保险箱封存分发。通知、代理和同步周期按设备保存；备份可包含全部本机配置。知识正文仍是普通同步数据；未接入 OS Keychain。
 
 当前只有 WebDAV 连接器；对象存储和专属服务端预留 `SyncTransport`。采用这套日志架构而非直接同步 SQLite 文件，能保留并发编辑。Merkle 校验、快照和备份是可靠性机制的一部分，**不能承诺任何故障下绝不丢失**；仍需多副本备份、故障注入和规模验证。
 
@@ -78,7 +88,7 @@ MCP 支持官方 SDK 的 **HTTPS Streamable HTTP**；手动添加、默认关闭
 
 ## 构建原生应用
 
-需要 Rust stable（建议当前 stable）、平台编译工具；执行：
+需要 Rust stable（最低 1.88，建议当前 stable）、平台编译工具；执行：
 
 ```bash
 npm ci
@@ -91,7 +101,7 @@ Linux（Debian/Ubuntu）先安装 Tauri 2 依赖：
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev \
-  libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+  libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libpipewire-0.3-dev libgbm-dev libxcb-randr0-dev libclang-dev tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim
 ```
 
 目前发布目标为 Windows x64、Android 15+ arm64-v8a 与 Ubuntu 24.04+ x64。Windows 需要 Visual Studio C++ Build Tools 与 WebView2。macOS 不在本次构建目标中。详见 [Tauri 官方前置条件](https://v2.tauri.app/start/prerequisites/)。
@@ -126,7 +136,7 @@ Windows 输出 `ZhiNexus_windows_x64_<version>_protable.exe` 和 `*_setup.exe`�
 | Android_15+_arm64-v8a | 关 | `.apk` |
 | Ubuntu_24.04+_x64 | 关 | `.deb` |
 
-默认只编译、不发布；勾选 `publish_release` 可发布，`draft_release` 决定是否草稿。macOS 不参与编译。push 只运行 Validate；安装包编译通过手动选择或 API dispatch 触发，避免修改配置时重复编译未选择的平台。
+此入口**只编译测试**，没有发布选项。Windows、Android、Ubuntu 另各有独立编译入口。正式发布使用 **Release → Run workflow**：固定编译全部平台，可勾选 **Create Release** 与 **Save as draft**（默认草稿）。macOS 不参与编译；push 只运行 Validate。
 
 Release 使用 GitHub 自动注入的 `GITHUB_TOKEN` 和 `contents: write`，**不需要自行配置上传密钥**。npm、Rust 编译产物、Gradle、NDK 和 Tauri 打包工具分别通过官方缓存 Action 复用。首次构建和依赖变更仍需要编译。Android 还会构建不发布的 x86_64 调试 APK，在 API 35 模拟器测试重启、SQLite 与通知；Windows 原生测试验证真实 exe 的普通/便携隔离及数据库损坏恢复。
 
@@ -159,7 +169,7 @@ Release 使用 GitHub 自动注入的 `GITHUB_TOKEN` 和 `contents: write`，**�
 版本以 [`versions.json`](versions.json) 为准。共享 UI/领域/同步代码变化提升共同 major.minor；平台专属修复只提升对应 patch，避免其他设备无效更新：
 
 ```bash
-npm run version:bump -- shared   # 如所有平台 0.2.x → 0.3.0
+npm run version:bump -- shared   # 如所有平台 0.3.x → 0.4.0
 npm run version:bump -- windows  # 仅 Windows 0.2.0 → 0.2.1
 npm run version:bump -- android
 npm run version:bump -- ubuntu

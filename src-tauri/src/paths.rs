@@ -25,6 +25,8 @@ pub fn select_root(executable: &Path, system_root: &Path, desktop: bool) -> Stor
 }
 /// Initialize the root before creating the webview or opening any application database.
 pub fn initialize(app: &tauri::AppHandle) -> Result<StorageLocation, Box<dyn std::error::Error>> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let _transition = crate::migration::transition_lock()?;
     let executable = std::env::current_exe()?;
     let system = app.path().app_data_dir()?;
     let location = select_root(
@@ -42,6 +44,8 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<StorageLocation, Box<dyn std
             copy_tree(&previous, &location.root)?;
         }
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    app.manage(crate::migration::lease(&location.root, false)?);
     Ok(location)
 }
 /// Preserve existing app-owned configuration when moving the default root from config to app-data storage.
@@ -65,7 +69,10 @@ fn copy_tree(source: &Path, target: &Path) -> std::io::Result<()> {
 #[tauri::command]
 pub fn storage_configuration(app: tauri::AppHandle) -> serde_json::Value {
     let location = app.state::<StorageLocation>();
-    serde_json::json!({"root":location.root,"portable":location.portable,"connection":format!("sqlite:{}",location.root.join("zhinexus.db").display())})
+    let notice = fs::read(location.root.join("recovery/migration-result.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    serde_json::json!({"canMigrate":cfg!(not(any(target_os="android",target_os="ios"))),"migrationNotice":notice,"root":location.root,"portable":location.portable,"connection":format!("sqlite:{}",location.root.join("zhinexus.db").display())})
 }
 #[cfg(test)]
 mod tests {

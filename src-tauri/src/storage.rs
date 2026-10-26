@@ -17,7 +17,7 @@ fn paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
     Ok((dir.join("zhinexus.db"), recovery))
 }
 /// Check a standalone SQLite file without creating or repairing it in place.
-async fn valid(path: &Path) -> bool {
+pub(crate) async fn valid(path: &Path) -> bool {
     let options = sqlx::sqlite::SqliteConnectOptions::new()
         .filename(path)
         .read_only(true);

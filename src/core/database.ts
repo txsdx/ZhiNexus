@@ -1,4 +1,5 @@
 /** SQLite persistence: native plugin on Tauri, WASM SQLite with IndexedDB durability in browsers. */
+import { encodeDevice, decodeDevice } from "./secrets";
 import initSqlJs, { type Database as WasmDB } from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import { get, setMany } from "idb-keyval";
@@ -19,12 +20,20 @@ export class Database {
   private db?: NativeDB;
   private engine?: Awaited<ReturnType<typeof initSqlJs>>;
   private tail: Promise<unknown> = Promise.resolve();
+  private closing = false;
   recoveryNotice = "";
   backupWarning = "";
   storageLocation: {
     root: string;
     portable: boolean;
     connection: string;
+    canMigrate?: boolean;
+    migrationNotice?: {
+      success: boolean;
+      message?: string;
+      source?: string;
+      retainedTarget?: string;
+    };
   } | null = null;
   private lastNativeCheckpoint = 0;
   /** Open the device database and create only the current development schema. */
@@ -200,6 +209,10 @@ export class Database {
   }
   /** Refresh browser state while holding a cross-tab write lock and roll back failed durability. */
   private write<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.closing)
+      return Promise.reject(
+        Error("正在关闭数据库以迁移或退出 / Storage is closing"),
+      );
     const run = async () => {
       const body = async () => {
         if (this.engine) {
@@ -230,6 +243,26 @@ export class Database {
     this.tail = task.catch(() => {});
     return task;
   }
+  /** Stop accepting writes, drain committed work and release SQLite before a post-exit helper copies storage. */
+  async closeForMaintenance() {
+    this.closing = true;
+    await this.tail;
+    if (this.db) {
+      await this.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("checkpoint_storage");
+      await this.db.close();
+      this.db = undefined;
+    }
+  }
+  /** Reopen the same root when helper launch fails; no schema or database replacement is performed. */
+  async resumeAfterMaintenance() {
+    if (native && !this.db) {
+      const { default: SQL } = await import("@tauri-apps/plugin-sql");
+      this.db = await SQL.load(this.storageLocation!.connection);
+    }
+    this.closing = false;
+  }
   /** Read all immutable operations; derived indexes may be rebuilt at any time. */
   async events(): Promise<Envelope[]> {
     const read = async (): Promise<Envelope[]> => {
@@ -255,11 +288,11 @@ export class Database {
   /** Insert an atomic, idempotent batch using one SQLite statement. */
   async append(events: Envelope[]) {
     if (!events.length) return;
-    await this.journal(
-      "events",
-      events.map((e) => ({ id: e.hash, data: canonical(e) })),
-    );
     await this.write(async () => {
+      await this.journal(
+        "events",
+        events.map((e) => ({ id: e.hash, data: canonical(e) })),
+      );
       await this.exec(
         "INSERT OR IGNORE INTO events(hash,json) SELECT json_extract(value,'$.hash'), json(value) FROM json_each(?)",
         [JSON.stringify(events)],
@@ -272,19 +305,23 @@ export class Database {
       "SELECT value FROM meta WHERE key=?",
       [key],
     );
-    return rows.length ? JSON.parse(rows[0].value) : fallback;
+    if (!rows.length) return fallback;
+    const value = JSON.parse(rows[0].value);
+    return (key === "device" ? await decodeDevice(value) : value) as T;
   }
   /** Persist a device-specific preference. */
   async setLocal(key: string, value: unknown) {
-    await this.journal("meta", [
-      { id: await sha256(key), data: canonical({ key, value }) },
-    ]);
-    await this.write(() =>
-      this.exec("INSERT OR REPLACE INTO meta(key,value) VALUES (?,?)", [
+    if (key === "device")
+      value = await encodeDevice(value as Record<string, unknown>);
+    await this.write(async () => {
+      await this.journal("meta", [
+        { id: await sha256(key), data: canonical({ key, value }) },
+      ]);
+      await this.exec("INSERT OR REPLACE INTO meta(key,value) VALUES (?,?)", [
         key,
         JSON.stringify(value),
-      ]),
-    );
+      ]);
+    });
   }
   /** Address attachment bytes by digest and verify before committing them. */
   async putBlob(
@@ -295,16 +332,15 @@ export class Database {
     if (bytes.length > 20 * 1024 * 1024) throw Error("单个附件上限 20 MiB");
     const hash = await sha256(bytes);
     if (expected && hash !== expected) throw Error("附件 SHA-256 不匹配");
-    await this.journal("blobs", [
-      { id: hash, data: canonical({ mime, data: base64(bytes) }) },
-    ]);
-    await this.write(() =>
-      this.exec("INSERT OR IGNORE INTO blobs(hash,mime,data) VALUES (?,?,?)", [
-        hash,
-        mime,
-        base64(bytes),
-      ]),
-    );
+    await this.write(async () => {
+      await this.journal("blobs", [
+        { id: hash, data: canonical({ mime, data: base64(bytes) }) },
+      ]);
+      await this.exec(
+        "INSERT OR IGNORE INTO blobs(hash,mime,data) VALUES (?,?,?)",
+        [hash, mime, base64(bytes)],
+      );
+    });
     return hash;
   }
   /** Retrieve verified attachment data for rendering or transfer. */

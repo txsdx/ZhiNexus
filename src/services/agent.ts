@@ -2,28 +2,11 @@
 import { sha256 } from "../core/crypto";
 import { executeKnowledgeTool, knowledgeTools } from "./agent-tools";
 import { store, json } from "../core/store";
-import type { Message, McpConfig, Topic } from "../core/types";
+import type { Message, Topic } from "../core/types";
 import { complete, renderPrompt } from "./ai";
-import { secureUrl, request } from "./network";
-/** Connect using the maintained MCP SDK and Streamable HTTP protocol. */
-async function connectMcp(config: McpConfig) {
-  secureUrl(config.url);
-  const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
-    import("@modelcontextprotocol/sdk/client/index.js"),
-    import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
-  ]);
-  const client = new Client({ name: "ZhiNexus", version: "0.1.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(config.url), {
-    requestInit: {
-      headers: config.token ? { Authorization: "Bearer " + config.token } : {},
-    },
-    fetch: async (input, init) => request(String(input), init),
-  });
-  await client.connect(transport);
-  return client;
-}
+import { connectMcp } from "./mcp";
 /** Run at most six tool rounds and persist protocol-complete messages after every round. */
-export async function chat(
+async function chatInternal(
   topic: Topic,
   text: string,
   confirm: (description: string) => Promise<boolean>,
@@ -185,4 +168,17 @@ export async function chat(
   } finally {
     await Promise.allSettled(clients.map((c) => c.close()));
   }
+}
+
+/** Notify once for the complete turn, rather than on every intermediate tool round. */
+export async function chat(...args: Parameters<typeof chatInternal>) {
+  await chatInternal(...args);
+  const { notifyCompletion } = await import("./notifications");
+  const topic = store
+    .getSnapshot()
+    .topics.find((topic) => topic.id === args[0].id);
+  const final =
+    topic?.messages.filter((message) => message.role === "assistant").at(-1)
+      ?.content ?? "";
+  void notifyCompletion("ai", final).catch(() => {});
 }

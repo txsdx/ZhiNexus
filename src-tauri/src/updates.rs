@@ -154,7 +154,7 @@ pub async fn install_platform_update(
             attempt.follow()
         }
     });
-    let client = reqwest::Client::builder()
+    let client = crate::network::client(&app, std::time::Duration::from_secs(900))?
         .https_only(true)
         .redirect(redirect)
         .timeout(std::time::Duration::from_secs(900))

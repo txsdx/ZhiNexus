@@ -49,6 +49,7 @@ function projection(
     ...defaultAI(),
     ...docs.find((d) => d.collection === "setting" && d.id === "ai")?.fields,
   } as AIConfig;
+  ai.tasks = { ...defaultAI().tasks, ...ai.tasks };
   const entries = rows<Entry>("entry").map((e) => ({
     ...e,
     tags: e.tags ?? [],
@@ -73,6 +74,7 @@ export class KnowledgeStore {
   readonly db = new Database();
   private listeners = new Set<() => void>();
   private deviceId = "";
+  private maintenance = false;
   private queue: Promise<unknown> = Promise.resolve();
   private channel?: BroadcastChannel;
   private state: Snapshot = {
@@ -133,6 +135,10 @@ export class KnowledgeStore {
   }
   /** Serialize commands so a session cannot accidentally reuse its causal counter. */
   private serial<T>(action: () => Promise<T>): Promise<T> {
+    if (this.maintenance)
+      return Promise.reject(
+        Error("正在迁移或退出，请稍候 / Maintenance in progress"),
+      );
     const task = this.queue.then(action, action);
     this.queue = task.catch(() => {});
     return task;
@@ -236,8 +242,37 @@ export class KnowledgeStore {
   }
   /** Persist local credentials and notification preferences separately from syncable data. */
   async saveDevice(device: DeviceConfig) {
-    await this.db.setLocal("device", device);
-    await this.reload(device);
+    const before = this.state.device;
+    const patch = Object.fromEntries(
+      [...new Set([...Object.keys(before), ...Object.keys(device)])]
+        .filter(
+          (key) =>
+            JSON.stringify(before[key as keyof DeviceConfig]) !==
+            JSON.stringify(device[key as keyof DeviceConfig]),
+        )
+        .map((key) => [key, device[key as keyof DeviceConfig]]),
+    );
+    await this.updateDevice(patch);
+  }
+  /** Apply only intended device fields inside the command queue, preserving concurrent key/notification edits. */
+  async updateDevice(patch: Partial<DeviceConfig>) {
+    await this.serial(async () => {
+      const device = { ...this.state.device, ...patch };
+      await this.db.setLocal("device", device);
+      await this.reload(device);
+    });
+  }
+  /** Freeze new commands and drain existing work before releasing the local SQL connection. */
+  async suspend() {
+    this.maintenance = true;
+    await this.queue;
+    await this.db.closeForMaintenance();
+  }
+  /** Restore command processing when a native helper could not be started. */
+  async resume() {
+    await this.db.resumeAfterMaintenance();
+    this.maintenance = false;
+    await this.reload();
   }
   /** Load curated examples only when explicitly requested by the user. */
   async seed() {

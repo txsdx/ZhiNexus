@@ -1,0 +1,95 @@
+# Shared desktop build implementation, invoked by the dedicated platform workflows.
+name: Desktop build implementation
+on:
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-latest' || 'ubuntu-24.04' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        if: runner.os == 'Windows'
+        with:
+          path: |
+            ~/AppData/Local/tauri
+            ~/AppData/Local/tauri-cli
+          key: tauri-bundlers-${{ runner.os }}-v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-all-crates: true
+          cache-on-failure: true
+          shared-key: desktop-${{ inputs.platform == 'windows' && 'windows-x64' || 'ubuntu-24.04-x64' }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf webkit2gtk-driver xvfb dbus-x11 libpipewire-0.3-dev libgbm-dev libxcb-randr0-dev libclang-dev tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim
+      - run: npm ci
+      - run: npm test
+      - run: node --test scripts/*.test.mjs
+      - run: node scripts/versions.mjs prepare ${{ inputs.platform }}
+      - name: Configure optional updater signing
+        id: metadata
+        env:
+          UPDATER_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          BUILD_PLATFORM: ${{ inputs.platform }}
+        run: node scripts/release-config.mjs
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: --bundles ${{ inputs.platform == 'windows' && 'nsis' || 'deb' }}
+      - name: Package portable and setup executables without recompiling
+        if: runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: pwsh
+        run: ./scripts/package-portable.ps1
+      - name: Prepare Windows native UI driver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/start-windows-driver.ps1
+      - name: Test real Windows storage and portable recovery
+        if: runner.os == 'Windows'
+        run: node scripts/native-smoke.mjs
+      - name: Prepare native driver and extract Ubuntu DEB
+        if: runner.os == 'Linux'
+        run: bash scripts/start-linux-driver.sh
+      - name: Test the packaged Ubuntu executable and portable recovery
+        if: runner.os == 'Linux'
+        run: node scripts/native-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ runner.os }}-native-test-results
+          path: |
+            native-test-results/
+            ${{ runner.temp }}/tauri-driver.log
+            ${{ runner.temp }}/tauri-driver.err.log
+      - name: Sign Ubuntu DEB when a publisher key is configured
+        if: runner.os == 'Linux'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/sign-release-files.mjs src-tauri/target/release/bundle/deb
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ZhiNexus-${{ inputs.platform == 'windows' && 'windows-x64' || 'ubuntu-24.04-x64' }}
+          path: |
+            release-files/*.exe
+            release-files/*.sig
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.sig

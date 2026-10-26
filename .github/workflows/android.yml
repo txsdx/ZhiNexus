@@ -1,32 +1,10 @@
-# Android builds use an installable development certificate unless a stable publisher certificate is configured.
+# Dedicated Android build and Android 15 device tests.
 name: Build Android
 on:
-  workflow_call:
-    inputs:
-      publish_release:
-        type: boolean
-        default: false
-      draft_release:
-        type: boolean
-        default: false
-      tag:
-        type: string
-        default: ""
   workflow_dispatch:
-    inputs:
-      publish_release:
-        description: Publish an installable APK with the automatic GITHUB_TOKEN (custom signing key optional)
-        type: boolean
-        default: false
-      tag:
-        description: Existing or new draft release tag
-        default: ""
-      draft_release:
-        description: Keep the Release as a draft
-        type: boolean
-        default: false
+  workflow_call:
 permissions:
-  contents: write
+  contents: read
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -155,29 +133,6 @@ jobs:
         with:
           name: Android-device-test-results
           path: android-test-results/
-      - if: inputs.publish_release
-        name: Prepare shared update metadata
-        run: |
-          curl --fail --silent --show-error --location 'https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json' -o previous-latest.json || rm -f previous-latest.json
-          node scripts/updater-manifest.mjs release-files
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
-      - if: inputs.publish_release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-          RELEASE_DRAFT: ${{ inputs.draft_release }}
-        run: |
-          expected_tag="v$(node scripts/versions.mjs release)"
-          release_tag="${RELEASE_TAG:-$expected_tag}"
-          test "$release_tag" = "$expected_tag"
-          if ! gh release view "$release_tag"; then
-            draft_args=()
-            if [ "$RELEASE_DRAFT" = true ]; then draft_args+=(--draft); fi
-            gh release create "$release_tag" "${draft_args[@]}" --title "ZhiNexus $release_tag" --notes-file .ai/CHANGELOG.md
-          fi
-          mapfile -d '' assets < <(find release-files -type f \( -name '*.apk' -o -name '*.sig' -o -name 'latest.json' \) -print0)
-          gh release upload "$release_tag" "${assets[@]}" --clobber
       - uses: actions/upload-artifact@v4
         if: always()
         with:

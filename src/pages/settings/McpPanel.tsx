@@ -1,75 +1,182 @@
-/** Mcp configuration panel with explicit persistence and verification. */
+/** Local MCP transport configuration, validated argument/environment editing and explicit connection tests. */
+import { useState } from "react";
+import { z } from "zod";
 import { store } from "../../core/store";
+import type { McpConfig } from "../../core/types";
+import { connectMcp } from "../../services/mcp";
+import { serviceUrl } from "../../services/network";
 import { useSettings } from "./context";
-/** McpPanel exposes one focused settings workflow. */
+/** Configure SDK HTTP/SSE or directly owned desktop stdio processes without shell command parsing. */
 export function McpPanel() {
-  const { t, device, setDevice, act } = useSettings();
+  const { t, device, setDevice, act, busy, notify } = useSettings();
+  const [drafts, setDrafts] = useState<
+    Record<string, { args?: string; env?: string }>
+  >({});
+  const update = (id: string, patch: Partial<McpConfig>) =>
+    setDevice({
+      ...device,
+      mcp: device.mcp.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    });
+  const parse = (m: McpConfig): McpConfig => {
+    if (m.transport !== "stdio") {
+      serviceUrl(m.url);
+      return m;
+    }
+    if (!m.command?.trim())
+      throw Error(t("请填写可执行程序", "Enter an executable"));
+    return {
+      ...m,
+      args: z
+        .array(z.string())
+        .max(128)
+        .parse(JSON.parse(drafts[m.id]?.args ?? JSON.stringify(m.args ?? []))),
+      env: z
+        .record(z.string(), z.string())
+        .parse(JSON.parse(drafts[m.id]?.env ?? JSON.stringify(m.env ?? {}))),
+    };
+  };
   return (
     <>
       <h2>{t("连接外部工具", "Connect external tools")}</h2>
       <p className="muted">
         {t(
-          "支持 HTTPS Streamable HTTP MCP，采用官方 SDK。默认关闭；Agent 每次执行外部工具都要求确认。暂不执行 stdio 命令。",
-          "Uses the official SDK for HTTPS Streamable HTTP MCP. Disabled by default; every tool execution requires confirmation. Stdio commands are not executed.",
+          "支持 Streamable HTTP、SSE 和桌面 stdio。stdio 配置程序路径、参数数组和环境变量；每次 Agent 执行外部工具时确认。导入其他设备的 stdio 配置默认关闭。",
+          "Supports Streamable HTTP, SSE and desktop stdio. Configure executable, argument array and environment variables. Agent tool execution requires confirmation; imported stdio configurations start disabled.",
         )}
       </p>
-      {device.mcp.map((m, i) => (
+      {device.mcp.map((m) => (
         <section className="mcp-card" key={m.id}>
-          <input
-            aria-label="MCP name"
-            value={m.name}
-            onChange={(e) =>
-              setDevice({
-                ...device,
-                mcp: device.mcp.map((x, j) =>
-                  i === j ? { ...x, name: e.target.value } : x,
-                ),
-              })
-            }
-          />
-          <input
-            aria-label="MCP URL"
-            placeholder="https://mcp.example.com/mcp"
-            value={m.url}
-            onChange={(e) =>
-              setDevice({
-                ...device,
-                mcp: device.mcp.map((x, j) =>
-                  i === j ? { ...x, url: e.target.value } : x,
-                ),
-              })
-            }
-          />
-          <input
-            aria-label="MCP token"
-            type="password"
-            placeholder="Bearer token (optional, device only)"
-            value={m.token}
-            onChange={(e) =>
-              setDevice({
-                ...device,
-                mcp: device.mcp.map((x, j) =>
-                  i === j ? { ...x, token: e.target.value } : x,
-                ),
-              })
-            }
-          />
+          <label>
+            {t("名称", "Name")}
+            <input
+              aria-label="MCP name"
+              value={m.name}
+              onChange={(e) => update(m.id, { name: e.target.value })}
+            />
+          </label>
+          <label>
+            {t("协议", "Transport")}
+            <select
+              value={m.transport ?? "http"}
+              onChange={(e) =>
+                update(m.id, {
+                  transport: e.target.value as McpConfig["transport"],
+                  enabled: false,
+                })
+              }
+            >
+              <option value="http">Streamable HTTP</option>
+              <option value="sse">SSE</option>
+              <option value="stdio">stdio · {t("仅桌面", "desktop")}</option>
+            </select>
+          </label>
+          {m.transport === "stdio" ? (
+            <>
+              <label>
+                {t("程序路径或命令名", "Executable path or name")}
+                <input
+                  value={m.command ?? ""}
+                  placeholder="npx"
+                  onChange={(e) => update(m.id, { command: e.target.value })}
+                />
+              </label>
+              <label>
+                {t("参数（JSON 字符串数组）", "Arguments (JSON string array)")}
+                <textarea
+                  rows={3}
+                  value={
+                    drafts[m.id]?.args ?? JSON.stringify(m.args ?? [], null, 2)
+                  }
+                  onChange={(e) =>
+                    setDrafts({
+                      ...drafts,
+                      [m.id]: { ...drafts[m.id], args: e.target.value },
+                    })
+                  }
+                />
+              </label>
+              <label>
+                {t(
+                  "环境变量（JSON 对象）",
+                  "Environment variables (JSON object)",
+                )}
+                <textarea
+                  rows={3}
+                  spellCheck={false}
+                  value={
+                    drafts[m.id]?.env ?? JSON.stringify(m.env ?? {}, null, 2)
+                  }
+                  onChange={(e) =>
+                    setDrafts({
+                      ...drafts,
+                      [m.id]: { ...drafts[m.id], env: e.target.value },
+                    })
+                  }
+                />
+              </label>
+              <label>
+                {t(
+                  "工作目录（可选绝对路径）",
+                  "Working directory (optional absolute path)",
+                )}
+                <input
+                  value={m.cwd ?? ""}
+                  onChange={(e) => update(m.id, { cwd: e.target.value })}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                URL
+                <input
+                  aria-label="MCP URL"
+                  placeholder="http://localhost:3000/mcp"
+                  value={m.url}
+                  onChange={(e) => update(m.id, { url: e.target.value })}
+                />
+              </label>
+              <label>
+                {t("访问令牌（可选）", "Access token (optional)")}
+                <input
+                  aria-label="MCP token"
+                  type="password"
+                  value={m.token}
+                  onChange={(e) => update(m.id, { token: e.target.value })}
+                />
+              </label>
+            </>
+          )}
           <div className="actions">
             <label className="toggle">
               <input
                 type="checkbox"
                 checked={m.enabled}
-                onChange={(e) =>
-                  setDevice({
-                    ...device,
-                    mcp: device.mcp.map((x, j) =>
-                      i === j ? { ...x, enabled: e.target.checked } : x,
-                    ),
-                  })
-                }
+                onChange={(e) => update(m.id, { enabled: e.target.checked })}
               />
               {t("启用", "Enabled")}
             </label>
+            <button
+              disabled={!!busy || !m.enabled}
+              onClick={() =>
+                void act(t("测试连接", "Testing connection"), async () => {
+                  const client = await connectMcp(parse(m));
+                  try {
+                    const tools = await client.listTools();
+                    notify(
+                      t(
+                        `连接成功：${tools.tools.length} 个工具`,
+                        `Connected: ${tools.tools.length} tools`,
+                      ),
+                    );
+                  } finally {
+                    await client.close();
+                  }
+                })
+              }
+            >
+              {t("测试连接", "Test connection")}
+            </button>
             <button
               className="danger"
               onClick={() =>
@@ -94,9 +201,10 @@ export function McpPanel() {
                 {
                   id: crypto.randomUUID(),
                   name: "MCP",
+                  transport: "http",
                   url: "",
-                  enabled: false,
                   token: "",
+                  enabled: false,
                 },
               ],
             })
@@ -106,13 +214,13 @@ export function McpPanel() {
         </button>
         <button
           className="primary"
+          disabled={!!busy}
           onClick={() =>
-            void act(t("保存 MCP", "Saving MCP"), () =>
-              store.saveDevice({
-                ...store.getSnapshot().device,
-                mcp: device.mcp,
-              }),
-            )
+            void act(t("保存 MCP", "Saving MCP"), async () => {
+              const mcp = device.mcp.map((m) => (m.enabled ? parse(m) : m));
+              await store.saveDevice({ ...store.getSnapshot().device, mcp });
+              notify(t("MCP 配置已保存", "MCP configuration saved"));
+            })
           }
         >
           {t("保存 MCP 配置", "Save MCP configuration")}

@@ -3,7 +3,6 @@ import { useState } from "react";
 import { sealCredentials, unlockCredentials } from "../../services/vault";
 import { RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { store } from "../../core/store";
-import { enableNotifications } from "../../services/device";
 import { synchronize } from "../../services/sync";
 import { useSettings } from "./context";
 /** Manage HTTPS replication and an optional end-to-end encrypted credential vault. */
@@ -71,33 +70,6 @@ export function SynchronizationPanel() {
           }
         />
       </label>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={device.notifications}
-          onChange={(e) => {
-            const checked = e.target.checked;
-            void act(t("通知权限", "Notification permission"), async () => {
-              const allowed = checked ? await enableNotifications() : false;
-              setDevice({ ...device, notifications: allowed });
-              if (checked && !allowed)
-                notify(
-                  t(
-                    "未获得系统通知权限",
-                    "Notification permission was not granted",
-                  ),
-                );
-            });
-          }}
-        />
-        {t("在此设备提醒我复习", "Remind me on this device")}
-      </label>
-      <p className="muted">
-        {t(
-          "Android 使用系统排程，关闭页面后仍可提醒（系统省电或强制停止可能延迟或阻止）；桌面版目前仅运行期间提醒。电脑和手机可独立开关。",
-          "Android alarms are scheduled with the OS and can fire after the webview closes; battery restrictions or force-stop can delay or prevent delivery. Desktop reminders currently require the app to run. Each device has its own switch.",
-        )}
-      </p>
       <div className="actions">
         <button
           className="primary"

@@ -92,8 +92,8 @@ try {
     ),
   );
   await page.locator(".mobile-settings").click();
-  await page.locator(".settings-tabs button:nth-child(5)").click();
-  const toggle = page.locator(".settings-content input[type=checkbox]");
+  await page.locator('.settings-tabs [data-settings-tab="notifications"]').click();
+  const toggle = page.locator(".settings-content input[type=checkbox]").first();
   await toggle.check();
   await page.locator(".settings-content .primary").click();
   await waitFor(() => device("shell", "dumpsys", "alarm").includes(pkg));

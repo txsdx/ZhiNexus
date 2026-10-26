@@ -82,7 +82,24 @@ export type Task =
   | "classify"
   | "relations"
   | "agent"
+  | "ocr"
   | "image";
+/** Per-device proxy policy shared by every native network client. */
+export interface ProxySettings {
+  mode: "system" | "http" | "socks5";
+  url: string;
+  username: string;
+  password: string;
+  bypass: string;
+}
+/** Native desktop preferences mirrored into encrypted backups, with OS integration applied explicitly. */
+export interface DesktopPreferences {
+  background: boolean;
+  autostart: boolean;
+  captureShortcut: string;
+  ocrShortcut: string;
+  showShortcut: string;
+}
 /** Only server-declared capabilities; null denotes unknown support. */
 export interface Model {
   id: string;
@@ -109,11 +126,22 @@ export interface AIConfig {
 /** Local credentials and device-specific scheduling and notification preferences. */
 export interface DeviceConfig {
   apiKey: string;
+  apiKeyEndpoint?: string;
+  apiKeySyncKey?: string;
+  proxy?: ProxySettings;
+  desktop?: DesktopPreferences;
   davUrl: string;
   davUser: string;
   davPassword: string;
   syncMinutes: number;
   notifications: boolean;
+  notificationOptions?: {
+    aiWhenUnfocused: boolean;
+    ocrWhenUnfocused: boolean;
+    syncFailures: boolean;
+    preview: boolean;
+    cooldownSeconds: number;
+  };
   lastSync: string;
   mcp: McpConfig[];
 }
@@ -124,6 +152,11 @@ export interface McpConfig {
   url: string;
   enabled: boolean;
   token: string;
+  transport?: "http" | "sse" | "stdio";
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
 }
 /** Structured review question, reference answer and grading rubric. */
 export interface Question {

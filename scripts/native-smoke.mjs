@@ -105,11 +105,21 @@ async function start() {
   session = data.sessionId;
   await waitFor(() => script('return !!document.querySelector(".app-shell")'));
   assert.equal(await script("return !!window.__TAURI_INTERNALS__"), true);
+  await waitFor(() => script('return document.fonts.status === "loaded"'));
+  // Native window fitting and offline font loading must settle before coordinate-based clicks.
+  await new Promise((resolve) => setTimeout(resolve, 500));
 }
 /** Close only the process created by this test. */
 async function stop() {
   try {
-    if (session) await command("DELETE", "");
+    if (session) {
+      // Closing a window now hides it in the tray. Explicitly quit the test-owned app before releasing its driver session.
+      await script(
+        'setTimeout(()=>window.__TAURI_INTERNALS__.invoke("quit_desktop"),50);return true;',
+      ).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await command("DELETE", "").catch(() => {});
+    }
   } finally {
     session = "";
     if (ownedApplication) {
@@ -169,10 +179,33 @@ try {
   }
   await start();
   await click(".sidebar-bottom>button");
-  await click(".settings-tabs button:nth-child(7)");
+  await click('.settings-tabs [data-settings-tab="database"]');
   await waitFor(() =>
     script('return !!document.querySelector(".database-stats")'),
   );
+  // Exercise the maintained SDK against a real directly spawned local child, using the normal settings UI.
+  await click('.settings-tabs [data-settings-tab="mcp"]');
+  await script(
+    'document.querySelectorAll(".settings-content button")[0].click();return true;',
+  );
+  await waitFor(() =>
+    script('return !!document.querySelector(".mcp-card select")'),
+  );
+  await script(
+    'const select=document.querySelector(".mcp-card select");Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,"value").set.call(select,"stdio");select.dispatchEvent(new Event("change",{bubbles:true}));return true;',
+  );
+  await type(".mcp-card input:not([type])", "Native MCP fixture");
+  await type(".mcp-card label:nth-of-type(3) input", process.execPath);
+  await type(
+    ".mcp-card textarea",
+    JSON.stringify([path.resolve("scripts/fixtures/mcp-server.mjs")]),
+  );
+  await click('.mcp-card input[type="checkbox"]');
+  await click(".mcp-card .actions button");
+  await waitFor(() =>
+    script('return document.querySelector(".toast")?.innerText.includes("1")'),
+  );
+  await click('.settings-tabs [data-settings-tab="database"]');
   const systemInfo = await script(
     'return document.querySelector(".settings-content .notice")?.innerText',
   );
@@ -201,7 +234,7 @@ try {
     ),
   );
   await click(".sidebar-bottom>button");
-  await click(".settings-tabs button:nth-child(7)");
+  await click('.settings-tabs [data-settings-tab="database"]');
   await waitFor(() =>
     script('return !!document.querySelector(".database-stats")'),
   );

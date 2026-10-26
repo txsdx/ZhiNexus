@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { store, json } from "../core/store";
 import { encryptBackup, decryptBackup } from "../core/crypto";
-import { secureUrl } from "./network";
+import { secureUrl, serviceUrl } from "./network";
 const credentialsSchema = z.object({
   apiKey: z.string(),
   davUrl: z.string(),
@@ -15,6 +15,11 @@ const credentialsSchema = z.object({
       url: z.string(),
       enabled: z.boolean(),
       token: z.string(),
+      transport: z.enum(["http", "sse", "stdio"]).optional(),
+      command: z.string().optional(),
+      args: z.array(z.string()).optional(),
+      env: z.record(z.string(), z.string()).optional(),
+      cwd: z.string().optional(),
     }),
   ),
 });
@@ -49,6 +54,18 @@ export async function unlockCredentials(passphrase: string) {
     await decryptBackup(vault.fields.cipher, passphrase),
   );
   if (credentials.davUrl) secureUrl(credentials.davUrl);
-  for (const m of credentials.mcp) if (m.url) secureUrl(m.url);
+  for (const m of credentials.mcp) {
+    if (m.transport !== "stdio" && m.url) serviceUrl(m.url);
+    if (m.transport === "stdio") {
+      const local = store
+        .getSnapshot()
+        .device.mcp.find((x) => x.id === m.id && x.transport === "stdio");
+      m.enabled = Boolean(
+        local?.enabled &&
+        JSON.stringify([local.command, local.args, local.env, local.cwd]) ===
+          JSON.stringify([m.command, m.args, m.env, m.cwd]),
+      );
+    }
+  }
   await store.saveDevice({ ...store.getSnapshot().device, ...credentials });
 }

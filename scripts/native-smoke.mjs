@@ -254,6 +254,13 @@ try {
   await stop();
   fs.writeFileSync(marker, "");
   await start();
+  // A previous failed smoke run may have left this fixture's intentionally unsaved draft; exercise cancel before reusing it.
+  if (
+    await script(
+      'return document.querySelector(".title-input")?.value==="Native portable recovery"',
+    )
+  )
+    await click(".entry-heading .actions button:nth-child(2)");
   await click(".capture-button");
   await type(".modal input", "Native portable recovery");
   await type(".modal textarea", "Native SQLite first draft");
@@ -397,7 +404,7 @@ try {
   await type(".search-box input", freshTitle);
   await waitFor(() =>
     script(
-      'return document.querySelector(".entry-row")?.innerText.includes(arguments[0])',
+      'return Array.from(document.querySelectorAll(".entry-row")).some(row=>row.innerText.includes(arguments[0]))',
       [freshTitle],
     ),
   );
@@ -405,7 +412,7 @@ try {
   await waitFor(() =>
     script('return document.querySelectorAll(".entry-row").length===1'),
   );
-  await click(".entry-row");
+  await click(".entry-title-cell button");
   await waitFor(() =>
     script(
       'return document.querySelector(".paper .markdown h1")?.textContent==="Native portable recovery"&&document.querySelector(".paper .markdown")?.innerText.includes("Verified native edit survives corruption.")',

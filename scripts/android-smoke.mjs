@@ -126,7 +126,7 @@ try {
   await page.locator('.entry-tabs [role="tab"]').waitFor();
   await page.locator(".sidebar nav button:nth-child(2)").click();
   await page.locator(".search-box input").fill("Android native memory");
-  await page.locator(".entry-row").click();
+  await page.locator(".entry-title-cell button").click();
   assert.ok(
     (await page.locator(".paper .markdown").innerText()).includes(
       "SQLite content survives",

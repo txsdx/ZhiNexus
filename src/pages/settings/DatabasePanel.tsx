@@ -1,17 +1,10 @@
 /** Database configuration panel with explicit persistence and verification. */
-import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Modal } from "../../components/common";
-import {
-  desktopAvailable,
-  migrateStorage,
-  type MigrationPlan,
-} from "../../services/desktop";
 import {
   auditAndRepair,
-  auditLocal,
   recoverCloudSnapshots,
 } from "../../services/integrity";
+import { SynchronizationPanel } from "./SynchronizationPanel";
+import { StorageLocationPanel } from "./StorageLocationPanel";
 import { ConflictManager } from "../../components/ConflictManager";
 import { Database, Download, ShieldCheck, Upload } from "lucide-react";
 import { store } from "../../core/store";
@@ -26,110 +19,15 @@ export function DatabasePanel() {
     busy,
     act,
     setReport,
+    setBusy,
     setSize,
     notify,
     setPassword,
     setArchive,
   } = useSettings();
-  const [plan, setPlan] = useState<MigrationPlan | null>(null);
   return (
     <>
-      <h2>{t("数据始终属于你", "Your data stays yours")}</h2>
-      {store.db.storageLocation && (
-        <div className="notice">
-          {store.db.storageLocation.portable
-            ? t(
-                "便携模式：数据随程序目录保存",
-                "Portable mode: data stays with this executable",
-              )
-            : t(
-                "系统用户应用数据目录",
-                "System user application-data directory",
-              )}
-          <code style={{ overflowWrap: "anywhere" }}>
-            {store.db.storageLocation.root}
-          </code>
-        </div>
-      )}
-      {store.db.storageLocation?.migrationNotice && (
-        <p role="status">
-          {store.db.storageLocation.migrationNotice.success
-            ? t(
-                "数据迁移已完成，源数据与旧目标备份均已保留。",
-                "Storage migration completed; source and previous target retained.",
-              )
-            : store.db.storageLocation.migrationNotice.message}
-        </p>
-      )}
-      {desktopAvailable && (
-        <button
-          disabled={!!busy}
-          onClick={() =>
-            void act(
-              t("检查迁移目录", "Checking storage locations"),
-              async () =>
-                setPlan(
-                  await invoke<MigrationPlan>("storage_migration_plan", {
-                    portable: !store.db.storageLocation?.portable,
-                  }),
-                ),
-            )
-          }
-        >
-          {store.db.storageLocation?.portable
-            ? t("迁移到系统应用数据目录", "Move to system application data")
-            : t(
-                "迁移为 protable（程序目录 _data）",
-                "Move to protable (executable _data)",
-              )}
-        </button>
-      )}
-      {plan && (
-        <Modal
-          title={t("确认迁移并重启", "Confirm storage migration and restart")}
-          onClose={() => {
-            if (!busy) setPlan(null);
-          }}
-        >
-          <p>
-            {t(
-              "程序将关闭数据库并重启，逐文件校验后切换目录。源目录保留；目标已有数据会整体备份，不会自动混合两套数据库。",
-              "The app will close storage, verify copied files and restart. The source is retained. Existing target data is backed up separately, without merging databases.",
-            )}
-          </p>
-          <p>
-            {t("来源：", "From: ")}
-            <code>{plan.source}</code>
-          </p>
-          <p>
-            {t("目标：", "To: ")}
-            <code>{plan.target}</code>
-          </p>
-          <p>
-            {plan.files} {t("个文件", "files")} ·{" "}
-            {(plan.bytes / 1024 / 1024).toFixed(2)} MiB
-          </p>
-          {plan.targetExists && (
-            <p>
-              {t(
-                "目标目录已存在，将保留带日期标识的独立备份。",
-                "The existing target will be retained in a uniquely named backup.",
-              )}
-            </p>
-          )}
-          <button
-            className="primary"
-            disabled={!!busy}
-            onClick={() =>
-              void act(t("正在迁移并重启…", "Migrating and restarting…"), () =>
-                migrateStorage(plan),
-              )
-            }
-          >
-            {t("迁移并重启", "Migrate and restart")}
-          </button>
-        </Modal>
-      )}
+      <h2>{t("数据库与云同步", "Database & cloud sync")}</h2>
       <div className="database-stats">
         <strong>
           {(size / 1024 / 1024).toFixed(2)} <small>MiB</small>
@@ -143,14 +41,17 @@ export function DatabasePanel() {
         <button
           disabled={!!busy}
           onClick={() =>
-            void act(t("校验日志与附件…", "Checking integrity…"), async () => {
-              const report = await auditLocal();
-              setReport("SQLite: ok\n" + JSON.stringify(report, null, 2));
-            })
+            void act(
+              t("校验本地与云端…", "Verifying local and cloud…"),
+              async () => {
+                const report = await auditAndRepair(undefined, setBusy);
+                setReport("SQLite: ok\n" + JSON.stringify(report, null, 2));
+              },
+            )
           }
         >
           <ShieldCheck size={16} />
-          {t("全库完整性校验", "Verify database")}
+          {t("校验、修复并清理", "Verify, repair & clean up")}
         </button>
         <button
           disabled={!!busy}
@@ -182,20 +83,15 @@ export function DatabasePanel() {
           {t("上传完整快照", "Upload full snapshot")}
         </button>
       </div>
-      <h3>{t("同步修复与恢复", "Replica repair and recovery")}</h3>
+      <p className="muted">
+        {t(
+          "校验将联网读取云端日志、附件与快照，合并本地尚未上传的修改，双向修复后重新读取并比较摘要，再安全清理恢复冗余。无法连接、缺少可信副本或云端持续变更时不清理。请先在下方保存 WebDAV 配置。",
+          "Verification reads cloud operations, attachments and snapshots, merges unpublished local edits, repairs both replicas and compares fresh digests before cleaning recovery redundancy. Cleanup is skipped on connection failures, missing repair sources or ongoing cloud changes. Save WebDAV settings below first.",
+        )}
+      </p>
+      <SynchronizationPanel />
+      <h3>{t("云端快照恢复", "Cloud snapshot recovery")}</h3>
       <div className="actions">
-        <button
-          disabled={!!busy}
-          onClick={() =>
-            void act(
-              t("深度校验并修复…", "Deep auditing and repairing…"),
-              async () =>
-                setReport(JSON.stringify(await auditAndRepair(), null, 2)),
-            )
-          }
-        >
-          {t("校验并修复云端副本", "Audit and repair cloud replica")}
-        </button>
         <button
           disabled={!!busy}
           onClick={() => {
@@ -266,6 +162,7 @@ export function DatabasePanel() {
           />
         </label>
       </div>
+      <StorageLocationPanel />
       <ConflictManager />
       <h3>{t("回收站", "Recycle bin")}</h3>
       {s.docs
@@ -284,8 +181,8 @@ export function DatabasePanel() {
         ))}
       <p className="muted">
         {t(
-          "不会自动清理日志或附件，以避免离线设备丢失数据。存储空间会随历史增长。",
-          "Logs and attachments are retained to protect offline devices. History grows over time.",
+          "自动清理三份已验证恢复点均覆盖的恢复日志副本和超过 24 小时的临时写入文件。同步日志、历史附件、回收站、冲突和损坏原件会保留，避免离线设备丢失数据。",
+          "Cleanup removes recovery journal copies covered by all three verified checkpoints and pending files older than 24 hours. Sync history, historical assets, trash, conflicts and damaged originals are retained to protect offline devices.",
         )}
       </p>
     </>

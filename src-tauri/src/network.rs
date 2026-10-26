@@ -89,3 +89,54 @@ pub fn client(app: &tauri::AppHandle, timeout: Duration) -> Result<reqwest::Clie
     }
     Ok(builder)
 }
+
+/// Exercise the HTTP plugin's URLPattern engine against custom-port provider and DAV URLs.
+#[cfg(test)]
+mod scope_tests {
+    #[test]
+    fn user_network_scope_includes_custom_ports_without_other_schemes() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/main.json")).unwrap();
+        let entries: Vec<urlpattern::UrlPattern> = config["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["identifier"] == "http:default")
+            .unwrap()["allow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| {
+                urlpattern::UrlPattern::parse(
+                    urlpattern::UrlPatternInit::parse_constructor_string::<regex::Regex>(
+                        v["url"].as_str().unwrap(),
+                        None,
+                    )
+                    .unwrap(),
+                    Default::default(),
+                )
+                .unwrap()
+            })
+            .collect();
+        for target in [
+            "https://microx.abrdns.com:12010/models",
+            "https://microx.abrdns.com:15822/ZhiNexus/",
+            "https://api.example.com/v1/models",
+            "http://127.0.0.1:43219/models",
+        ] {
+            let url: reqwest::Url = target.parse().unwrap();
+            assert!(
+                entries.iter().any(|e| e
+                    .test(urlpattern::UrlPatternMatchInput::Url(url.clone()))
+                    .unwrap()),
+                "{target}"
+            );
+        }
+        for target in ["file:///etc/passwd", "ftp://example.com/file"] {
+            let url: reqwest::Url = target.parse().unwrap();
+            assert!(!entries.iter().any(|e| e
+                .test(urlpattern::UrlPatternMatchInput::Url(url.clone()))
+                .unwrap()));
+        }
+    }
+}

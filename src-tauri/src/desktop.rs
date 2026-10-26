@@ -46,6 +46,7 @@ pub struct Action {
 pub struct DesktopState {
     settings: Mutex<Preferences>,
     pending: Mutex<VecDeque<Action>>,
+    capture_lease: Mutex<Option<String>>,
     exiting: AtomicBool,
     warning: Mutex<String>,
 }
@@ -75,7 +76,13 @@ pub fn mark_exiting(app: &tauri::AppHandle) {
 }
 /// Interpret shortcut events on the native side, so hidden windows remain responsive.
 pub fn shortcut(app: &tauri::AppHandle, shortcut: &Shortcut, state: ShortcutState) {
-    if state != ShortcutState::Pressed {
+    if app
+        .state::<DesktopState>()
+        .capture_lease
+        .lock()
+        .map_or(true, |v| v.is_some())
+        || state != ShortcutState::Pressed
+    {
         return;
     }
     let settings = match app.state::<DesktopState>().settings.lock() {
@@ -167,6 +174,15 @@ fn keys(settings: &Preferences) -> Result<Vec<Shortcut>, String> {
 /// Apply registrations transactionally: register new keys first, roll back on conflict, then release old owned keys.
 #[tauri::command]
 pub fn configure_desktop(app: tauri::AppHandle, settings: Preferences) -> Result<(), String> {
+    if app
+        .state::<DesktopState>()
+        .capture_lease
+        .lock()
+        .map_err(|_| "Shortcut state unavailable")?
+        .is_some()
+    {
+        return Err("正在录制快捷键 / Shortcut capture active".into());
+    }
     let requested = keys(&settings)?;
     let state = app.state::<DesktopState>();
     let previous = state
@@ -473,4 +489,83 @@ fn startup(enabled: bool) -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+/// Temporarily release only our own global registrations so an already assigned key can reach the webview.
+#[tauri::command]
+pub fn begin_shortcut_capture(app: tauri::AppHandle) -> Result<String, String> {
+    let state = app.state::<DesktopState>();
+    let mut lease = state
+        .capture_lease
+        .lock()
+        .map_err(|_| "Shortcut state unavailable")?;
+    if lease.is_some() {
+        return Err("另一个快捷键正在录制 / Another capture is active".into());
+    }
+    let owned = keys(
+        &*state
+            .settings
+            .lock()
+            .map_err(|_| "Desktop settings unavailable")?,
+    )?;
+    for key in &owned {
+        if app.global_shortcut().is_registered(*key) {
+            if let Err(error) = app.global_shortcut().unregister(*key) {
+                for old in &owned {
+                    if !app.global_shortcut().is_registered(*old) {
+                        let _ = app.global_shortcut().register(*old);
+                    }
+                }
+                return Err(error.to_string());
+            }
+        }
+    }
+    let token = uuid::Uuid::new_v4().to_string();
+    *lease = Some(token.clone());
+    let timeout_token = token.clone();
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(35)).await;
+        let _ = end_shortcut_capture(handle, timeout_token);
+    });
+    Ok(token)
+}
+/// Restore registrations for the matching lease; stale blur callbacks cannot end a newer recording.
+#[tauri::command]
+pub fn end_shortcut_capture(app: tauri::AppHandle, token: String) -> Result<(), String> {
+    let state = app.state::<DesktopState>();
+    let mut lease = state
+        .capture_lease
+        .lock()
+        .map_err(|_| "Shortcut state unavailable")?;
+    if lease.as_ref() != Some(&token) {
+        return Ok(());
+    }
+    let owned = keys(
+        &*state
+            .settings
+            .lock()
+            .map_err(|_| "Desktop settings unavailable")?,
+    )?;
+    let mut errors = Vec::new();
+    for key in owned {
+        if !app.global_shortcut().is_registered(key) {
+            if let Err(e) = app.global_shortcut().register(key) {
+                errors.push(e.to_string());
+            }
+        }
+    }
+    *lease = None;
+    if !errors.is_empty() {
+        let error = format!(
+            "无法恢复快捷键，请重新保存设置 / Could not restore shortcuts: {}",
+            errors.join("; ")
+        );
+        *state
+            .warning
+            .lock()
+            .map_err(|_| "Desktop diagnostics unavailable")? = error.clone();
+        return Err(error);
+    }
+    Ok(())
 }

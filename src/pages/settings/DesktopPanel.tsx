@@ -8,6 +8,7 @@ import {
 } from "../../services/desktop";
 import { store } from "../../core/store";
 import type { DesktopPreferences } from "../../core/types";
+import { ShortcutCapture } from "./ShortcutCapture";
 import { useSettings } from "./context";
 /** Keep OS integrations explicit and report actual shortcut conflicts without silently dropping registrations. */
 export function DesktopPanel() {
@@ -76,21 +77,19 @@ export function DesktopPanel() {
           ["showShortcut", t("显示主窗口", "Show main window")],
         ] as const
       ).map(([key, label]) => (
-        <label key={key}>
-          {label}
-          <input
-            value={settings[key]}
-            onChange={(e) =>
-              setSettings({ ...settings, [key]: e.target.value })
-            }
-            placeholder="CommandOrControl+Shift+N"
-          />
-        </label>
+        <ShortcutCapture
+          key={key}
+          label={label}
+          value={settings[key]}
+          onChange={(value) =>
+            setSettings((previous) => ({ ...previous, [key]: value }))
+          }
+        />
       ))}
       <p className="muted">
         {t(
-          "快捷键留空可禁用；更改时会检查占用。系统 DPI 在启动时读取并跟随屏幕变化，字体大小可在外观页单独调整。",
-          "Leave a shortcut empty to disable it. Conflicts are checked before changes. System DPI follows the display; font size is adjustable on the Appearance page.",
+          "点击按钮后直接按组合键，Esc 取消；可单独禁用，更改时会检查占用。系统 DPI 在启动时读取并跟随屏幕变化，字体大小可在外观页单独调整。",
+          "Click to record a shortcut; Escape cancels. Shortcuts can be disabled individually. Conflicts are checked before changes. System DPI follows the display; font size is adjustable on the Appearance page.",
         )}
       </p>
       {warning && <p role="alert">{warning}</p>}

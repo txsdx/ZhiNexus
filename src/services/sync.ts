@@ -2,7 +2,8 @@
 import { z } from "zod";
 import { store, json } from "../core/store";
 import { base64, canonical, merkle, sha256, unbase64 } from "../core/crypto";
-import { stateHash } from "../core/crdt";
+import { assertCausalClosure, validateDocuments } from "../core/validation";
+import { materialize, stateHash } from "../core/crdt";
 import type { Envelope, Json } from "../core/types";
 import { request, boundedText, secureUrl } from "./network";
 /** Future object-storage and dedicated-server adapters implement this immutable transport contract. */
@@ -97,6 +98,16 @@ export class WebDAV implements SyncTransport {
   }
 }
 let syncing = false;
+/** Share one gate between automatic exchange and explicit deep audit. */
+export async function withSyncLock<T>(work: () => Promise<T>): Promise<T> {
+  if (syncing) throw Error("同步或校验正在进行 / Sync or audit in progress");
+  syncing = true;
+  try {
+    return await work();
+  } finally {
+    syncing = false;
+  }
+}
 export interface SyncReport {
   received: number;
   sent: number;
@@ -110,9 +121,7 @@ export async function synchronize(
     void s;
   },
 ): Promise<SyncReport> {
-  if (syncing) throw Error("同步正在进行");
-  syncing = true;
-  try {
+  return withSyncLock(async () => {
     const { device } = store.getSnapshot();
     const remote =
       transport ??
@@ -193,9 +202,7 @@ export async function synchronize(
       lastSync: new Date().toISOString(),
     });
     return { received: incoming.length, sent, root, state };
-  } finally {
-    syncing = false;
-  }
+  });
 }
 /** Build a complete, independently verifiable snapshot without deleting operation history. */
 export async function snapshot(): Promise<Json> {
@@ -217,7 +224,7 @@ export async function snapshot(): Promise<Json> {
   });
 }
 /** Restore by union, preserving local edits and refusing tampered archives before any writes. */
-export async function restoreSnapshot(input: unknown) {
+export async function verifySnapshot(input: unknown) {
   const s = z
     .object({
       schema: z.literal(1),
@@ -247,9 +254,16 @@ export async function restoreSnapshot(input: unknown) {
     (await stateHash(events)) !== s.state
   )
     throw Error("备份完整性校验失败");
+  assertCausalClosure(events);
+  validateDocuments(materialize(events));
+  return { ...s, events };
+}
+/** Validate a complete archive before merging any records. */
+export async function restoreSnapshot(input: unknown) {
+  const s = await verifySnapshot(input);
   for (const b of s.blobs)
     await store.db.putBlob(unbase64(b.data), b.mime, b.hash);
-  await store.ingest(events);
+  await store.ingest(s.events);
 }
 /** Upload a complete manual snapshot in addition to incremental synchronization. */
 export async function uploadSnapshot() {

@@ -32,15 +32,12 @@ export async function testNativeOcr({ command, script, click, type, waitFor }) {
       'return document.querySelector(".ocr-preview")?.naturalWidth === 420',
     ),
   );
-  await waitFor(
+  const result = await waitFor(
     () =>
       script(
-        'return document.querySelector(".modal textarea") && !document.querySelector(".modal textarea").disabled',
+        'const field=document.querySelector(".modal textarea");const result={recognized:!!field?.value.trim(),diagnostic:document.querySelector(".modal [role=alert]")?.innerText??""};return field&&!field.disabled&&(result.recognized||result.diagnostic)?result:null;',
       ),
     60000,
-  );
-  const result = await script(
-    'return {recognized:!!document.querySelector(".modal textarea")?.value.trim(),diagnostic:document.querySelector(".modal [role=alert]")?.innerText??""};',
   );
   assert.ok(
     result.recognized || result.diagnostic,

@@ -13,14 +13,12 @@ export function SynchronizationPanel() {
     useSettings();
   return (
     <>
-      <h2>
-        {t("随时离线，随处连接", "Offline anywhere. Connected everywhere.")}
-      </h2>
+      <h3>{t("WebDAV 云同步", "WebDAV cloud sync")}</h3>
       <div className="notice">
         <ShieldCheck size={18} />
         {t(
-          "WebDAV 强制 HTTPS。不可变日志不覆盖整库，并发版本保留；凭证仅本设备保存。",
-          "HTTPS is mandatory. Immutable logs preserve concurrent versions. Credentials stay on this device.",
+          "WebDAV 强制 HTTPS。不可变日志不覆盖整库，并发版本保留；AI Key 自动加密同步；WebDAV/MCP 凭证可用下方保险箱共享。",
+          "HTTPS is mandatory. Immutable logs preserve concurrent versions. AI keys sync encrypted automatically; share WebDAV/MCP credentials using the vault below.",
         )}
       </div>
       <label>

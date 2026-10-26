@@ -16,6 +16,7 @@ mod paths;
 #[cfg(target_os = "windows")]
 mod startup;
 mod storage;
+mod storage_cleanup;
 pub mod updates;
 use tauri::Manager;
 
@@ -60,9 +61,13 @@ pub fn run() {
         storage::recover_storage,
         storage::journal_storage,
         storage::read_storage_journal,
+        storage::repair_storage_journal,
+        storage_cleanup::cleanup_storage,
         storage::checkpoint_storage,
         desktop::desktop_configuration,
         desktop::configure_desktop,
+        desktop::begin_shortcut_capture,
+        desktop::end_shortcut_capture,
         desktop::take_desktop_actions,
         desktop::quit_desktop,
         migration::storage_migration_plan,
@@ -88,6 +93,8 @@ pub fn run() {
         storage::recover_storage,
         storage::journal_storage,
         storage::read_storage_journal,
+        storage::repair_storage_journal,
+        storage_cleanup::cleanup_storage,
         storage::checkpoint_storage
     ]);
     #[cfg(target_os = "android")]

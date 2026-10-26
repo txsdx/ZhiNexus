@@ -9,7 +9,7 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
       assert.equal(request.headers.authorization, "Bearer native-fixture-key");
       assert.match(
         request.url,
-        /^http:\/\/native-fixture\.invalid\/v1\/models\?client_version=cpa$/,
+        /^http:\/\/native-fixture\.invalid:12010\/v1\/models\?client_version=cpa$/,
       );
       requests++;
       response.writeHead(200, {
@@ -54,7 +54,7 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
     await click('[data-settings-tab="ai"]');
     await type(
       '.settings-content input[placeholder="https://api.example.com/v1"]',
-      "http://native-fixture.invalid/v1/chat/completions",
+      "http://native-fixture.invalid:12010/v1/chat/completions",
     );
     await type(
       '.settings-content input[type="password"]',

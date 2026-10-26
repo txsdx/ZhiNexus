@@ -7571,7 +7571,7 @@ dependencies = [
 
 [[package]]
 name = "zhinexus"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -7580,6 +7580,7 @@ dependencies = [
  "futures-util",
  "image",
  "minisign-verify",
+ "regex",
  "reqwest 0.12.28",
  "semver",
  "serde",
@@ -7600,6 +7601,7 @@ dependencies = [
  "tauri-plugin-sql",
  "tauri-plugin-updater",
  "tokio",
+ "urlpattern",
  "uuid",
  "windows",
  "windows-sys 0.61.2",

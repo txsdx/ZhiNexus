@@ -18,7 +18,6 @@ import { McpPanel } from "./settings/McpPanel";
 import { ModelsPanel } from "./settings/ModelsPanel";
 import { PromptsPanel } from "./settings/PromptsPanel";
 import { CategoryTree, saveFile } from "./settings/shared";
-import { SynchronizationPanel } from "./settings/SynchronizationPanel";
 /** Render independent settings panels and reviewable taxonomy/backup confirmations. */
 export function Settings({
   notify,
@@ -79,7 +78,6 @@ export function Settings({
             {tab === "ai" && <ModelsPanel />}
             {tab === "prompts" && <PromptsPanel />}
             {tab === "categories" && <CategoriesPanel />}
-            {tab === "sync" && <SynchronizationPanel />}
             {tab === "mcp" && <McpPanel />}
             {tab === "network" && <NetworkPanel />}
             {tab === "desktop" && <DesktopPanel />}

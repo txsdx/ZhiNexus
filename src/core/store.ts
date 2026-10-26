@@ -262,6 +262,21 @@ export class KnowledgeStore {
       await this.reload(device);
     });
   }
+  /** Hold application mutations while a full replica repair validates and commits its union. */
+  async maintain<T>(work: () => Promise<T>): Promise<T> {
+    if (this.maintenance) throw Error("Maintenance in progress");
+    this.maintenance = true;
+    await this.queue;
+    try {
+      return await work();
+    } finally {
+      try {
+        await this.reload();
+      } finally {
+        this.maintenance = false;
+      }
+    }
+  }
   /** Freeze new commands and drain existing work before releasing the local SQL connection. */
   async suspend() {
     this.maintenance = true;

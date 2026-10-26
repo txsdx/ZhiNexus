@@ -259,7 +259,9 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
   await expect(page.locator(".content-editor")).toHaveCount(0);
   await expect(page.locator(".markdown img")).toBeVisible();
   await page.getByRole("button", { name: "设置与偏好" }).click();
-  await page.getByRole("button", { name: "数据库与备份", exact: true }).click();
+  await page
+    .getByRole("button", { name: "数据库与云同步", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "一个舒适的思考空间" }),
   ).toHaveCount(0);
@@ -283,7 +285,7 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
   );
   await other.getByRole("button", { name: "设置与偏好" }).click();
   await other
-    .getByRole("button", { name: "数据库与备份", exact: true })
+    .getByRole("button", { name: "数据库与云同步", exact: true })
     .click();
   await other
     .locator("label")
@@ -303,8 +305,12 @@ test("UI capture, image attachment, encrypted backup and lossless union restore"
       `return store.getSnapshot().entries.map(e=>e.title).sort();`,
     ),
   ).toEqual(["本地不能丢失", "贝叶斯定理"].sort());
-  await other.getByRole("button", { name: "全库完整性校验" }).click();
-  await expect(other.locator(".report")).toContainText("SQLite: ok");
+  const audit = await other.evaluate(async () => {
+    const { auditLocal } = await import("/src/services/integrity.ts" as string);
+    return auditLocal();
+  });
+  expect(audit.events).toBeGreaterThan(0);
+  expect(audit.blobs).toBe(1);
   await context.close();
 });
 
@@ -480,7 +486,9 @@ test("encrypted credential vault replicates secrets without exposing them or rep
     `await store.saveDevice({...store.getSnapshot().device,apiKey:'secret-api-sentinel',davUrl:'https://dav.example/knowledge/',davUser:'private-user',davPassword:'secret-dav-sentinel',mcp:[{id:'mcp1',name:'Private MCP',url:'https://mcp.example/rpc',token:'secret-mcp-sentinel',enabled:false}]});`,
   );
   await page.getByRole("button", { name: "设置与偏好" }).click();
-  await page.getByRole("button", { name: "数据同步", exact: true }).click();
+  await page
+    .getByRole("button", { name: "数据库与云同步", exact: true })
+    .click();
   await page
     .getByLabel("保险箱密码（不保存）")
     .fill("a unique vault test passphrase");
@@ -505,7 +513,9 @@ test("encrypted credential vault replicates secrets without exposing them or rep
     `await store.ingest(${serialized});await store.saveDevice({...store.getSnapshot().device,notifications:true,syncMinutes:0});`,
   );
   await other.getByRole("button", { name: "设置与偏好" }).click();
-  await other.getByRole("button", { name: "数据同步", exact: true }).click();
+  await other
+    .getByRole("button", { name: "数据库与云同步", exact: true })
+    .click();
   await other
     .getByLabel("保险箱密码（不保存）")
     .fill("a unique vault test passphrase");
@@ -806,4 +816,150 @@ test("desktop navigation remains reachable in a short high-DPI workspace", async
   await expect(
     page.locator('[data-settings-tab="notifications"]'),
   ).toBeVisible();
+});
+
+test("merged database page repairs local corruption from cloud and snapshot union without losing offline edits", async ({
+  page,
+  context,
+}) => {
+  const files = new Map<string, string>();
+  await mockDav(context, files);
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',syncMinutes:0});
+    const bytes=new Uint8Array([1,2,3,4]);const hash=await store.db.putBlob(bytes,'image/png');
+    await store.createEntry('云端完整副本','asset:'+hash);`,
+  );
+  await page.evaluate(async () => {
+    const s = await import("/src/services/sync.ts" as string);
+    await s.synchronize();
+    await s.uploadSnapshot();
+  });
+  // Remove an operation from the live cloud folder; its independently verified full snapshot still retains it.
+  const eventPath = [...files.keys()].find((p) => p.startsWith("events/"))!;
+  files.delete(eventPath);
+  await repository(
+    page,
+    `await store.createEntry('尚未同步的新知','must survive');
+    const rows=await store.db.rawEvents();await store.db.write(()=>store.db.exec('UPDATE events SET json=? WHERE hash=?',['{broken',rows[0].hash]));
+    const [hash]=await store.db.blobHashes();await store.db.write(()=>store.db.exec('UPDATE blobs SET data=? WHERE hash=?',['AAAA',hash]));`,
+  );
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await page.locator('[data-settings-tab="database"]').click();
+  await expect(page.locator('[data-settings-tab="sync"]')).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "WebDAV 云同步" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "校验、修复并清理" }).click();
+  await expect(page.locator(".report")).toContainText("cloudRoot");
+  const report = JSON.parse(
+    (await page.locator(".report").innerText()).slice("SQLite: ok\n".length),
+  );
+  expect(report.root).toBe(report.cloudRoot);
+  expect(report.state).toBe(report.cloudState);
+  expect(report.blobs).toBe(1);
+  expect(files.has(eventPath)).toBe(true);
+  expect(
+    await repository(
+      page,
+      "return store.getSnapshot().entries.map(e=>e.title).sort()",
+    ),
+  ).toEqual(["云端完整副本", "尚未同步的新知"].sort());
+  expect(
+    await repository(
+      page,
+      `const [hash]=await store.db.blobHashes();return Array.from((await store.db.blob(hash)).bytes)`,
+    ),
+  ).toEqual([1, 2, 3, 4]);
+  await page.reload();
+  expect(
+    await repository(page, "return store.getSnapshot().entries.length"),
+  ).toBe(2);
+});
+
+test("deep verification refuses unrepairable cloud corruption and skips cleanup", async ({
+  page,
+  context,
+}) => {
+  const files = new Map<string, string>();
+  await mockDav(context, files);
+  await page.goto("/");
+  await repository(
+    page,
+    `await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',syncMinutes:0});await store.createEntry('必须保留','local');`,
+  );
+  const badPath = "events/" + "f".repeat(64) + ".json";
+  files.set(badPath, "{broken");
+  const result = await page.evaluate(async () => {
+    const { auditAndRepair } = await import(
+      "/src/services/integrity.ts" as string
+    );
+    try {
+      await auditAndRepair();
+      return "unexpected success";
+    } catch (e) {
+      return String(e);
+    }
+  });
+  expect(result).toContain("No verified repair source");
+  expect(files.get(badPath)).toBe("{broken");
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].title"),
+  ).toBe("必须保留");
+  await repository(page, `await store.createEntry('失败后仍可编辑','works');`);
+  expect(
+    await repository(page, "return store.getSnapshot().entries.length"),
+  ).toBe(2);
+});
+
+test("deep verification retries concurrent cloud additions before certifying equal digests", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await repository(page, `await store.createEntry('离线内容','local');`);
+  const result = await page.evaluate(async () => {
+    const { auditAndRepair } = await import(
+      "/src/services/integrity.ts" as string
+    );
+    const { sha256, canonical } = await import("/src/core/crypto.ts" as string);
+    const files = new Map<string, string>();
+    let eventLists = 0;
+    const transport = {
+      init: async () => {},
+      read: async (p: string) => {
+        if (!files.has(p)) throw Error("missing");
+        return files.get(p)!;
+      },
+      write: async (p: string, b: string) => {
+        files.set(p, b);
+      },
+      list: async (folder: string) => {
+        if (folder === "events" && ++eventLists === 2) {
+          const op = {
+            schema: 1,
+            device: "11111111-1111-4111-8111-111111111111",
+            seq: 1,
+            vector: { "11111111-1111-4111-8111-111111111111": 1 },
+            collection: "category",
+            entity: "new-cloud-category",
+            patch: { name: "并发云端分类", parent: "" },
+            at: new Date().toISOString(),
+            source: "test",
+          };
+          const hash = await sha256(op);
+          files.set("events/" + hash + ".json", canonical({ hash, op }));
+        }
+        return [...files.keys()]
+          .filter((p) => p.startsWith(folder + "/"))
+          .map((p) => p.slice(folder.length + 1));
+      },
+    };
+    return { report: await auditAndRepair(transport), eventLists };
+  });
+  expect(result.eventLists).toBeGreaterThanOrEqual(4);
+  expect(result.report.root).toBe(result.report.cloudRoot);
+  expect(
+    await repository(page, "return store.getSnapshot().categories[0].name"),
+  ).toBe("并发云端分类");
 });

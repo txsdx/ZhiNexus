@@ -9,7 +9,7 @@ use std::{
 use tauri::Manager;
 
 /// Return only application-owned paths; callers cannot request arbitrary filesystem locations.
-fn paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
     let dir = app.state::<crate::paths::StorageLocation>().root.clone();
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let recovery = dir.join("recovery");
@@ -38,7 +38,7 @@ fn stamp() -> u128 {
         .as_nanos()
 }
 /// List checkpoint generations newest first; temporary and quarantined files are excluded.
-fn generations(dir: &Path) -> Result<Vec<PathBuf>, String> {
+pub(crate) fn generations(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files: Vec<_> = fs::read_dir(dir)
         .map_err(|e| e.to_string())?
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -215,4 +215,36 @@ pub fn read_storage_journal(
         });
     }
     Ok(result)
+}
+
+/// Preserve a conflicting recovery record before restoring an independently verified same-address copy.
+#[tauri::command]
+pub fn repair_storage_journal(
+    app: tauri::AppHandle,
+    kind: String,
+    records: Vec<StorageRecord>,
+) -> Result<(), String> {
+    if !["events", "blobs"].contains(&kind.as_str()) {
+        return Err("Invalid repair kind".into());
+    }
+    let (_, root) = paths(&app)?;
+    for r in &records {
+        if r.id.len() != 64
+            || !r.id.bytes().all(|b| b.is_ascii_hexdigit())
+            || r.data.len() > 32 * 1024 * 1024
+        {
+            return Err("Invalid repair record".into());
+        }
+        let path = root
+            .join("journal")
+            .join(&kind)
+            .join(format!("{}.json", r.id));
+        if path.exists() && fs::read_to_string(&path).map_err(|e| e.to_string())? != r.data {
+            let retained = root.join(format!("repaired-{}", stamp()));
+            fs::create_dir_all(&retained).map_err(|e| e.to_string())?;
+            fs::rename(&path, retained.join(format!("{}-{}.json", kind, r.id)))
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    journal_storage(app, kind, records)
 }

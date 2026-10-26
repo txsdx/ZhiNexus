@@ -1,7 +1,6 @@
 /** Typed settings state, draft edits and action feedback shared by independent configuration panels. */
 import {
   Bell,
-  Cloud,
   Database,
   FolderTree,
   Globe,
@@ -22,7 +21,7 @@ export function useSettingsState(
 ) {
   const s = useKnowledge(),
     t = useT(),
-    [tab, setTab] = useState(initialTab),
+    [tab, setTab] = useState(initialTab === "sync" ? "database" : initialTab),
     [ai, setAI] = useState<AIConfig>(structuredClone(s.ai)),
     [device, setDevice] = useState<DeviceConfig>(structuredClone(s.device)),
     [task, setTask] = useState<Task>("explain"),
@@ -65,18 +64,17 @@ export function useSettingsState(
     },
     { id: "mcp", label: "MCP", icon: Plug },
     { id: "categories", label: t("知识分类", "Categories"), icon: FolderTree },
-    { id: "sync", label: t("数据同步", "Data synchronization"), icon: Cloud },
+    {
+      id: "database",
+      label: t("数据库与云同步", "Database & cloud sync"),
+      icon: Database,
+    },
     { id: "network", label: t("网络与代理", "Network & proxy"), icon: Globe },
     { id: "notifications", label: t("通知设置", "Notifications"), icon: Bell },
     {
       id: "desktop",
       label: t("后台与快捷键", "Background & shortcuts"),
       icon: Settings2,
-    },
-    {
-      id: "database",
-      label: t("数据库与备份", "Database & backup"),
-      icon: Database,
     },
     { id: "about", label: t("关于与更新", "About & updates"), icon: Globe },
   ];

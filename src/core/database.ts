@@ -114,6 +114,11 @@ export class Database {
   /** Force a verified recovery point after loading a valid application state. */
   async checkpoint() {
     await this.write(async () => {});
+    if (native) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("checkpoint_storage");
+      this.lastNativeCheckpoint = Date.now();
+    }
   }
   /** Replay the durable native mirror after SQLite recovery, validating all records before importing. */
   async replayJournal() {
@@ -342,6 +347,89 @@ export class Database {
       );
     });
     return hash;
+  }
+  /** Inspect raw row addresses so a corrupt JSON record can be recovered from the same cloud hash. */
+  async rawEvents(): Promise<{ hash: string; json: string }[]> {
+    await this.tail;
+    return this.query("SELECT hash,json FROM events");
+  }
+  /** Retain old bytes before replacing only records validated by the replica auditor. */
+  async repair(
+    events: Envelope[],
+    blobs: { hash: string; mime: string; data: string }[],
+  ) {
+    for (const e of events) await validateEnvelope(e);
+    for (const b of blobs)
+      if ((await sha256(unbase64(b.data))) !== b.hash)
+        throw Error("Repair asset hash mismatch");
+    return this.write(async () => {
+      const previous = await this.query<{ hash: string; json: string }>(
+        "SELECT hash,json FROM events",
+      );
+      const oldBlobs = await this.query<{
+        hash: string;
+        mime: string;
+        data: string;
+      }>("SELECT hash,mime,data FROM blobs");
+      const previousByHash = new Map(previous.map((r) => [r.hash, r]));
+      const blobsByHash = new Map(oldBlobs.map((r) => [r.hash, r]));
+      const sameEvent = (e: Envelope) => {
+        const row = previousByHash.get(e.hash);
+        if (!row) return false;
+        try {
+          return canonical(JSON.parse(row.json)) === canonical(e);
+        } catch {
+          return false;
+        }
+      };
+      const writeEvents = events.filter((e) => !sameEvent(e));
+      const writeBlobs = blobs.filter((b) => {
+        const row = blobsByHash.get(b.hash);
+        return !row || row.data !== b.data || row.mime !== b.mime;
+      });
+      const changedEvents = writeEvents.filter((e) =>
+        previousByHash.has(e.hash),
+      );
+      const changedBlobs = writeBlobs.filter((b) => blobsByHash.has(b.hash));
+      if (changedEvents.length || changedBlobs.length)
+        await this.exec("INSERT INTO meta(key,value) VALUES (?,?)", [
+          "repair-quarantine-" + crypto.randomUUID(),
+          JSON.stringify({
+            events: previous.filter((r) =>
+              changedEvents.some((e) => e.hash === r.hash),
+            ),
+            blobs: oldBlobs.filter((r) =>
+              changedBlobs.some((b) => b.hash === r.hash),
+            ),
+          }),
+        ]);
+      if (native) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("repair_storage_journal", {
+          kind: "events",
+          records: events.map((e) => ({ id: e.hash, data: canonical(e) })),
+        });
+        await invoke("repair_storage_journal", {
+          kind: "blobs",
+          records: blobs.map((b) => ({
+            id: b.hash,
+            data: canonical({ mime: b.mime, data: b.data }),
+          })),
+        });
+      }
+      // Each upsert is idempotent; originals are retained before the first replacement.
+      for (const e of writeEvents)
+        await this.exec(
+          "INSERT OR REPLACE INTO events(hash,json) VALUES (?,?)",
+          [e.hash, canonical(e)],
+        );
+      for (const b of writeBlobs)
+        await this.exec(
+          "INSERT OR REPLACE INTO blobs(hash,mime,data) VALUES (?,?,?)",
+          [b.hash, b.mime, b.data],
+        );
+      return writeEvents.length + writeBlobs.length;
+    });
   }
   /** Retrieve verified attachment data for rendering or transfer. */
   async blob(

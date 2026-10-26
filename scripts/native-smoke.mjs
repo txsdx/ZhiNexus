@@ -1,5 +1,6 @@
 /** Real Tauri/WebKit smoke test: native SQLite edits, portable isolation, restart and physical-corruption recovery. */
 import fs from "node:fs";
+import { testNativeShortcuts } from "./native-shortcuts.mjs";
 import { testNativeNetwork } from "./native-network.mjs";
 import { testNativeOcr } from "./native-ocr.mjs";
 import path from "node:path";
@@ -215,12 +216,14 @@ try {
     script('return document.querySelector(".toast")?.innerText.includes("1")'),
   );
   await click('.settings-tabs [data-settings-tab="database"]');
+  await testNativeShortcuts({ click, script, waitFor, command });
   await testNativeNetwork({ click, type, script, waitFor });
   await testNativeOcr({ command, script, click, type, waitFor });
   await click(".sidebar-bottom>button");
   await click('[data-settings-tab="database"]');
+  await click("[data-storage-location] summary");
   const systemInfo = await script(
-    'return document.querySelector(".settings-content .notice")?.innerText',
+    'return document.querySelector("[data-storage-location] .notice code")?.innerText',
   );
   assert.ok(!systemInfo.includes("_data"));
   await stop();
@@ -251,8 +254,9 @@ try {
   await waitFor(() =>
     script('return !!document.querySelector(".database-stats")'),
   );
+  await click("[data-storage-location] summary");
   const portableInfo = await script(
-    'return document.querySelector(".settings-content .notice")?.innerText',
+    'return document.querySelector("[data-storage-location] .notice code")?.innerText',
   );
   assert.ok(portableInfo.includes("_data"));
   fs.mkdirSync("native-test-results", { recursive: true });

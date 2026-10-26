@@ -1,5 +1,11 @@
 # 更新日志
 
+## Ubuntu 0.3.1 · 2026-10-26
+
+- 仅上传 .deb/.sig，去除打包中间目录；实际检查 Deb 为 amd64、ASCII 包名、正确版本及系统依赖。
+- 打包仅手动/API dispatch，push 保留 Validate，减少未选平台的重复构建。Windows/Android 维持 0.3.0。
+
+
 ## 0.3.0 · 2026-10-26
 
 - 更新 Vitest 至 4.1.12、KaTeX 至 0.18.2 并统一传递渲染依赖，修复已报告的测试/公式依赖漏洞；npm audit 0 漏洞。

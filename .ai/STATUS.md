@@ -47,3 +47,6 @@
 - 依赖安全迭代 0.3.0：Vitest 4.1.12、KaTeX 0.18.2（所有渲染链通过统一 override 去除旧版）；23 核心、13 浏览器复验及生产构建通过，npm audit 0 漏洞。CI 发现浏览器测试在异步保存完成前立即刷新，已增加保存确认再验证重载的断言，仍需新 CI 运行确认。Android setup Action 旧 tools 包不存在，已显式 packages: platform-tools，并扩大 SDK 缓存。
 
 - 0.3.0：23 核心、16 发布脚本、13 浏览器测试及 TypeScript/Vite、Linux cargo check 通过。追加从实际 Deb 解包后在 Ubuntu/Xvfb 上运行恢复测试的 CI；该新增步骤尚需运行。
+
+- Ubuntu 0.3.1（仅 CI/产物补丁）：实际下载并检查 0.2 Deb，包名 zhi-nexus、架构 amd64、依赖正常；发现 artifact 同时包含中间打包树，已收窄为仅 .deb/.sig，减少冗余上传。打包改为仅手动/API dispatch，push 保留 Validate。Windows/Android 仍为 0.3.0，不产生无意义平台更新。
+- Android 0.3.0 arm64 Release APK、开发签名验证、aapt minSdk35/唯一 arm64-v8a/versionName0.3.0、最新 JSON 生成：全部通过；APK 约 38 MiB。

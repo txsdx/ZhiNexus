@@ -4,6 +4,6 @@
   "platforms": {
     "windows": "0.3.0",
     "android": "0.3.0",
-    "ubuntu": "0.3.0"
+    "ubuntu": "0.3.1"
   }
 }

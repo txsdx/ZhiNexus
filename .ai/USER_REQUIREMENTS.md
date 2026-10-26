@@ -21,3 +21,5 @@
 - 使用官方 Action 缓存 npm、Rust、Gradle 与 SDK/打包工具；不缓存私有签名密钥。
 - 各平台读取同一个最新 Release/latest.json，含平台版本、下载地址、摘要及更新内容，提供一键下载校验和系统安装流程。
 - 所有平台 major.minor 相同、patch 独立。共享实现修改提升 shared 并重置各 patch；只改某平台则仅 bump 对应 patch。未来 AI 每次实现迭代必须更新版本，并更新本目录记录。
+
+实现约定：push 执行 Validate，打包仅手动/API dispatch，避免平台专属补丁重复打包未选择平台。Ubuntu Artifact 仅含 .deb/.sig，不上传打包中间目录。

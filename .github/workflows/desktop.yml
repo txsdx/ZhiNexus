@@ -1,13 +1,6 @@
-# Unified manual target selection. Configuration changes automatically verify Windows only; no automatic Release.
+# Manual target selection; pushes validate code without repeatedly packaging unselected platforms.
 name: Build selected platforms
 on:
-  push:
-    paths:
-      - ".github/workflows/desktop.yml"
-      - "src-tauri/tauri.conf.json"
-      - "scripts/package-portable.ps1"
-      - "scripts/release-config.mjs"
-      - "scripts/build-plan.mjs"
   workflow_dispatch:
     inputs:
       build_windows:
@@ -46,7 +39,7 @@ jobs:
       - uses: actions/checkout@v5
       - id: targets
         env:
-          BUILD_WINDOWS: ${{ github.event_name != 'workflow_dispatch' || inputs.build_windows }}
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
           BUILD_ANDROID: ${{ inputs.build_android }}
           BUILD_UBUNTU: ${{ inputs.build_ubuntu }}
         run: node scripts/build-plan.mjs
@@ -135,7 +128,8 @@ jobs:
           path: |
             release-files/*.exe
             release-files/*.sig
-            src-tauri/target/release/bundle/deb/
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.sig
   android:
     needs: plan
     if: needs.plan.outputs.android == 'true'

@@ -126,7 +126,7 @@ Windows 输出 `ZhiNexus_windows_x64_<version>_protable.exe` 和 `*_setup.exe`�
 | Android_15+_arm64-v8a | 关 | `.apk` |
 | Ubuntu_24.04+_x64 | 关 | `.deb` |
 
-默认只编译、不发布；勾选 `publish_release` 可发布，`draft_release` 决定是否草稿。macOS 不参与编译。修复工作流或打包配置的 push 会自动验证 Windows，不会自动发布。
+默认只编译、不发布；勾选 `publish_release` 可发布，`draft_release` 决定是否草稿。macOS 不参与编译。push 只运行 Validate；安装包编译通过手动选择或 API dispatch 触发，避免修改配置时重复编译未选择的平台。
 
 Release 使用 GitHub 自动注入的 `GITHUB_TOKEN` 和 `contents: write`，**不需要自行配置上传密钥**。npm、Rust 编译产物、Gradle、NDK 和 Tauri 打包工具分别通过官方缓存 Action 复用。首次构建和依赖变更仍需要编译。Android 还会构建不发布的 x86_64 调试 APK，在 API 35 模拟器测试重启、SQLite 与通知；Windows 原生测试验证真实 exe 的普通/便携隔离及数据库损坏恢复。
 

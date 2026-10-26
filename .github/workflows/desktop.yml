@@ -1,0 +1,66 @@
+# Manually build installers; publishing is an explicit workflow input, never a side effect of push.
+name: Build desktop
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Create a draft GitHub release (requires signing secrets and public key variable)
+        type: boolean
+        default: false
+      tag:
+        description: Release tag matching package version
+        default: v0.1.0
+permissions:
+  contents: write
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - run: npm ci
+      - run: npm test
+      - if: inputs.publish_release
+        name: Configure signed updater
+        shell: bash
+        env:
+          UPDATER_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          if(process.env.RELEASE_TAG!==`v${pkg.version}`)throw Error('Tag must match package version');
+          if(!process.env.UPDATER_PUBLIC_KEY)throw Error('Configure TAURI_SIGNING_PUBLIC_KEY repository variable');
+          const path='src-tauri/tauri.conf.json',config=JSON.parse(fs.readFileSync(path,'utf8'));
+          config.plugins.updater={pubkey:process.env.UPDATER_PUBLIC_KEY,endpoints:['https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json']};
+          config.bundle.createUpdaterArtifacts=true;
+          fs.writeFileSync(path,JSON.stringify(config,null,2));
+          JS
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ inputs.publish_release && inputs.tag || '' }}
+          releaseName: ${{ inputs.publish_release && format('知枢 ZhiNexus {0}', inputs.tag) || '' }}
+          releaseBody: See .ai/CHANGELOG.md for implementation status and known limitations.
+          releaseDraft: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZhiNexus-${{ matrix.os }}
+          path: src-tauri/target/release/bundle/

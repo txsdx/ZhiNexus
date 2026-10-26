@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Local knowledge storage and user-configured HTTPS providers; no shell execution.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "sql:default",
+    "sql:allow-execute",
+    "dialog:default",
+    "fs:allow-write-text-file",
+    "notification:default",
+    { "identifier": "http:default", "allow": [{ "url": "https://**" }] }
+  ]
+}

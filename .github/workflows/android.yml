@@ -1,0 +1,72 @@
+# Android compilation is available now; public APK publication requires a stable private signing key.
+name: Build Android
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the signed APK to a draft release (requires Android signing secrets)
+        type: boolean
+        default: false
+      tag:
+        description: Existing or new draft release tag
+        default: v0.1.0
+permissions:
+  contents: write
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Prepare SDK and NDK
+        run: |
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm test
+      - run: npm run tauri -- android init --ci
+      - run: npm run tauri -- android build --apk --target aarch64
+      - name: Sign release APK when publishing
+        if: inputs.publish_release
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          node -e "if(process.env.RELEASE_TAG!=='v'+require('./package.json').version)process.exit(1)"
+          test -n "$KEYSTORE_BASE64" && test -n "$KEY_ALIAS" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          apk=$(find src-tauri/gen/android -name '*-unsigned.apk' | head -1)
+          test -n "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-key-alias "$KEY_ALIAS" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD --out ZhiNexus-android.apk "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify ZhiNexus-android.apk
+          rm "$RUNNER_TEMP/release.jks"
+      - if: inputs.publish_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG"; then
+            gh release create "$RELEASE_TAG" --draft --title "ZhiNexus $RELEASE_TAG" --notes-file .ai/CHANGELOG.md
+          fi
+          gh release upload "$RELEASE_TAG" ZhiNexus-android.apk --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZhiNexus-Android
+          path: |
+            src-tauri/gen/android/**/*.apk
+            ZhiNexus-android.apk

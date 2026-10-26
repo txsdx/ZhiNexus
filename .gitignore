@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+src-tauri/target/
+src-tauri/gen/
+.env
+.env.*
+!.env.example
+*.log
+*.db
+*.sqlite*
+coverage/
+playwright-report/
+test-results/
+.DS_Store
+.idea/
+.vscode/

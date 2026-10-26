@@ -108,26 +108,27 @@ async function start() {
 }
 /** Close only the process created by this test. */
 async function stop() {
-  if (session) {
-    await command("DELETE", "");
+  try {
+    if (session) await command("DELETE", "");
+  } finally {
     session = "";
-  }
-  if (ownedApplication) {
-    const child = ownedApplication;
-    ownedApplication = undefined;
-    child.kill();
-    await waitFor(
-      () => child.exitCode !== null || child.signalCode !== null,
-      10000,
-    );
-    await waitFor(async () => {
-      try {
-        await fetch("http://127.0.0.1:9222/json/version");
-        return false;
-      } catch {
-        return true;
-      }
-    }, 10000);
+    if (ownedApplication) {
+      const child = ownedApplication;
+      ownedApplication = undefined;
+      child.kill();
+      await waitFor(
+        () => child.exitCode !== null || child.signalCode !== null,
+        10000,
+      );
+      await waitFor(async () => {
+        try {
+          await fetch("http://127.0.0.1:9222/json/version");
+          return false;
+        } catch {
+          return true;
+        }
+      }, 10000);
+    }
   }
 }
 const marker = path.join(path.dirname(application), "portable");

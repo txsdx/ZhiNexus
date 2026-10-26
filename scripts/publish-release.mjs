@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { releaseVersion } from "./versions.mjs";
+import { artifactIdentity } from "./updater-manifest.mjs";
 /** Produce reviewable CLI argument arrays without shell interpolation or writing to an existing public version. */
 export function publicationPlan({ tag, sha, draft, existing, artifacts }) {
   if (existing && !existing.draft)
@@ -15,6 +16,22 @@ export function publicationPlan({ tag, sha, draft, existing, artifacts }) {
     !artifacts.some((file) => path.basename(file) === "latest.json")
   )
     throw Error("Release artifacts and latest.json are required");
+  const names = artifacts.map((file) => path.basename(file));
+  if (new Set(names).size !== names.length)
+    throw Error("Release artifact basenames must be unique");
+  const kinds = new Set(
+    artifacts
+      .map((file) => artifactIdentity(path.basename(file)))
+      .filter(Boolean)
+      .map((item) => item.platform + "/" + item.kind),
+  );
+  for (const kind of [
+    "windows-x86_64/portable",
+    "windows-x86_64/setup",
+    "android-arm64/apk",
+    "linux-x86_64/deb",
+  ])
+    if (!kinds.has(kind)) throw Error("Missing platform artifact: " + kind);
   const commands = [];
   if (!existing)
     commands.push([
@@ -49,22 +66,35 @@ function existingRelease(repository, tag) {
     );
   }
 }
+/** Collect nested upload-artifact paths, excluding links and unrelated intermediate files. */
+export function releaseArtifacts(directory) {
+  const files = [];
+  const visit = (folder) => {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue;
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (
+        entry.isFile() &&
+        (/\.(exe|deb|apk|sig)$/.test(entry.name) ||
+          entry.name === "latest.json")
+      )
+        files.push(file);
+    }
+  };
+  visit(directory);
+  return files.sort();
+}
 /** Publish only the complete all-platform workflow output using its automatically supplied GITHUB_TOKEN. */
 export function run() {
   const versions = JSON.parse(fs.readFileSync("versions.json", "utf8")),
     tag = `v${releaseVersion(versions)}`,
     directory = process.argv[2] ?? "release-artifacts";
-  const artifacts = fs
-    .readdirSync(directory)
-    .filter(
-      (file) => /\.(exe|deb|apk|sig)$/.test(file) || file === "latest.json",
-    )
-    .sort()
-    .map((file) => path.join(directory, file));
+  const artifacts = releaseArtifacts(directory);
   const commands = publicationPlan({
     tag,
     sha: process.env.GITHUB_SHA,
-    draft: process.env.RELEASE_DRAFT === "true",
+    draft: process.env.RELEASE_DRAFT !== "false",
     existing: existingRelease(process.env.GITHUB_REPOSITORY, tag),
     artifacts,
   });

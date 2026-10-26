@@ -28,8 +28,12 @@
 
 ## 0.10 本轮验证（2026-10-27）
 
+- **正式 Release [v0.10.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.10.0) 已发布**（非草稿、非预发布），源码 `fb2b626`，北京时间 2026-10-27 02:26。Windows protable/setup、Ubuntu DEB、Android arm64 APK 和 latest.json 共 5 项资产均上传完成。已认证读回 latest.json，校验三个平台版本/URL，并将 4 个安装包 SHA-256 与 GitHub 资产 digest 独立比对一致。
+- **Release 构建全部成功**：[40375405443](https://github.com/txsdx/ZhiNexus/actions/runs/40375405443)：共享前端 `121757000844`、Windows `121757565617`、Ubuntu `121757565655`、Android `121757565523`、发布 `121765144940` 均成功，含缓存收尾。自动 Validate [40375381171](https://github.com/txsdx/ZhiNexus/actions/runs/40375381171) 的浏览器与 Rust 任务也全部成功。
+- Windows/Ubuntu 实际打包程序通过无 Apply 按钮的快捷键/代理/模型配置自动保存、MCP/OCR/编辑、重启及损坏恢复；Android15/API35 模拟器通过编辑、重启恢复、移动界面、通知配置自动保存和 OS 排程。Android 本轮为 `_development.apk`，使用每次 CI 生成的开发证书，不保证覆盖旧开发包；正式连续升级仍需持久签名。已在 Release 说明中写明。没有 Android 实体手机或真实 AI 账号验证。
+
 - 已实现 nullable tool_calls/图片可选字段兼容、本机 AI/错误日志页、统一自动保存和失败重试。浏览器覆盖真实请求/原始响应与密钥去除、刷新持久化、日志导出/取消清空、跨页自动保存、密钥清空、保存失败重试、无效代理不阻断有效 AI；原生测试同步移除手动 Apply。
-- 本地 `npm test` **74 项**、脚本 **26 项**、完整 Playwright **40 项**、前端构建、Prettier/差异检查和 locked Rust check 均通过。旧富文本回归保存前增加草稿采集等待，提交后仍严格核对已存摘要。按用户授权推送并启动正式 Release 构建；CI/Release 结果完成后记录。
+- 本地 `npm test` **74 项**、脚本 **26 项**、完整 Playwright **40 项**、前端构建、Prettier/差异检查和 locked Rust check 均通过。旧富文本回归保存前增加草稿采集等待，提交后仍严格核对已存摘要。已按用户授权推送、完成三平台构建并发布正式 Release，证据见上。
 
 ## 0.9 本轮验证（2026-10-27）
 

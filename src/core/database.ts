@@ -134,10 +134,13 @@ export class Database {
       if (e.hash !== r.id) throw Error("Recovery journal address mismatch");
       events.push(e);
     }
-    const all = [...(await this.events()), ...events];
+    const current = await this.events();
+    const known = new Set(current.map((e) => e.hash));
+    const all = [...current, ...events];
     assertCausalClosure(all);
     validateDocuments(materialize(all));
-    await this.append(all);
+    // Checkpoint-covered SQL rows need no new mirror; only replay records missing from the primary.
+    await this.append(events.filter((e) => !known.has(e.hash)));
     for (const r of await invoke<Row[]>("read_storage_journal", {
       kind: "blobs",
     })) {
@@ -154,7 +157,7 @@ export class Database {
     }
     for (const hash of await this.blobHashes()) {
       const b = await this.blob(hash);
-      if (b) await this.putBlob(b.bytes, b.mime, hash);
+      if (!b) throw Error("Missing local asset");
     }
     for (const row of await this.query<{ key: string; value: string }>(
       "SELECT key,value FROM meta",

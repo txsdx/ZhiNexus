@@ -264,11 +264,68 @@ try {
     "native-test-results/native-database.png",
     Buffer.from(await command("GET", "/screenshot"), "base64"),
   );
+  // Force all three independent generations to cover the current union before pruning its recovery mirror.
+  const cleaned = await command("POST", "/execute/async", {
+    script:
+      'const done=arguments[arguments.length-1];const invoke=window.__TAURI_INTERNALS__.invoke;(async()=>{for(let i=0;i<3;i++)await invoke("checkpoint_storage");return invoke("cleanup_storage");})().then(done,e=>done({error:String(e)}));',
+    args: [],
+  });
+  assert.ok(!cleaned.error, cleaned.error);
+  assert.ok(cleaned.files > 0);
+  assert.ok(cleaned.bytes > 0);
   await stop();
   const root = path.join(path.dirname(application), "_data"),
     db = path.join(root, "zhinexus.db");
+  const journal = path.join(root, "recovery", "journal", "events");
   assert.ok(fs.existsSync(db));
-  assert.ok(fs.existsSync(path.join(root, "recovery", "journal", "events")));
+  const mirrored = () =>
+    fs.readdirSync(journal).filter((name) => /^[a-f0-9]{64}\.json$/.test(name));
+  assert.equal(
+    mirrored().length,
+    0,
+    "All current operations are covered by all three checkpoints",
+  );
+  await start();
+  await waitFor(() =>
+    script(
+      'return document.body.innerText.includes("Native portable recovery")',
+    ),
+  );
+  assert.equal(
+    mirrored().length,
+    0,
+    "Restart must not recreate the checkpoint-covered journal",
+  );
+  const freshTitle = "After cleanup " + Date.now();
+  await click(".capture-button");
+  await type(".modal input", freshTitle);
+  await type(
+    ".modal textarea",
+    "A newer journal record must survive fallback to an older checkpoint.",
+  );
+  await click(".modal .primary");
+  await waitFor(() =>
+    script(
+      'return document.querySelector(".entry-heading h1")?.innerText===arguments[0]',
+      [freshTitle],
+    ),
+  );
+  assert.ok(
+    mirrored().length > 0,
+    "New edits after cleanup must still be journaled",
+  );
+  await stop();
+  // A damaged newest checkpoint must not lose records whose journal copies were safely pruned.
+  const latest = fs
+    .readdirSync(path.join(root, "recovery"))
+    .filter((name) => /^checkpoint-.*\.sqlite$/.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(latest);
+  const checkpointPath = path.join(root, "recovery", latest),
+    checkpointBytes = fs.readFileSync(checkpointPath);
+  checkpointBytes.fill(0, 0, Math.min(128, checkpointBytes.length));
+  fs.writeFileSync(checkpointPath, checkpointBytes);
   // WAL can legitimately repair the primary header by itself. Damage both headers to exercise the independent checkpoint/journal fallback.
   for (const file of [db, db + "-wal"]) {
     if (!fs.existsSync(file)) continue;
@@ -277,6 +334,11 @@ try {
     fs.writeFileSync(file, damaged);
   }
   await start();
+  await waitFor(() =>
+    script("return document.body.innerText.includes(arguments[0])", [
+      freshTitle,
+    ]),
+  );
   await click(".sidebar nav button:nth-child(2)");
   await type(".search-box input", "Native portable recovery");
   await waitFor(() =>
@@ -299,7 +361,7 @@ try {
   );
   await stop();
   console.log(
-    "PASS: native screenshot/OCR, proxy/model networking, MCP stdio SDK, SQLite editing, system/portable isolation, restart and durable-journal corruption recovery",
+    "PASS: native shortcut recording, screenshot/OCR, custom-port proxy/model networking, MCP stdio SDK, SQLite editing, system/portable isolation, cleanup surviving restart and recovery after primary/WAL/newest-checkpoint corruption",
   );
 } catch (error) {
   fs.mkdirSync("native-test-results", { recursive: true });

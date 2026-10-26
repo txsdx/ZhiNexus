@@ -2163,3 +2163,39 @@ details pre {
   border-radius: 8px;
   background: var(--surface);
 }
+
+/* Native desktop windows can have few logical pixels at high OS DPI. Keep navigation reachable without reducing text. */
+[data-system-scale] .sidebar {
+  max-height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+[data-system-scale] .sidebar > * {
+  flex-shrink: 0;
+}
+[data-system-scale] .main {
+  min-width: 0;
+}
+@media (min-width: 601px) and (max-height: 820px) {
+  [data-system-scale] .brand {
+    margin-bottom: 20px;
+  }
+  [data-system-scale] .nav-caption {
+    margin-top: 18px;
+  }
+  [data-system-scale] .sidebar nav {
+    gap: 4px;
+  }
+  [data-system-scale] .sidebar nav button,
+  [data-system-scale] .sidebar-bottom > button {
+    padding-block: 10px;
+  }
+  [data-system-scale] .sidebar-bottom {
+    padding-top: 16px;
+    padding-bottom: 12px;
+  }
+  [data-system-scale] .sidebar-bottom .local-card,
+  [data-system-scale] .sidebar-bottom .profile {
+    display: none;
+  }
+}

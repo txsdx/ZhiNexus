@@ -787,3 +787,23 @@ test("API keys synchronize automatically as ciphertext, with optional custom key
     await b.close();
   }
 });
+
+test("desktop navigation remains reachable in a short high-DPI workspace", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 992, height: 688 });
+  await page.goto("/");
+  await expect(page.locator(".app-shell")).toBeVisible();
+  await page.evaluate(() => {
+    document.documentElement.dataset.systemScale = "1.5";
+  });
+  const settings = page.getByRole("button", { name: "设置与偏好" });
+  await settings.scrollIntoViewIfNeeded();
+  const bounds = await settings.boundingBox();
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(688);
+  await settings.click();
+  await expect(
+    page.locator('[data-settings-tab="notifications"]'),
+  ).toBeVisible();
+});

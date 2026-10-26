@@ -42,15 +42,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DRAFT: ${{ inputs.draft }}
-        run: |
-          expected_tag="v$(node scripts/versions.mjs release)"
-          release_tag="${RELEASE_TAG:-$expected_tag}"
-          test "$release_tag" = "$expected_tag"
-          if ! gh release view "$release_tag"; then
-            draft_args=()
-            if [ "$RELEASE_DRAFT" = true ]; then draft_args+=(--draft); fi
-            gh release create "$release_tag" "${draft_args[@]}" --target "$GITHUB_SHA" --title "知枢 ZhiNexus $release_tag" --notes-file .ai/CHANGELOG.md
-          fi
-          mapfile -d '' assets < <(find release-artifacts -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.apk' -o -name '*.sig' -o -name 'latest.json' \) -print0)
-          test "${#assets[@]}" -gt 0
-          gh release upload "$release_tag" "${assets[@]}" --clobber
+        run: node scripts/publish-release.mjs release-artifacts

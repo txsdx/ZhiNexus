@@ -19,7 +19,36 @@ struct Frame {
     id: String,
     image: image::RgbaImage,
     png: String,
-    source: String,
+    origin: (i32, i32),
+    windows: Vec<SourceWindow>,
+}
+/// Window bounds are sampled before the overlay appears, so provenance comes from the selected region's center.
+struct SourceWindow {
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+    name: String,
+}
+/// Record only bounded process names and geometry, never window titles or command lines.
+fn source_windows() -> Vec<SourceWindow> {
+    xcap::Window::all()
+        .unwrap_or_default()
+        .into_iter()
+        .take(512)
+        .filter_map(|window| {
+            if window.is_minimized().ok()? {
+                return None;
+            }
+            Some(SourceWindow {
+                x: window.x().ok()? as i64,
+                y: window.y().ok()? as i64,
+                width: window.width().ok()? as i64,
+                height: window.height().ok()? as i64,
+                name: window.app_name().ok()?.chars().take(128).collect(),
+            })
+        })
+        .collect()
 }
 /// Serialize PNG with explicit image and payload bounds before crossing IPC.
 fn png(image: &image::RgbaImage) -> Result<String, String> {
@@ -47,10 +76,16 @@ pub async fn begin(app: tauri::AppHandle) -> Result<(), String> {
         let monitor=xcap::Monitor::from_point(cursor.x as i32,cursor.y as i32).map_err(|_|"无法截取当前屏幕，请检查系统录屏权限 / Screen capture permission or monitor unavailable")?;
         let image=monitor.capture_image().map_err(|e|format!("截图失败 / Capture failed: {e}"))?;
         if image.width() as u64*image.height() as u64>40_000_000{return Err("Screen exceeds 40 megapixels".into());}
-        let source=xcap::Window::all().ok().and_then(|windows|windows.into_iter().find(|w|w.is_focused().unwrap_or(false))).and_then(|window|window.app_name().ok()).unwrap_or_else(||"unknown-process".into());
+        let windows=source_windows();
         let encoded=png(&image)?;let width=image.width();let height=image.height();let x=monitor.x().map_err(|e|e.to_string())?;let y=monitor.y().map_err(|e|e.to_string())?;
-        *handle.state::<CaptureState>().frame.lock().map_err(|_|"Capture state unavailable")?=Some(Frame{id:uuid::Uuid::new_v4().to_string(),image,png:encoded,source:format!("screenshot:{}",source.chars().take(128).collect::<String>())});
-        let window=tauri::WebviewWindowBuilder::new(&handle,"ocr-overlay",tauri::WebviewUrl::App("index.html?ocr-overlay=1".into())).title("知枢 · 截图识别").decorations(false).resizable(false).always_on_top(true).skip_taskbar(true).visible(false).build().map_err(|e|e.to_string())?;
+        *handle.state::<CaptureState>().frame.lock().map_err(|_|"Capture state unavailable")?=Some(Frame{id:uuid::Uuid::new_v4().to_string(),image,png:encoded,origin:(x,y),windows});
+        let window=tauri::WebviewWindowBuilder::new(&handle,"ocr-overlay",tauri::WebviewUrl::App("index.html?ocr-overlay=1".into()))
+            .title("知枢 · 截图识别").decorations(false).resizable(false).always_on_top(true)
+            .skip_taskbar(true).visible(false)
+            .data_directory(handle.state::<crate::paths::StorageLocation>().root.join("webview"));
+        #[cfg(target_os="windows")]
+        let window=match crate::startup::automation_arguments(){Some(arguments)=>window.additional_browser_args(&arguments),None=>window};
+        let window=window.build().map_err(|e|e.to_string())?;
         window.set_position(tauri::PhysicalPosition::new(x,y)).map_err(|e|e.to_string())?;window.set_size(tauri::PhysicalSize::new(width,height)).map_err(|e|e.to_string())?;
         window.show().map_err(|e|e.to_string())?;window.set_focus().map_err(|e|e.to_string())?;
         let cleanup=handle.clone();window.on_window_event(move|event|{if matches!(event,tauri::WindowEvent::Destroyed){if let Ok(mut frame)=cleanup.state::<CaptureState>().frame.lock(){frame.take();}cleanup.state::<CaptureState>().active.store(false,Ordering::SeqCst);}});
@@ -119,7 +154,22 @@ pub fn finish_ocr_capture(
     }
     let image = image::imageops::crop_imm(&current.image, x, y, width, height).to_image();
     let encoded = png(&image)?;
-    let source = current.source.clone();
+    let point = (
+        current.origin.0 as i64 + x as i64 + (width / 2) as i64,
+        current.origin.1 as i64 + y as i64 + (height / 2) as i64,
+    );
+    let process = current
+        .windows
+        .iter()
+        .find(|window| {
+            point.0 >= window.x
+                && point.1 >= window.y
+                && point.0 < window.x + window.width
+                && point.1 < window.y + window.height
+        })
+        .map(|window| window.name.as_str())
+        .unwrap_or("unknown-process");
+    let source = format!("screenshot:{process}");
     frame.take();
     drop(frame);
     window.destroy().map_err(|e| e.to_string())?;

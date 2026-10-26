@@ -42,10 +42,27 @@ async function connect() {
     ),
   );
   device("forward", "tcp:9223", "localabstract:webview_devtools_remote_" + pid);
-  const browser = await waitFor(() =>
-    chromium.connectOverCDP("http://127.0.0.1:9223", { noDefaults: true }),
-  );
-  const page = await waitFor(() => browser.contexts()[0]?.pages()[0]);
+  // The debug socket can be listening before its new page target exists after a force-stop.
+  await waitFor(async () => {
+    const response = await fetch("http://127.0.0.1:9223/json/list");
+    const targets = await response.json();
+    return targets.some(
+      (target) => target.type === "page" && target.webSocketDebuggerUrl,
+    );
+  });
+  const { browser, page } = await waitFor(async () => {
+    const browser = await chromium.connectOverCDP("http://127.0.0.1:9223", {
+      noDefaults: true,
+      timeout: 10000,
+    });
+    const page = browser
+      .contexts()
+      .flatMap((context) => context.pages())
+      .find((page) => !page.isClosed());
+    if (page) return { browser, page };
+    await browser.close();
+    return false;
+  });
   connected = { browser, page };
   await page.waitForSelector(".app-shell", { timeout: 60000 });
   assert.equal(await page.evaluate(() => !!window.__TAURI_INTERNALS__), true);
@@ -55,7 +72,7 @@ fs.mkdirSync("android-test-results", { recursive: true });
 let connected;
 try {
   device("shell", "pm", "grant", pkg, "android.permission.POST_NOTIFICATIONS");
-  device("shell", "am", "start", "-n", pkg + "/.MainActivity");
+  device("shell", "am", "start", "-W", "-n", pkg + "/.MainActivity");
   connected = await connect();
   let { page } = connected;
   await page.locator(".page-heading .primary").click();
@@ -79,8 +96,16 @@ try {
   });
   await connected.browser.close();
   connected = null;
+  device("forward", "--remove", "tcp:9223");
   device("shell", "am", "force-stop", pkg);
-  device("shell", "am", "start", "-n", pkg + "/.MainActivity");
+  await waitFor(() => {
+    try {
+      return !device("shell", "pidof", pkg).trim();
+    } catch {
+      return true;
+    }
+  });
+  device("shell", "am", "start", "-W", "-n", pkg + "/.MainActivity");
   connected = await connect();
   page = connected.page;
   await page.locator(".sidebar nav button:nth-child(2)").click();
@@ -92,7 +117,9 @@ try {
     ),
   );
   await page.locator(".mobile-settings").click();
-  await page.locator('.settings-tabs [data-settings-tab="notifications"]').click();
+  await page
+    .locator('.settings-tabs [data-settings-tab="notifications"]')
+    .click();
   const toggle = page.locator(".settings-content input[type=checkbox]").first();
   await toggle.check();
   await page.locator(".settings-content .primary").click();
@@ -125,6 +152,25 @@ try {
         .innerText()
         .catch(() => "WebView disconnected"),
     );
+  try {
+    const pid = device("shell", "pidof", pkg).trim().split(/\s/)[0];
+    if (pid)
+      fs.writeFileSync(
+        "android-test-results/app-logcat.txt",
+        device("logcat", "-d", "--pid", pid),
+      );
+    fs.writeFileSync(
+      "android-test-results/activity.txt",
+      device("shell", "dumpsys", "activity", "top"),
+    );
+    const targets = await fetch("http://127.0.0.1:9223/json/list")
+      .then((response) => response.json())
+      .catch(() => null);
+    fs.writeFileSync(
+      "android-test-results/devtools-targets.json",
+      JSON.stringify(targets, null, 2),
+    );
+  } catch {}
   try {
     fs.writeFileSync(
       "android-test-results/logcat.txt",

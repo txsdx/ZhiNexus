@@ -1,5 +1,7 @@
 /** Real Tauri/WebKit smoke test: native SQLite edits, portable isolation, restart and physical-corruption recovery. */
 import fs from "node:fs";
+import { testNativeNetwork } from "./native-network.mjs";
+import { testNativeOcr } from "./native-ocr.mjs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
@@ -52,7 +54,14 @@ const element = (selector) =>
   command("POST", "/element", { using: "css selector", value: selector });
 /** Click one real DOM control through the native driver. */
 async function click(selector) {
-  const e = await waitFor(() => element(selector));
+  const e = await waitFor(async () => {
+    const ready = await script(
+      'const e=document.querySelector(arguments[0]);if(!e||e.disabled)return false;e.scrollIntoView({block:"center",inline:"nearest"});return true;',
+      [selector],
+    );
+    return ready ? element(selector) : false;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
   await command(
     "POST",
     "/element/" + e["element-6066-11e4-a52e-4f735466cecf"] + "/click",
@@ -206,6 +215,10 @@ try {
     script('return document.querySelector(".toast")?.innerText.includes("1")'),
   );
   await click('.settings-tabs [data-settings-tab="database"]');
+  await testNativeNetwork({ click, type, script, waitFor });
+  await testNativeOcr({ command, script, click, type, waitFor });
+  await click(".sidebar-bottom>button");
+  await click('[data-settings-tab="database"]');
   const systemInfo = await script(
     'return document.querySelector(".settings-content .notice")?.innerText',
   );
@@ -282,7 +295,7 @@ try {
   );
   await stop();
   console.log(
-    "PASS: native SQLite editing, system/portable isolation, restart and durable-journal corruption recovery",
+    "PASS: native screenshot/OCR, proxy/model networking, MCP stdio SDK, SQLite editing, system/portable isolation, restart and durable-journal corruption recovery",
   );
 } catch (error) {
   fs.mkdirSync("native-test-results", { recursive: true });

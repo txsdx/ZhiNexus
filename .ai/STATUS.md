@@ -28,10 +28,13 @@
 
 ## 0.13 本轮验证（2026-10-27）
 
+- **正式 Release [v0.13.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.13.0) 已发布**（非草稿/非预发布），北京时间 2026-10-27 18:44，打包源码 `af7cf79`。Windows protable/setup、Ubuntu DEB、Android arm64 开发签名 APK 及 latest.json 共 5 项资产均已上传；已读回清单并校验三平台版本、四个下载 URL/安装包 SHA-256 与清单自身摘要全部一致。
+- 最终 [Build and release 40489154837](https://github.com/txsdx/ZhiNexus/actions/runs/40489154837) 全组成功：共享前端 `122138421219`、Windows `122138757148`、Ubuntu `122138757128`、Android `122138757035`、发布 `122143697751`，含缓存/上传收尾。Windows/Ubuntu 实包测试通过真实 SSE（结束前可见部分输出）、快捷键/OCR、代理/模型/MCP、SQLite、portable/系统隔离、清理/重启/损坏恢复；Android15 模拟器通过存储/编辑/重启/移动界面/通知与 OS 排程、真实 SSE 对话和任务确认清除。
+- 最终自动 [Validate 40489155626](https://github.com/txsdx/ZhiNexus/actions/runs/40489155626) 全部成功：99 单元、26 脚本、58 浏览器、前端构建与 locked Rust check。发布说明已写明本轮功能和 Android 开发证书无法保证覆盖旧开发 APK 的限制；未宣称真实私有 AI 账号或 Android 实体手机兼容已验证。
 - 真实流式 AI、可配置并发与持久任务审阅、词条左大纲/顶部信息、划词 AI/黄色高亮、侧栏收起/展开已经实现。
 - 最终本地 **99 单元、26 脚本、58 Playwright 全量回归、前端构建、locked Rust check、格式/差异检查全部通过**。新任务专项 8 项覆盖真实分块 HTTP、选区上下文/失败保留输入、OCR 审阅持久化、分类先确认/清队列失败幂等、动态限流/排队取消、第二窗口保护、重载中断恢复及侧栏/高亮布局。复习控制 8 项与删除/同步/备份等既有回归保持通过。
-- 首轮全量 56/57 通过，提示词独立保存用例在设置控制器热更新期间失败；该组独立重跑通过，冻结应用源码后最终 58/58 全量通过。三平台原生 SSE/正式 Release 待云端构建验证，完成后补证据。
-- 应用源码 `f80cae9` 的云端 Validate [40486897040](https://github.com/txsdx/ZhiNexus/actions/runs/40486897040) 全部通过；首次构建 [40486896426](https://github.com/txsdx/ZhiNexus/actions/runs/40486896426) 的 Windows/Ubuntu 实包含真实 SSE 测试全部通过。Android 编译成功，但新增测试使用 `.chat-model select` 同时匹配模型和思考框而严格定位失败，尚未发出流式请求；已改为精确 Chat model 可访问名称，应用代码不变，重新构建发布验证。
+- 首轮全量 56/57 通过，提示词独立保存用例在设置控制器热更新期间失败；该组独立重跑通过，冻结应用源码后最终 58/58 全量通过。三平台原生 SSE/正式 Release 已完成，最终证据见本节开头。
+- 应用源码 `f80cae9` 的云端 Validate [40486897040](https://github.com/txsdx/ZhiNexus/actions/runs/40486897040) 全部通过；首次构建 [40486896426](https://github.com/txsdx/ZhiNexus/actions/runs/40486896426) 的 Windows/Ubuntu 实包含真实 SSE 测试全部通过。Android 编译成功，但新增测试使用 `.chat-model select` 同时匹配模型和思考框而严格定位失败，尚未发出流式请求；改为精确 Chat model 可访问名称，应用代码不变，最终重新构建及正式发布全部成功。
 
 ## 0.12 本轮验证（2026-10-27）
 

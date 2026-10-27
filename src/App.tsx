@@ -1,5 +1,8 @@
 /** Application shell, responsive navigation, capture flow and per-device background services. */
 import { diagnostics } from "./services/diagnostics";
+import { aiJobs } from "./services/ai-jobs";
+import { AIJobReview, AITaskCenter, useAIJobs } from "./components/AIJobView";
+import type { AITarget, AIJob } from "./core/ai-jobs";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -16,6 +19,9 @@ import {
   Settings2,
   Sparkles,
   X,
+  ListTodo,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import Fuse from "fuse.js";
 import { reconcileReminders } from "./services/reminders";
@@ -124,8 +130,8 @@ function Capture({
                     if (store.getSnapshot().device.apiKey)
                       notify(
                         t(
-                          "已执行已配置的自动整理任务",
-                          "Configured enrichment tasks completed",
+                          "整理任务已排队，生成后请到 AI 任务队列审阅",
+                          "Enrichment queued; review the result in AI tasks",
                         ),
                       );
                   })
@@ -257,6 +263,11 @@ function Shell() {
     t = useT(),
     [page, setPage] = useState("home"),
     [chatEntry, setChatEntry] = useState(""),
+    [chatTopic, setChatTopic] = useState(""),
+    [chatQuote, setChatQuote] = useState(""),
+    [reviewSession, setReviewSession] = useState(""),
+    [settingsTab, setSettingsTab] = useState("appearance"),
+    [selectedJob, setSelectedJob] = useState(""),
     [query, setQuery] = useState(""),
     [capture, setCapture] = useState(false),
     [captureText, setCaptureText] = useState(""),
@@ -265,6 +276,11 @@ function Shell() {
     [ocr, setOcr] = useState<DesktopAction | null>(null),
     [actions, setActions] = useState<DesktopAction[]>([]),
     [toast, setToast] = useState("");
+  const sidebarCollapsed =
+    s.device.sidebarCollapsed ??
+    s.docs.find((d) => d.id === "appearance" && d.collection === "setting")
+      ?.fields.layout === "compact";
+  const jobs = useAIJobs();
   const workspace = useEntryWorkspace(),
     entry = workspace.active;
   const interacted = useRef(false),
@@ -423,6 +439,44 @@ function Shell() {
   const open = (id: string) => {
     if (navigate("entry")) workspace.controller.open(id);
   };
+  const destination = (target: AITarget) => {
+    if (target.page === "entry" && target.entryId) open(target.entryId);
+    else if (target.page === "agent") {
+      setChatEntry(target.entryId ?? "");
+      setChatTopic(target.topicId ?? "");
+      setChatQuote("");
+      navigate("agent");
+    } else if (target.page === "review") {
+      setReviewSession(target.sessionId ?? "");
+      navigate("review");
+    } else if (target.page === "tasks") {
+      navigate("tasks");
+    } else {
+      setSettingsTab(target.tab ?? "appearance");
+      navigate("settings");
+    }
+  };
+  const openJob = (job: AIJob) => {
+    destination(job.target);
+    setSelectedJob(job.id);
+  };
+  const openJobRef = useRef(openJob);
+  openJobRef.current = openJob;
+  useEffect(() => {
+    const handle = (event: Event) => {
+      const id = (event as CustomEvent<{ id: string }>).detail?.id;
+      const job = aiJobs.getSnapshot().jobs.find((j) => j.id === id);
+      if (job) openJobRef.current(job);
+    };
+    window.addEventListener("zhinexus:ai-job", handle);
+    const failed = (event: Event) =>
+      setToast((event as CustomEvent<{ error: string }>).detail.error);
+    window.addEventListener("zhinexus:ai-job-error", failed);
+    return () => {
+      window.removeEventListener("zhinexus:ai-job", handle);
+      window.removeEventListener("zhinexus:ai-job-error", failed);
+    };
+  }, []);
   const nav = [
     { id: "home", name: t("学习概览", "Overview"), icon: Home },
     { id: "library", name: t("我的知识库", "Knowledge"), icon: LibraryBig },
@@ -434,10 +488,46 @@ function Shell() {
     },
     { id: "graph", name: t("知识星图", "Knowledge graph"), icon: GitBranch },
     { id: "agent", name: t("学习伙伴", "AI companion"), icon: MessageSquare },
+    {
+      id: "tasks",
+      name: t("AI 任务", "AI tasks"),
+      icon: ListTodo,
+      badge: jobs.jobs.length,
+    },
   ];
   return (
-    <div className="app-shell">
+    <div
+      className={
+        "app-shell" +
+        (sidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded")
+      }
+    >
       <aside className="sidebar">
+        <button
+          className="sidebar-toggle icon"
+          aria-label={
+            sidebarCollapsed
+              ? t("展开左侧栏", "Expand sidebar")
+              : t("收起左侧栏", "Collapse sidebar")
+          }
+          aria-expanded={!sidebarCollapsed}
+          title={
+            sidebarCollapsed
+              ? t("展开左侧栏", "Expand sidebar")
+              : t("收起左侧栏", "Collapse sidebar")
+          }
+          onClick={() =>
+            void store
+              .updateDevice({ sidebarCollapsed: !sidebarCollapsed })
+              .catch((error) => notify(String(error)))
+          }
+        >
+          {sidebarCollapsed ? (
+            <PanelLeftOpen size={20} />
+          ) : (
+            <PanelLeftClose size={20} />
+          )}
+        </button>
         <a
           className="brand"
           href="#"
@@ -470,6 +560,7 @@ function Shell() {
           {nav.map((n) => (
             <button
               key={n.id}
+              title={n.name}
               className={
                 page === n.id || (page === "entry" && n.id === "library")
                   ? "active"
@@ -477,7 +568,11 @@ function Shell() {
               }
               onClick={() => {
                 navigate(n.id);
-                if (n.id === "agent") setChatEntry("");
+                if (n.id === "agent") {
+                  setChatEntry("");
+                  setChatTopic("");
+                  setChatQuote("");
+                }
               }}
             >
               <n.icon size={19} />
@@ -566,6 +661,16 @@ function Shell() {
             >
               <Settings2 size={18} />
             </button>
+            <button
+              className="ai-queue-button"
+              onClick={() => navigate("tasks")}
+              aria-label={t("打开 AI 任务队列", "Open AI task queue")}
+            >
+              <ListTodo size={17} />
+              <span>
+                {t("AI 任务", "AI tasks")} {jobs.jobs.length || ""}
+              </span>
+            </button>
             <span className="topbar-status">
               <span className="status-dot" />
               {t("本地已保存", "Saved locally")}
@@ -613,21 +718,49 @@ function Shell() {
               id={id}
               active={page === "entry" && entry === id}
               onBack={() => navigate("library")}
-              onOpen={open}
-              onChat={(id) => {
-                if (navigate("agent")) setChatEntry(id);
+              onChat={(id, quote) => {
+                if (navigate("agent")) {
+                  setChatEntry(id);
+                  setChatTopic("");
+                  setChatQuote(quote ?? "");
+                }
               }}
               notify={notify}
             />
           ))}
-          {page === "review" && <Review notify={notify} />}{" "}
+          {page === "review" && (
+            <Review notify={notify} initialSession={reviewSession} />
+          )}{" "}
           {page === "graph" && <Graph onOpen={open} />}{" "}
           {page === "agent" && (
-            <Agent key={chatEntry} entryId={chatEntry} notify={notify} />
+            <Agent
+              key={chatEntry}
+              entryId={chatEntry}
+              initialTopic={chatTopic}
+              quote={chatQuote}
+              notify={notify}
+            />
           )}{" "}
-          {page === "settings" && <Settings notify={notify} />}
+          {page === "settings" && (
+            <Settings
+              key={settingsTab}
+              initialTab={settingsTab}
+              notify={notify}
+            />
+          )}
+          {page === "tasks" && (
+            <AITaskCenter onOpen={openJob} notify={notify} />
+          )}
         </Suspense>
       </main>
+      {selectedJob && (
+        <AIJobReview
+          id={selectedJob}
+          onClose={() => setSelectedJob("")}
+          onNavigate={destination}
+          notify={notify}
+        />
+      )}
       {ocr?.image && (
         <OcrResult
           image={ocr.image}

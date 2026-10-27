@@ -9,6 +9,8 @@ import {
   type NodeViewProps,
 } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/core";
+import { BubbleMenu } from "@tiptap/react/menus";
+import { Copy, Highlighter, MessageSquare, Eraser, Bold } from "lucide-react";
 import CodeBlock from "@tiptap/extension-code-block";
 import Image from "@tiptap/extension-image";
 import { Modal, useT } from "../common";
@@ -66,12 +68,18 @@ export function BlockEditor({
   focus,
   onChange,
   onFocus,
+  onChat,
+  onAnnotate,
+  onFeedback,
 }: {
   document: JSONContent;
   editable: boolean;
   focus: BlockFocus | null;
   onChange: (json: JSONContent, markdown: string) => void;
   onFocus: (id: string) => void;
+  onChat?: (text: string) => void;
+  onAnnotate?: (json: JSONContent, markdown: string) => void;
+  onFeedback?: (message: string) => void;
 }) {
   const t = useT(),
     full = useRef(document),
@@ -188,6 +196,23 @@ export function BlockEditor({
       </p>
     );
   const block = documentBlocks(document).find((b) => b.id === selected);
+  /** An explicit annotation can enter draft editing from reading mode without changing saved knowledge. */
+  const annotate = (kind: "highlight" | "clear" | "bold") => {
+    if (kind === "highlight") editor.chain().focus().setHighlight().run();
+    else if (kind === "clear") editor.chain().focus().unsetHighlight().run();
+    else editor.chain().focus().toggleBold().run();
+    const merged = replaceScoped(
+      full.current,
+      focusRef.current,
+      editor.getJSON(),
+    );
+    full.current = merged;
+    onAnnotate?.(merged, documentMarkdown(merged));
+  };
+  const selectionText = () => {
+    const { from, to } = editor.state.selection;
+    return editor.state.doc.textBetween(from, to, "\n");
+  };
   /** Reorder only the visible slice; undo can restore the previous block ordering. */
   const move = (direction: number) => {
     const json = editor.getJSON(),
@@ -200,6 +225,77 @@ export function BlockEditor({
   };
   return (
     <>
+      <BubbleMenu
+        editor={editor}
+        options={{ placement: "top", offset: 8 }}
+        shouldShow={({ state }) =>
+          !state.selection.empty &&
+          !!state.doc
+            .textBetween(state.selection.from, state.selection.to)
+            .trim()
+        }
+      >
+        <div
+          className="selection-toolbar"
+          role="toolbar"
+          aria-label={t("划词工具", "Selection tools")}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <button
+            title={t("AI 对话", "Ask AI")}
+            onClick={() => onChat?.(selectionText())}
+          >
+            <MessageSquare size={16} />
+            {t("AI 对话", "Ask AI")}
+          </button>
+          <button
+            title={t("黄色高亮", "Yellow highlight")}
+            aria-label={t("黄色高亮", "Yellow highlight")}
+            onClick={() => annotate("highlight")}
+          >
+            <Highlighter size={16} />
+          </button>
+          <button
+            title={t("取消高亮", "Remove highlight")}
+            aria-label={t("取消高亮", "Remove highlight")}
+            onClick={() => annotate("clear")}
+          >
+            <Eraser size={16} />
+          </button>
+          <button
+            title={t("加粗选区", "Bold selection")}
+            aria-label={t("加粗选区", "Bold selection")}
+            onClick={() => annotate("bold")}
+          >
+            <Bold size={16} />
+          </button>
+          <button
+            title={t("复制选区", "Copy selection")}
+            aria-label={t("复制选区", "Copy selection")}
+            onClick={() => {
+              const text = selectionText();
+              void (async () => {
+                if ("__TAURI_INTERNALS__" in window) {
+                  const { writeText } =
+                    await import("@tauri-apps/plugin-clipboard-manager");
+                  await writeText(text);
+                } else await navigator.clipboard.writeText(text);
+              })().then(
+                () => onFeedback?.(t("已复制选区", "Selection copied")),
+                () =>
+                  onFeedback?.(
+                    t(
+                      "复制失败，请检查剪贴板权限",
+                      "Copy failed; check clipboard permissions",
+                    ),
+                  ),
+              );
+            }}
+          >
+            <Copy size={16} />
+          </button>
+        </div>
+      </BubbleMenu>
       {editable && (
         <div
           className="block-toolbar"

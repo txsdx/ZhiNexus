@@ -6,24 +6,47 @@ import { store, json } from "../core/store";
 import type { Message, Topic } from "../core/types";
 import { complete, renderPrompt } from "./ai";
 import { connectMcp } from "./mcp";
+import type { AIJobContext } from "../core/ai-jobs";
 /** Run at most six tool rounds and persist protocol-complete messages after every round. */
 async function chatInternal(
   topic: Topic,
   text: string,
   confirm: (description: string) => Promise<boolean>,
   override: { model: string; effort: string },
+  orchestration?: { context: AIJobContext; jobId: string },
 ): Promise<void> {
   const s = store.getSnapshot(),
     entry = s.entries.find((e) => e.id === topic.entryId);
   const messages: Message[] = [...topic.messages];
-  const persist = () =>
-    store.patch(
+  const persist = async () => {
+    orchestration?.context.check();
+    const written = await store.patchWhen(
       "topic",
       topic.id,
       { messages: json(messages), updatedAt: new Date().toISOString() },
       "agent",
+      () =>
+        !orchestration?.context.signal.aborted &&
+        store.getSnapshot().topics.some((t) => t.id === topic.id),
     );
-  messages.push({ role: "user", content: text });
+    if (!written)
+      throw Error("对话已取消或删除 / Conversation cancelled or deleted");
+  };
+  const previousFinal =
+    orchestration &&
+    messages
+      .filter((m) => m.jobId === orchestration.jobId && m.role === "assistant")
+      .at(-1);
+  if (previousFinal && !previousFinal.tool_calls?.length) return;
+  if (
+    !orchestration ||
+    !messages.some((m) => m.role === "user" && m.jobId === orchestration.jobId)
+  )
+    messages.push({
+      role: "user",
+      content: text,
+      ...(orchestration ? { jobId: orchestration.jobId } : {}),
+    });
   await persist();
   const clients: Awaited<ReturnType<typeof connectMcp>>[] = [];
   const external = new Map<
@@ -60,6 +83,7 @@ async function chatInternal(
     const execute = async (
       call: import("../core/types").ToolCall,
     ): Promise<unknown> => {
+      orchestration?.context.check();
       const receipt = "tool-" + (await sha256([topic.id, call.id]));
       const saved = store
         .getSnapshot()
@@ -89,12 +113,14 @@ async function chatInternal(
           ))
         )
           return { cancelled: true };
+        orchestration?.context.check();
         await store.patch(
           "setting",
           receipt,
           { status: "pending", tool: call.function.name },
           "agent-outbox",
         );
+        orchestration?.context.check();
         const result = await remote.client.callTool({
           name: remote.name,
           arguments: args,
@@ -143,14 +169,26 @@ async function chatInternal(
       }),
     };
     for (let turn = 0; turn < 6; turn++) {
-      const response = await complete(
-        "agent",
-        [system, ...messages],
-        specs,
-        override,
-      );
+      orchestration?.context.check();
+      const request = (progress?: Parameters<typeof complete>[6]) =>
+        complete(
+          "agent",
+          [system, ...messages],
+          specs,
+          override,
+          undefined,
+          orchestration?.context.signal,
+          progress,
+        );
+      const response = orchestration
+        ? await orchestration.context.request("agent", (progress) =>
+            request(progress),
+          )
+        : await request();
+      orchestration?.context.check();
       messages.push({
         role: "assistant",
+        ...(orchestration ? { jobId: orchestration.jobId } : {}),
         content: response.content,
         ...(response.calls.length ? { tool_calls: response.calls } : {}),
       });

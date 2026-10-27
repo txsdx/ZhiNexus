@@ -1453,32 +1453,6 @@ details pre {
     "Segoe UI",
     sans-serif;
 }
-[data-layout="compact"] .sidebar {
-  width: 82px;
-  padding: 25px 12px 0;
-}
-[data-layout="compact"] .brand {
-  margin: 0 4px 30px;
-}
-[data-layout="compact"] .brand > span:last-child,
-[data-layout="compact"] .sidebar button > span,
-[data-layout="compact"] .sidebar button > b,
-[data-layout="compact"] .sidebar button > kbd,
-[data-layout="compact"] .nav-caption,
-[data-layout="compact"] .local-card,
-[data-layout="compact"] .profile {
-  display: none;
-}
-[data-layout="compact"] .sidebar nav button,
-[data-layout="compact"] .sidebar-bottom > button,
-[data-layout="compact"] .capture-button {
-  justify-content: center;
-  padding: 13px;
-}
-[data-layout="compact"] .main {
-  margin-left: 82px;
-  width: calc(100% - 82px);
-}
 @media (min-width: 1650px) {
   .page {
     padding: 50px 70px;
@@ -2119,4 +2093,400 @@ textarea::placeholder {
 }
 .diagnostic-record h3 {
   margin-top: 16px;
+}
+
+/* Global AI work center: genuine streams stay readable without expanding the viewport. */
+.ai-job-list {
+  display: grid;
+  gap: 16px;
+}
+.ai-job-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--surface);
+}
+.ai-job-link {
+  min-width: 0;
+  text-align: left;
+  justify-content: flex-start;
+}
+.ai-job-link strong {
+  overflow-wrap: anywhere;
+}
+.ai-job-card time {
+  font-size: 0.82rem;
+}
+.ai-job-stream {
+  min-width: 0;
+  max-height: 360px;
+  overflow: auto;
+  margin: 12px 0;
+}
+.ai-job-stage + .ai-job-stage {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.ai-stream-content,
+.ai-job-stage pre,
+.ai-tool-approval pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+.ai-job-stage pre {
+  background: var(--bg);
+  padding: 12px;
+  border-radius: 8px;
+}
+.ai-review-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.ai-result-review {
+  min-width: 0;
+}
+.ai-result-review img {
+  max-height: 420px;
+  object-fit: contain;
+}
+.ai-queue-button {
+  white-space: nowrap;
+}
+.chat-live-job {
+  min-width: 0;
+}
+.chat-selection-context {
+  margin: 0 20px 12px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  max-height: 180px;
+  overflow: auto;
+}
+.chat-selection-context p {
+  white-space: pre-wrap;
+}
+.review-live-task {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.review-live-task .ai-job-stream {
+  flex-basis: 100%;
+  width: 100%;
+  max-height: 260px;
+}
+/* An explicit rail toggle retains the navigation's accessible names when labels are hidden. */
+.sidebar-toggle {
+  align-self: flex-end;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+.sidebar-collapsed .sidebar {
+  width: 76px;
+  padding: 16px 10px;
+}
+.sidebar-collapsed .main {
+  margin-left: 76px;
+  width: calc(100% - 76px);
+}
+.sidebar-collapsed .brand {
+  justify-content: center;
+  padding: 10px 0;
+}
+.sidebar-collapsed .brand span,
+.sidebar-collapsed .capture-button span,
+.sidebar-collapsed .capture-button kbd,
+.sidebar-collapsed .nav-caption,
+.sidebar-collapsed .sidebar nav button span,
+.sidebar-collapsed .sidebar-bottom > button span,
+.sidebar-collapsed .local-card,
+.sidebar-collapsed .profile {
+  display: none;
+}
+.sidebar-collapsed .sidebar nav button,
+.sidebar-collapsed .capture-button,
+.sidebar-collapsed .sidebar-bottom > button {
+  justify-content: center;
+  padding: 13px 8px;
+}
+.sidebar-collapsed .sidebar nav button {
+  position: relative;
+}
+.sidebar-collapsed .sidebar nav button b {
+  position: absolute;
+  right: 0;
+  top: 1px;
+  font-size: 0.65rem;
+  min-width: 16px;
+}
+.sidebar-collapsed .sidebar-bottom {
+  margin-top: auto;
+}
+.sidebar-collapsed .brand-icon {
+  width: 42px;
+  max-width: 100%;
+}
+/* Entry information is above the paper; only the outline occupies a side column. */
+.entry-columns {
+  display: grid;
+  grid-template-columns: minmax(160px, 205px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+.entry-outline {
+  position: sticky;
+  top: 100px;
+  min-width: 0;
+  max-height: calc(100vh - 125px);
+  overflow: auto;
+}
+.entry-outline > details > summary {
+  font-weight: 700;
+  cursor: pointer;
+  padding: 12px;
+}
+.entry-outline .document-outline {
+  border: 0;
+  padding: 8px 12px;
+}
+.entry-outline .document-outline > h3 {
+  display: none;
+}
+.entry-columns > .paper {
+  min-width: 0;
+}
+.entry-meta {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.entry-meta h3 {
+  font-size: 1rem;
+  margin: 0 4px 8px 0;
+}
+.entry-meta label {
+  margin: 0;
+  min-width: 160px;
+  flex: 1;
+}
+.entry-meta p {
+  font-size: 0.82rem;
+  margin: 0;
+  line-height: 1.6;
+}
+.entry-meta .danger.full {
+  width: auto;
+  min-width: 100px;
+  align-self: center;
+}
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px #0002;
+  max-width: calc(100vw - 20px);
+}
+.selection-toolbar button {
+  padding: 7px;
+  white-space: nowrap;
+}
+.block-document mark,
+.markdown mark {
+  background: #ffeb76;
+  color: #000;
+  border-radius: 2px;
+  box-decoration-break: clone;
+}
+.entry-outline .document-outline button {
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 1100px) {
+  .topbar-status {
+    display: none;
+  }
+  .entry-columns {
+    grid-template-columns: 170px minmax(0, 1fr);
+  }
+}
+@media (max-width: 999px) {
+  .entry-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .entry-outline {
+    position: static;
+    max-height: 320px;
+  }
+  .entry-outline > details {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .entry-meta {
+    gap: 10px;
+  }
+  .entry-meta label {
+    min-width: 140px;
+  }
+  .ai-review-status {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 760px) {
+  .sidebar-toggle {
+    display: none;
+  }
+  .sidebar-collapsed .sidebar {
+    width: 100%;
+    padding: 0;
+  }
+  .sidebar-collapsed .main {
+    margin-left: 0;
+    width: 100%;
+  }
+  .sidebar-collapsed .sidebar nav button span {
+    display: block;
+  }
+  .sidebar-collapsed .sidebar nav button {
+    padding: 8px 3px;
+    flex-direction: column;
+  }
+  .sidebar-collapsed .sidebar nav button b {
+    right: 12%;
+    top: 2px;
+  }
+  .ai-queue-button span {
+    font-size: 0.8rem;
+  }
+  .ai-queue-button {
+    padding: 7px;
+  }
+  .ai-job-card {
+    padding: 12px;
+  }
+  .ai-job-card .section-heading {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .ai-job-link {
+    padding: 4px;
+  }
+  .entry-meta {
+    padding: 10px;
+  }
+  .entry-meta h3 {
+    flex-basis: 100%;
+    margin: 0;
+  }
+  .entry-meta .danger.full {
+    font-size: 0.85rem;
+  }
+}
+/* The explicit navigation toggle takes precedence over automatic desktop icon layouts. */
+.sidebar-expanded .sidebar {
+  width: 242px;
+  padding: 30px 20px 0;
+}
+.sidebar-expanded .main {
+  margin-left: 242px;
+  width: calc(100% - 242px);
+}
+.sidebar-expanded .brand {
+  display: flex;
+  justify-content: flex-start;
+  margin: 0 13px 36px;
+}
+.sidebar-expanded .brand > span:last-child,
+.sidebar-expanded .sidebar button > span,
+.sidebar-expanded .sidebar button > b,
+.sidebar-expanded .sidebar button > kbd,
+.sidebar-expanded .nav-caption {
+  display: block;
+}
+.sidebar-expanded .local-card,
+.sidebar-expanded .profile {
+  display: flex;
+}
+.sidebar-expanded .sidebar nav button,
+.sidebar-expanded .sidebar-bottom > button,
+.sidebar-expanded .capture-button {
+  justify-content: flex-start;
+  padding: 13px 15px;
+}
+.sidebar-toggle {
+  position: absolute;
+  top: 30px;
+  right: 9px;
+  margin: 0;
+  padding: 5px;
+  width: 29px;
+  height: 29px;
+  z-index: 1;
+}
+.sidebar-collapsed .sidebar-toggle {
+  top: 10px;
+  right: 23px;
+}
+.sidebar-collapsed .brand {
+  margin-top: 30px;
+}
+@media (min-width: 761px) and (max-width: 1200px) {
+  .sidebar-expanded .sidebar {
+    width: 210px;
+    padding: 25px 14px 0;
+  }
+  .sidebar-expanded .main {
+    margin-left: 210px;
+    width: calc(100% - 210px);
+  }
+}
+@media (max-width: 760px) {
+  .sidebar-expanded .sidebar {
+    width: 100%;
+    padding: 0;
+  }
+  .sidebar-expanded .main {
+    margin: 0;
+    width: 100%;
+  }
+  .sidebar-expanded .brand,
+  .sidebar-expanded .capture-button,
+  .sidebar-expanded .nav-caption,
+  .sidebar-expanded .sidebar-bottom {
+    display: none;
+  }
+  .sidebar-expanded .sidebar nav button {
+    padding: 8px 3px;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .sidebar-expanded .sidebar nav button span {
+    display: block;
+  }
+  .sidebar-toggle {
+    display: none;
+  }
+}
+fieldset.ai-result-review {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
 }

@@ -10,6 +10,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import Image from "@tiptap/extension-image";
 import Mathematics from "@tiptap/extension-mathematics";
 import UniqueID from "@tiptap/extension-unique-id";
+import Highlight from "@tiptap/extension-highlight";
 /** Retain raw HTML as visible source; it never becomes executable editor HTML. */
 export const RawMarkdown = Node.create({
   name: "rawMarkdown",
@@ -79,6 +80,23 @@ export function documentExtensions(
     ...(overrides.codeBlock ? [overrides.codeBlock] : []),
     TableKit.configure({ table: { resizable: false } }),
     TaskList,
+    Highlight.extend({
+      markdownTokenizer: {
+        name: "highlight",
+        level: "inline",
+        start: (src) => src.indexOf("=="),
+        tokenize(src, _tokens, helpers) {
+          const match = /^==([\s\S]+?)==/.exec(src);
+          if (match)
+            return {
+              type: "highlight",
+              raw: match[0],
+              text: match[1],
+              tokens: helpers.inlineTokens(match[1]),
+            };
+        },
+      },
+    }).configure({ multicolor: false }),
     TaskItem.configure({ nested: true }),
     overrides.image ?? Image,
     Mathematics.configure({

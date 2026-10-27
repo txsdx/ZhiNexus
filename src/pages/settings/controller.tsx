@@ -19,7 +19,6 @@ import {
 import { useKnowledge, useT } from "../../components/common";
 import { store } from "../../core/store";
 import type { AIConfig, DeviceConfig, Task } from "../../core/types";
-import { type Classification } from "../../services/classification";
 import { settingsEditor, flushSettings } from "../../services/settings";
 import { diagnostics } from "../../services/diagnostics";
 /** useSettingsState exposes one focused settings workflow. */
@@ -35,7 +34,6 @@ export function useSettingsState(
     [report, setReport] = useState(""),
     [categoryName, setCategoryName] = useState(""),
     [parent, setParent] = useState(""),
-    [proposal, setProposal] = useState<Classification | null>(null),
     [archive, setArchive] = useState<{
       mode: "export" | "import";
       text: string;
@@ -126,8 +124,6 @@ export function useSettingsState(
     setCategoryName,
     parent,
     setParent,
-    proposal,
-    setProposal,
     archive,
     setArchive,
     password,

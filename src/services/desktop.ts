@@ -71,6 +71,7 @@ export async function quitDesktop() {
     return;
   try {
     await flushSettings();
+    await (await import("./ai-jobs")).stopAIJobsForShutdown();
     await diagnostics.flush().catch(() => {});
     await entryWorkspace.init();
     await entryWorkspace.flush();
@@ -100,6 +101,7 @@ export async function migrateStorage(plan: MigrationPlan) {
   )
     return;
   try {
+    await (await import("./ai-jobs")).stopAIJobsForShutdown();
     await entryWorkspace.init();
     await entryWorkspace.flush();
     await store.suspend();

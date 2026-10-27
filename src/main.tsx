@@ -8,6 +8,7 @@ import { store } from "./core/store";
 import "./styles.css";
 import { diagnostics, initDiagnostics } from "./services/diagnostics";
 import { flushSettings } from "./services/settings";
+import { initAIJobs, flushAIJobs } from "./services/ai-jobs";
 /** Keep storage and rendering failures visible without clearing user data. */
 class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -58,6 +59,7 @@ if (new URLSearchParams(location.search).has("ocr-overlay")) {
           error,
         );
       });
+      await initAIJobs();
       window.addEventListener("error", (event) =>
         diagnostics.error(
           "app",
@@ -75,6 +77,7 @@ if (new URLSearchParams(location.search).has("ocr-overlay")) {
       const flush = () => {
         void flushSettings().catch(() => {});
         void diagnostics.flush().catch(() => {});
+        void flushAIJobs().catch(() => {});
       };
       window.addEventListener("blur", flush);
       window.addEventListener("pagehide", flush);

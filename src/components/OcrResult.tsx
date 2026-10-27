@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, useT } from "./common";
 import { store } from "../core/store";
-import { resolveModel } from "../core/ai-config";
-import { complete, renderPrompt } from "../services/ai";
+import { submitAIJob } from "../services/ai-jobs";
+import { unbase64 } from "../core/crypto";
 import { notifyCompletion } from "../services/notifications";
 /** Review text and image provenance before starting the standard duplicate-aware entry capture flow. */
 export function OcrResult({
@@ -30,32 +30,17 @@ export function OcrResult({
     try {
       let result: string;
       if (ai) {
-        const s = store.getSnapshot(),
-          task = s.ai.tasks.ocr;
-        if (
-          s.ai.models.find((m) => m.id === resolveModel(s.ai, "ocr"))
-            ?.vision === false
-        )
-          throw Error(
-            t(
-              "此模型不支持图片，请为 OCR 选择视觉模型",
-              "Choose a vision-capable model for OCR",
-            ),
-          );
-        result = (
-          await complete(
-            "ocr",
-            [
-              {
-                role: "user",
-                content: renderPrompt(task.prompt, { content: "" }),
-              },
-            ],
-            undefined,
-            undefined,
-            image,
-          )
-        ).content;
+        const hash = await store.db.putBlob(
+          unbase64(image.split(",")[1]),
+          "image/png",
+        );
+        await submitAIJob(
+          "ocr",
+          { page: "tasks" },
+          { imageHash: hash, source },
+        );
+        onClose();
+        return;
       } else result = await invoke<string>("recognize_ocr", { image });
       setText(result);
       if (!result.trim())

@@ -429,7 +429,7 @@ try {
   );
   await stop();
   console.log(
-    "PASS: native shortcut recording, screenshot/OCR, custom-port proxy/model networking, MCP stdio SDK, SQLite editing, system/portable isolation, cleanup surviving restart and recovery after primary/WAL/newest-checkpoint corruption",
+    "PASS: native shortcut recording, screenshot/OCR, custom-port proxy/model networking and real SSE chat, MCP stdio SDK, SQLite editing, system/portable isolation, cleanup surviving restart and recovery after primary/WAL/newest-checkpoint corruption",
   );
 } catch (error) {
   fs.mkdirSync("native-test-results", { recursive: true });

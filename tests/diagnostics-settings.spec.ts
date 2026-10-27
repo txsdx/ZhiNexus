@@ -62,6 +62,22 @@ test("null tool_calls no longer breaks enrichment; logs retain prompts, raw resp
     .getByRole("textbox", { name: "随手记下的理解或原始材料（可选）" })
     .fill("必须保留的原始材料");
   await page.getByRole("button", { name: "保存到知识库", exact: true }).click();
+  await expect(page.locator(".entry-heading h1")).toHaveText("可空工具调用");
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].content"),
+  ).toBe("必须保留的原始材料");
+  await page
+    .getByRole("button", { name: "打开 AI 任务队列", exact: true })
+    .click();
+  await expect(page.locator(".ai-job-card")).toHaveAttribute(
+    "data-job-state",
+    "review",
+  );
+  await page
+    .getByRole("button", { name: "打开相关页面并审阅", exact: true })
+    .click();
+  await page.getByRole("button", { name: "确认并应用", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".markdown")).toContainText("自动整理已经成功");
   await expect
     .poll(() =>

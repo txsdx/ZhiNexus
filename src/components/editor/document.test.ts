@@ -121,3 +121,24 @@ it("invalid rich cache falls back to authoritative Markdown and complex source i
   expect(sourceOnlyMarkdown("```html\n<div>code</div>\n```")).toBe(false);
   expect(sourceOnlyMarkdown("inline `<div>` code")).toBe(false);
 });
+
+it("round-trips yellow highlights while preserving spaces, equations and block identities", () => {
+  const source = "before== a=b **marked** ==after";
+  const document = entryDocument({ content: source });
+  const rendered = documentMarkdown(document);
+  expect(rendered).toContain("==");
+  expect(rendered).toContain("a=b");
+  const restored = entryDocument({ content: rendered });
+  expect(JSON.stringify(restored)).toContain("highlight");
+  const text = (node: import("@tiptap/core").JSONContent): string =>
+    node.text ?? node.content?.map(text).join("") ?? "";
+  expect(text(restored)).toBe("before a=b marked after");
+  expect(
+    documentBlocks(
+      entryDocument({
+        content: rendered,
+        editorDocument: storedDocument(rendered, document),
+      }),
+    ).map((b) => b.id),
+  ).toEqual(documentBlocks(document).map((b) => b.id));
+});

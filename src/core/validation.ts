@@ -16,6 +16,7 @@ const card = z.object({
   last_review: z.string().optional(),
 });
 const message = z.object({
+  jobId: z.string().optional(),
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: text,
   tool_call_id: text.optional(),

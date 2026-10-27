@@ -4,47 +4,37 @@ import { useEntryDocument } from "../hooks/useEntryDocument";
 import { useConfirmation } from "../hooks/useConfirmation";
 import { BlockEditor } from "../components/editor/BlockEditor";
 import { DocumentOutline } from "../components/editor/DocumentOutline";
-import { entryDocument, documentBlocks } from "../components/editor/document";
+import { documentBlocks } from "../components/editor/document";
 import { RevisionDiff } from "../components/RevisionDiff";
 import { useState, type ChangeEvent } from "react";
 import {
   ArrowLeft,
-  Check,
   Edit3,
-  GitBranch,
   History,
   ImagePlus,
-  MessageSquare,
   Save,
   Sparkles,
   Trash2,
   WandSparkles,
 } from "lucide-react";
-import { z } from "zod";
 import { useKnowledge, useT, Modal, Busy } from "../components/common";
 import { Markdown } from "../components/Markdown";
 import { store } from "../core/store";
-import {
-  generateImage,
-  parseJson,
-  renderPrompt,
-  runTask,
-} from "../services/ai";
+import { renderPrompt } from "../services/ai";
+import { submitAIJob } from "../services/ai-jobs";
 import { json } from "../core/store";
 /** Render and edit one entry; save only changed fields so concurrent category changes are preserved. */
 export function EntryPage({
   id,
   active = true,
   onBack,
-  onOpen,
   onChat,
   notify,
 }: {
   id: string;
   active?: boolean;
   onBack: () => void;
-  onOpen: (id: string) => void;
-  onChat: (id: string) => void;
+  onChat: (id: string, quote?: string) => void;
   notify: (s: string) => void;
 }) {
   const s = useKnowledge(),
@@ -59,8 +49,6 @@ export function EntryPage({
     setContent,
     title,
     setTitle,
-    summary,
-    setSummary,
     sourceMode,
     setSourceMode,
     sourceOnly,
@@ -81,7 +69,9 @@ export function EntryPage({
   const [history, setHistory] = useState(false),
     [busy, setBusy] = useState(""),
     [imagePrompt, setImagePrompt] = useState<string | null>(null),
-    [preview, setPreview] = useState<string | null>(null);
+    [outlineOpen, setOutlineOpen] = useState(
+      () => window.matchMedia("(min-width: 1000px)").matches,
+    );
   const confirmation = useConfirmation(notify);
   if (!active) return null;
   if (!entry)
@@ -187,19 +177,115 @@ export function EntryPage({
           </button>
         </div>
       )}
+      <section className="entry-meta">
+        <h3>{t("词条信息", "Entry details")}</h3>
+        <label>
+          {t("所属分类", "Category")}
+          <select
+            value={entry.category}
+            onChange={(e) =>
+              void store.patch("entry", id, { category: e.target.value })
+            }
+          >
+            <option value="">{t("未分类", "Uncategorized")}</option>
+            {s.categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("标签（逗号分隔）", "Tags (comma separated)")}
+          <input
+            defaultValue={entry.tags.join(", ")}
+            key={entry.id + entry.tags.join(",")}
+            onBlur={(e) =>
+              void store.patch("entry", id, {
+                tags: json(
+                  e.target.value
+                    .split(/[,，]/)
+                    .map((x) => x.trim())
+                    .filter(Boolean),
+                ),
+              })
+            }
+          />
+        </label>
+        <p>
+          {t("复习次数", "Reviews")}: {entry.card.reps}
+          <br />
+          {t("下次复习", "Next review")}: {entry.card.due.toLocaleString()}
+        </p>
+        <button
+          className="danger full"
+          onClick={() => {
+            void confirmation.request(
+              t(
+                "删除此条目？日志将保留，可在数据库管理中恢复。",
+                "Delete this entry? Its history remains recoverable.",
+              ),
+              async () => {
+                await store.patch("entry", id, { deleted: true });
+                onBack();
+              },
+            );
+          }}
+        >
+          <Trash2 size={15} />
+          {t("删除词条", "Delete entry")}
+        </button>
+      </section>
       <div className="entry-columns">
+        <aside className="entry-outline">
+          <details
+            open={outlineOpen}
+            onToggle={(event) => setOutlineOpen(event.currentTarget.open)}
+          >
+            <summary>{t("文档大纲", "Document outline")}</summary>
+            <DocumentOutline
+              document={document}
+              focusId={focusId}
+              onFocus={setFocusId}
+              allowFocus={!sourceOnly}
+              onLocate={locate}
+            />
+          </details>
+        </aside>
         <article className="paper">
           <div className="editor-toolbar">
             <button
               disabled={!!busy || dirty}
               onClick={() =>
-                void act(t("生成解释…", "Generating…"), async () =>
-                  setPreview(await runTask("explain", vars)),
+                void act(
+                  t("加入解释队列…", "Queueing explanation…"),
+                  async () => {
+                    await submitAIJob("explain", {
+                      page: "entry",
+                      entryId: id,
+                    });
+                  },
                 )
               }
             >
               <WandSparkles size={16} />
               {t("AI 标准解释", "AI explanation")}
+            </button>
+            <button
+              disabled={!!busy || dirty}
+              onClick={() =>
+                void act(
+                  t("加入关联队列…", "Queueing connections…"),
+                  async () => {
+                    await submitAIJob("relations", {
+                      page: "entry",
+                      entryId: id,
+                    });
+                  },
+                )
+              }
+            >
+              {t("发现关联", "Find connections")}
             </button>
             <label className="button">
               <ImagePlus size={16} />
@@ -292,6 +378,26 @@ export function EntryPage({
               document={document}
               editable={editing && !saving}
               focus={focus}
+              onChat={(text) => onChat(id, text)}
+              onFeedback={notify}
+              onAnnotate={(json, markdown) => {
+                if (!editing)
+                  base.current = {
+                    title: entry.title,
+                    content: entry.content,
+                    summary: entry.summary ?? "",
+                  };
+                setRichCache({ source: markdown, json });
+                setContent(markdown);
+                setTitle(editing ? title : entry.title);
+                setEditing(true);
+                notify(
+                  t(
+                    "标记已加入草稿，保存词条后同步",
+                    "Annotation added to draft; save the entry to sync",
+                  ),
+                );
+              }}
               onFocus={(id) => setFocusId(id)}
               onChange={(json, markdown) => {
                 setRichCache({ source: markdown, json });
@@ -300,220 +406,6 @@ export function EntryPage({
             />
           )}
         </article>
-        <aside className="entry-aside">
-          <DocumentOutline
-            document={document}
-            focusId={focusId}
-            onFocus={setFocusId}
-            allowFocus={!sourceOnly}
-            onLocate={locate}
-          />
-          <section className="entry-summary-editor">
-            <h3>{t("一句话解释", "One-line explanation")}</h3>
-            {editing ? (
-              <input
-                aria-label={t("一句话解释", "One-line explanation")}
-                disabled={saving}
-                value={summary}
-                maxLength={600}
-                onChange={(e) => setSummary(e.target.value)}
-              />
-            ) : (
-              <p>
-                {entry.summary ||
-                  t(
-                    "自动提取正文中的一句话解释；编辑可单独设置。",
-                    "Uses the one-sentence section from the body; edit to set it explicitly.",
-                  )}
-              </p>
-            )}
-          </section>
-          <section>
-            <h3>
-              <GitBranch size={17} />
-              {t("知识连接", "Connections")}
-            </h3>
-            <button
-              disabled={!!busy || dirty}
-              className="full"
-              onClick={() =>
-                void act(t("分析关联…", "Finding connections…"), async () => {
-                  const r = z
-                    .object({
-                      prerequisites: z.array(z.string()).max(8),
-                      relatedIds: z.array(z.string()),
-                    })
-                    .parse(
-                      parseJson(
-                        await runTask("relations", {
-                          ...vars,
-                          entries: JSON.stringify(
-                            s.entries.map((e) => ({
-                              id: e.id,
-                              title: e.title,
-                            })),
-                          ),
-                        }),
-                      ),
-                    );
-                  await store.patch(
-                    "entry",
-                    id,
-                    { prerequisites: json(r.prerequisites) },
-                    "ai-relations",
-                  );
-                  for (const target of r.relatedIds)
-                    if (target !== id && s.entries.some((e) => e.id === target))
-                      await store.patch(
-                        "edge",
-                        crypto.randomUUID(),
-                        { source: id, target, label: "related" },
-                        "ai-relations",
-                      );
-                })
-              }
-            >
-              <Sparkles size={15} />
-              {t("自动建立关联", "Find connections")}
-            </button>
-            <h4>{t("前置知识", "Prerequisites")}</h4>
-            {entry.prerequisites.length ? (
-              entry.prerequisites.map((p) => (
-                <button
-                  className="prereq"
-                  key={p}
-                  onClick={() =>
-                    void act(t("打开概念", "Opening"), async () => {
-                      const existing = s.entries.find(
-                        (e) =>
-                          e.title.toLocaleLowerCase() === p.toLocaleLowerCase(),
-                      );
-                      onOpen(
-                        existing?.id ??
-                          (await store.createEntry(
-                            p,
-                            undefined,
-                            "prerequisite",
-                          )),
-                      );
-                    })
-                  }
-                >
-                  {p}
-                  <span>↗</span>
-                </button>
-              ))
-            ) : (
-              <p className="muted">
-                {t(
-                  "AI 可发现理解此概念所需的基础。",
-                  "Discover the concepts that come before this one.",
-                )}
-              </p>
-            )}
-            <h4>{t("关联条目", "Related entries")}</h4>
-            {s.docs
-              .filter(
-                (d) =>
-                  d.collection === "edge" &&
-                  !d.fields.deleted &&
-                  (d.fields.source === id || d.fields.target === id),
-              )
-              .map((d) => {
-                const other = s.entries.find(
-                  (e) =>
-                    e.id ===
-                    (d.fields.source === id
-                      ? d.fields.target
-                      : d.fields.source),
-                );
-                return other ? (
-                  <button
-                    className="prereq"
-                    key={d.id}
-                    onClick={() => onOpen(other.id)}
-                  >
-                    {other.title} ↗
-                  </button>
-                ) : null;
-              })}
-          </section>
-          <section>
-            <h3>
-              <MessageSquare size={17} />
-              {t("和知识聊一聊", "Think it through")}
-            </h3>
-            <p>
-              {t(
-                "从“是什么”到“为什么”，每次提问都是更深一层的理解。",
-                "Move from what to why, one question at a time.",
-              )}
-            </p>
-            <button className="primary full" onClick={() => onChat(id)}>
-              {t("打开词条助手", "Entry assistant")}
-              <span>↗</span>
-            </button>
-          </section>
-          <section>
-            <h3>{t("词条信息", "Entry details")}</h3>
-            <label>
-              {t("所属分类", "Category")}
-              <select
-                value={entry.category}
-                onChange={(e) =>
-                  void store.patch("entry", id, { category: e.target.value })
-                }
-              >
-                <option value="">{t("未分类", "Uncategorized")}</option>
-                {s.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("标签（逗号分隔）", "Tags (comma separated)")}
-              <input
-                defaultValue={entry.tags.join(", ")}
-                key={entry.id + entry.tags.join(",")}
-                onBlur={(e) =>
-                  void store.patch("entry", id, {
-                    tags: json(
-                      e.target.value
-                        .split(/[,，]/)
-                        .map((x) => x.trim())
-                        .filter(Boolean),
-                    ),
-                  })
-                }
-              />
-            </label>
-            <p>
-              {t("复习次数", "Reviews")}: {entry.card.reps}
-              <br />
-              {t("下次复习", "Next review")}: {entry.card.due.toLocaleString()}
-            </p>
-            <button
-              className="danger full"
-              onClick={() => {
-                void confirmation.request(
-                  t(
-                    "删除此条目？日志将保留，可在数据库管理中恢复。",
-                    "Delete this entry? Its history remains recoverable.",
-                  ),
-                  async () => {
-                    await store.patch("entry", id, { deleted: true });
-                    onBack();
-                  },
-                );
-              }}
-            >
-              <Trash2 size={15} />
-              {t("删除词条", "Delete entry")}
-            </button>
-          </section>
-        </aside>
       </div>
       {confirmation.dialog}
       {compareSave && (
@@ -551,38 +443,6 @@ export function EntryPage({
           </button>
         </Modal>
       )}
-      {preview !== null && (
-        <Modal
-          wide
-          title={t("AI 解释预览", "AI explanation preview")}
-          onClose={() => setPreview(null)}
-        >
-          <div className="modal-scroll">
-            <Markdown>{preview}</Markdown>
-          </div>
-          <button
-            className="primary"
-            onClick={() => {
-              base.current = {
-                title: entry.title,
-                content: entry.content,
-                summary: entry.summary ?? "",
-              };
-              setRichCache({
-                source: preview,
-                json: entryDocument({ content: preview }),
-              });
-              setContent(preview);
-              setTitle(entry.title);
-              setEditing(true);
-              setPreview(null);
-            }}
-          >
-            <Check size={16} />
-            {t("采用并编辑（保存后生效）", "Use and edit (save to apply)")}
-          </button>
-        </Modal>
-      )}
       {imagePrompt !== null && (
         <Modal
           title={t("生成教学配图", "Generate an illustration")}
@@ -598,8 +458,11 @@ export function EntryPage({
             disabled={!!busy}
             onClick={() =>
               void act(t("生成图片…", "Generating image…"), async () => {
-                const hash = await generateImage(imagePrompt);
-                appendImage(hash, "AI illustration");
+                await submitAIJob(
+                  "image",
+                  { page: "entry", entryId: id },
+                  { prompt: imagePrompt },
+                );
                 setImagePrompt(null);
               })
             }
@@ -607,7 +470,7 @@ export function EntryPage({
             {busy ? (
               <Busy label={busy} />
             ) : (
-              t("生成并插入草稿", "Generate and insert into draft")
+              t("生成配图（审阅后插入）", "Generate image for review")
             )}
           </button>
         </Modal>

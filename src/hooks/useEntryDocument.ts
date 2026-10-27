@@ -123,6 +123,27 @@ export function useEntryDocument(
     });
   }, [id, title, content, summary, editing, sourceMode, focus, document]);
   useEffect(() => {
+    const receive = (event: Event) => {
+      if ((event as CustomEvent<{ id: string }>).detail?.id !== id) return;
+      const saved = entryWorkspace.getSnapshot().drafts[id];
+      if (!saved) return;
+      base.current = saved.base;
+      setContent(saved.content);
+      setTitle(saved.title);
+      setSummary(saved.summary);
+      setEditing(saved.editing);
+      setSourceMode(saved.sourceMode);
+      setFocus(saved.focus);
+      setRichCache(
+        saved.editorDocument
+          ? { source: saved.content, json: saved.editorDocument as JSONContent }
+          : null,
+      );
+    };
+    window.addEventListener("zhinexus:ai-draft", receive);
+    return () => window.removeEventListener("zhinexus:ai-draft", receive);
+  }, [id]);
+  useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (
         saving ||

@@ -1,7 +1,6 @@
 /** Validate AI taxonomy proposals before showing a before/after confirmation dialog. */
 import { z } from "zod";
-import { store, json } from "../core/store";
-import { parseJson, runTask } from "./ai";
+import { store } from "../core/store";
 const schema = z.object({
   categories: z.array(
     z.object({
@@ -46,42 +45,4 @@ export function validateClassification(input: unknown): Classification {
   if (assigned.size !== s.entries.length)
     throw Error("AI 遗漏部分词条，请重试");
   return result;
-}
-/** Request one complete proposal; user confirmation is required by the view before commit. */
-export async function proposeClassification() {
-  const s = store.getSnapshot();
-  if (!s.categories.some((c) => !c.parent)) throw Error("请先创建至少一个大类");
-  return validateClassification(
-    parseJson(
-      await runTask("classify", {
-        categories: JSON.stringify(s.categories),
-        entries: JSON.stringify(
-          s.entries.map((e) => ({
-            id: e.id,
-            title: e.title,
-            content: e.content.slice(0, 1500),
-          })),
-        ),
-      }),
-    ),
-  );
-}
-/** Commit an accepted proposal without deleting the user's existing categories. */
-export async function applyClassification(proposal: Classification) {
-  const p = validateClassification(proposal);
-  await store.batch(
-    [
-      ...p.categories.map((c) => ({
-        collection: "category" as const,
-        id: c.id,
-        patch: json(c) as Record<string, import("../core/types").Json>,
-      })),
-      ...p.assignments.map((a) => ({
-        collection: "entry" as const,
-        id: a.entryId,
-        patch: { category: a.category, updatedAt: new Date().toISOString() },
-      })),
-    ],
-    "classification",
-  );
 }

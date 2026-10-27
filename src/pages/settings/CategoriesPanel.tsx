@@ -2,22 +2,13 @@
 import { CategoryEditor } from "../../components/CategoryEditor";
 import { Sparkles } from "lucide-react";
 import { store } from "../../core/store";
-import { proposeClassification } from "../../services/classification";
+import { submitAIJob } from "../../services/ai-jobs";
 import { useSettings } from "./context";
 import { CategoryTree } from "./shared";
 /** CategoriesPanel exposes one focused settings workflow. */
 export function CategoriesPanel() {
-  const {
-    t,
-    categoryName,
-    setCategoryName,
-    parent,
-    setParent,
-    s,
-    busy,
-    act,
-    setProposal,
-  } = useSettings();
+  const { t, categoryName, setCategoryName, parent, setParent, s, busy, act } =
+    useSettings();
   return (
     <>
       <h2>
@@ -64,9 +55,12 @@ export function CategoriesPanel() {
         className="primary"
         disabled={!!busy || !s.entries.length}
         onClick={() =>
-          void act(t("分析全部条目…", "Organizing all entries…"), async () =>
-            setProposal(await proposeClassification()),
-          )
+          void act(t("分析全部条目…", "Organizing all entries…"), async () => {
+            await submitAIJob("classification", {
+              page: "settings",
+              tab: "categories",
+            });
+          })
         }
       >
         <Sparkles size={16} />

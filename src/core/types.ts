@@ -58,6 +58,8 @@ export interface Category {
 }
 /** Serializable OpenAI chat message including complete tool protocol metadata. */
 export interface Message {
+  /** Local orchestration metadata, stripped before requests are sent to the provider. */
+  jobId?: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   tool_call_id?: string;
@@ -129,6 +131,10 @@ export interface AIConfig {
 }
 /** Local credentials and device-specific scheduling and notification preferences. */
 export interface DeviceConfig {
+  /** Per-device limit for active AI HTTP generation requests; waiting reviews consume no slot. */
+  aiConcurrency?: number;
+  /** Remember the full/compact navigation rail on this device. */
+  sidebarCollapsed?: boolean;
   apiKey: string;
   apiKeyEndpoint?: string;
   /** One optional key for all synchronized credentials; empty selects built-in encryption. */

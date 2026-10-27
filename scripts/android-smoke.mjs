@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
+import http from "node:http";
 const adb = path.join(
     process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT,
     "platform-tools",
@@ -95,6 +96,94 @@ async function connect() {
   );
   return { browser, page };
 }
+/** Verify real chunk delivery across the Android native HTTP bridge before the provider completes. */
+async function testStreaming(page) {
+  let requests = 0,
+    finish = () => {};
+  const fixture = http.createServer((request, response) => {
+    if (request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "android-stream-model" }] }));
+      return;
+    }
+    let raw = "";
+    request.on("data", (chunk) => {
+      raw += chunk;
+    });
+    request.on("end", () => {
+      const body = JSON.parse(raw);
+      assert.equal(body.stream, true);
+      assert.equal(body.model, "android-stream-model");
+      requests++;
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+      });
+      response.flushHeaders();
+      response.write(
+        'data: {"choices":[{"index":0,"delta":{"content":"Android streaming partial"}}]}\n\n',
+      );
+      finish = () =>
+        response.end(
+          'data: {"choices":[{"index":0,"delta":{"content":" complete"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        );
+    });
+  });
+  await new Promise((resolve) => fixture.listen(0, "0.0.0.0", resolve));
+  try {
+    await page.locator('[data-settings-tab="ai"]').click();
+    await page
+      .locator(
+        '.settings-content input[placeholder="https://api.example.com/v1"]',
+      )
+      .fill(`http://10.0.2.2:${fixture.address().port}/v1`);
+    await page
+      .locator('.settings-content input[type="password"]')
+      .fill("android-stream-fixture");
+    await page.locator(".settings-content .actions button").click();
+    await page
+      .locator(".model-list strong")
+      .filter({ hasText: "android-stream-model" })
+      .waitFor();
+    await page.locator(".sidebar nav button:nth-child(5)").click();
+    await page
+      .locator(".chat-model select")
+      .selectOption("android-stream-model");
+    await page
+      .locator(".chat-input textarea")
+      .fill("Android streaming verification");
+    await page.locator(".chat-input button").click();
+    await waitFor(() =>
+      page
+        .locator(".ai-live-message")
+        .textContent()
+        .then((text) => text?.includes("Android streaming partial")),
+    );
+    assert.equal(requests, 1);
+    assert.equal(
+      await page
+        .locator(".messages")
+        .innerText()
+        .then((text) => text.includes("partial complete")),
+      false,
+    );
+    captureScreen("streaming-partial");
+    finish();
+    await page
+      .locator(".message.assistant")
+      .filter({ hasText: "Android streaming partial complete" })
+      .waitFor();
+    await page.locator(".ai-queue-button").click();
+    await page.locator('.ai-job-card[data-job-state="review"]').waitFor();
+    await page.locator(".ai-job-card .actions button").first().click();
+    await page.locator(".ai-result-review .primary").click();
+    await page.locator(".modal").waitFor({ state: "hidden" });
+    captureScreen("streaming-reviewed");
+  } finally {
+    fixture.closeAllConnections();
+    await new Promise((resolve) => fixture.close(resolve));
+  }
+}
 fs.mkdirSync("android-test-results", { recursive: true });
 let connected;
 try {
@@ -177,12 +266,13 @@ try {
   await page.locator('[data-save-status="saved"]').waitFor();
   await waitFor(() => device("shell", "dumpsys", "alarm").includes(pkg));
   captureScreen("sync-reminders");
+  await testStreaming(page);
   fs.writeFileSync(
     "android-test-results/result.txt",
-    "PASS: Android native WebView, SQLite capture, rich blocks, restored tabs, mobile navigation, process restart, per-device reminder and OS alarm registration.\n",
+    "PASS: Android native WebView, SQLite capture, rich blocks, restored tabs, mobile navigation, process restart, per-device reminder, OS alarm registration and genuine SSE chat before completion.\n",
   );
   console.log(
-    "PASS: Android native storage, restart and OS notification scheduling",
+    "PASS: Android native storage, restart, OS notification scheduling and genuine SSE chat",
   );
 } catch (error) {
   fs.writeFileSync(

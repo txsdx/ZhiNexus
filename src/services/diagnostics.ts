@@ -67,6 +67,7 @@ export async function traceAI<T>(
 export async function diagnosticJson(
   response: Response,
   id: string,
+  allowHTTPError = false,
 ): Promise<unknown> {
   diagnostics.update(id, { status: response.status });
   const text = await boundedText(response);
@@ -77,7 +78,7 @@ export async function diagnosticJson(
       ...secrets(),
     ]),
   });
-  if (!response.ok)
+  if (!response.ok && !allowHTTPError)
     throw Error(`AI HTTP ${response.status}; 请查看日志 / See logs`);
   try {
     return JSON.parse(text);
@@ -86,4 +87,19 @@ export async function diagnosticJson(
       "AI 返回的内容不是有效 JSON，请查看日志 / Invalid provider JSON; see logs",
     );
   }
+}
+
+/** Record parsed SSE frames with the original request's credential redaction inputs. */
+export function diagnosticStream(
+  id: string,
+  status: number,
+  events: unknown[],
+) {
+  diagnostics.update(id, {
+    status,
+    response: diagnosticText(events, [
+      ...(requestSecrets.get(id) ?? []),
+      ...secrets(),
+    ]),
+  });
 }

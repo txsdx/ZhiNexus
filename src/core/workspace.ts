@@ -28,6 +28,7 @@ const workspaceSchema = z.object({
   tabs: z.array(z.string()),
   active: z.string(),
   drafts: z.record(z.string(), draftSchema),
+  aiApplied: z.array(z.string()).default([]),
 });
 /** A local draft records its original version so remote changes require a comparison before overwriting. */
 export type EntryDraft = z.infer<typeof draftSchema>;
@@ -44,6 +45,7 @@ export class EntryWorkspace {
     tabs: [],
     active: "",
     drafts: {},
+    aiApplied: [],
     ready: false,
     pending: false,
     error: "",
@@ -76,7 +78,13 @@ export class EntryWorkspace {
         await store.db.setLocal("entry-workspace-damaged-" + Date.now(), saved);
       const initial = parsed.success
         ? parsed.data
-        : { schema: 1 as const, tabs: [], active: "", drafts: {} };
+        : {
+            schema: 1 as const,
+            tabs: [],
+            active: "",
+            drafts: {},
+            aiApplied: [],
+          };
       this.state = {
         ...initial,
         ...(this.generation
@@ -119,9 +127,15 @@ export class EntryWorkspace {
   flush = async () => {
     clearTimeout(this.timer);
     const version = this.generation;
-    const { schema, tabs, active, drafts } = this.state;
+    const { schema, tabs, active, drafts, aiApplied } = this.state;
     const task = this.tail.then(() =>
-      store.db.setLocal("entry-workspace", { schema, tabs, active, drafts }),
+      store.db.setLocal("entry-workspace", {
+        schema,
+        tabs,
+        active,
+        drafts,
+        aiApplied,
+      }),
     );
     this.tail = task.catch(() => {});
     try {
@@ -149,6 +163,16 @@ export class EntryWorkspace {
   draft(id: string, value: EntryDraft) {
     if (JSON.stringify(this.state.drafts[id]) !== JSON.stringify(value))
       this.change({ drafts: { ...this.state.drafts, [id]: value } });
+  }
+  /** Apply a reviewed result once, recording its receipt in the same local workspace snapshot. */
+  async applyAIResult(id: string, jobId: string, create: () => EntryDraft) {
+    await this.init();
+    if (!this.state.aiApplied.includes(jobId))
+      this.change({
+        drafts: { ...this.state.drafts, [id]: create() },
+        aiApplied: [...this.state.aiApplied, jobId],
+      });
+    await this.flush();
   }
   /** Drop a local draft only after explicit cancellation or successful knowledge persistence. */
   clearDraft(id: string) {

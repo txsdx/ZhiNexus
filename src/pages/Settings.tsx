@@ -3,7 +3,6 @@ import { Busy, Modal } from "../components/common";
 import { decryptBackup, encryptBackup } from "../core/crypto";
 import { json, store } from "../core/store";
 import type { DeviceConfig } from "../core/types";
-import { applyClassification } from "../services/classification";
 import { restoreSnapshot, snapshot } from "../services/sync";
 import { DesktopPanel } from "./settings/DesktopPanel";
 import { NetworkPanel } from "./settings/NetworkPanel";
@@ -17,7 +16,7 @@ import { DatabasePanel } from "./settings/DatabasePanel";
 import { McpPanel } from "./settings/McpPanel";
 import { ModelsPanel } from "./settings/ModelsPanel";
 import { PromptsPanel } from "./settings/PromptsPanel";
-import { CategoryTree, saveFile } from "./settings/shared";
+import { saveFile } from "./settings/shared";
 import { useConfirmation } from "../hooks/useConfirmation";
 import { LogsPanel } from "./settings/LogsPanel";
 /** Render independent settings panels and reviewable taxonomy/backup confirmations. */
@@ -36,9 +35,6 @@ export function Settings({
     tab,
     setTab,
     report,
-    proposal,
-    setProposal,
-    s,
     act,
     archive,
     setArchive,
@@ -121,59 +117,6 @@ export function Settings({
             {report && <pre className="report">{report}</pre>}
           </div>
         </div>
-        {proposal && (
-          <Modal
-            wide
-            title={t("确认知识分类变更", "Confirm taxonomy changes")}
-            onClose={() => setProposal(null)}
-          >
-            <div className="compare-trees">
-              <section>
-                <h3>{t("变更前", "Before")}</h3>
-                <CategoryTree
-                  categories={s.categories}
-                  assignments={s.entries}
-                />
-              </section>
-              <section>
-                <h3>{t("变更后", "After")}</h3>
-                <CategoryTree
-                  categories={[...s.categories, ...proposal.categories]}
-                  assignments={proposal.assignments}
-                />
-              </section>
-            </div>
-            <details>
-              <summary>{t("逐条分配变化", "Entry-by-entry changes")}</summary>
-              {proposal.assignments.map((a) => (
-                <p key={a.entryId}>
-                  {s.entries.find((e) => e.id === a.entryId)?.title} →{" "}
-                  {
-                    [...s.categories, ...proposal.categories].find(
-                      (c) => c.id === a.category,
-                    )?.name
-                  }
-                </p>
-              ))}
-            </details>
-            <button
-              className="primary"
-              disabled={!!busy}
-              onClick={() =>
-                void act(
-                  t("应用分类…", "Applying classification…"),
-                  async () => {
-                    await applyClassification(proposal);
-                    setProposal(null);
-                    notify(t("分类已更新", "Categories updated"));
-                  },
-                )
-              }
-            >
-              {t("确认并应用", "Confirm and apply")}
-            </button>
-          </Modal>
-        )}
         {archive && (
           <Modal
             title={t("备份密码", "Backup passphrase")}
@@ -203,7 +146,7 @@ export function Settings({
                         await encryptBackup(
                           json({
                             snapshot: await snapshot(),
-                            device: s.device,
+                            device: store.getSnapshot().device,
                           }),
                           password,
                         ),

@@ -76,6 +76,13 @@ async function save(next: SettingsDraft, base: SettingsDraft) {
       keys.filter((key) => key in patch).map((key) => [key, patch[key]]),
     ) as Partial<DeviceConfig>;
   const dav = group(["davUrl", "davUser", "davPassword", "syncMinutes"]);
+  if ("aiConcurrency" in patch)
+    await attempt("AI concurrency", async () => {
+      const value = patch.aiConcurrency;
+      if (!Number.isInteger(value) || value! < 1 || value! > 16)
+        throw Error("AI 并发上限必须为 1–16 / AI concurrency must be 1–16");
+      await store.updateDevice({ aiConcurrency: value });
+    });
   if (Object.keys(dav).length)
     await attempt("WebDAV", async () => {
       if (value.device.davUrl) secureUrl(value.device.davUrl);

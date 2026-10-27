@@ -1,5 +1,4 @@
-/** Resumable AI review sessions with answer persistence, teaching feedback and FSRS commits. */
-import { diagnostics } from "../services/diagnostics";
+/** Resumable review controls backed by the global streamed AI queue and explicit FSRS result commits. */
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -11,210 +10,146 @@ import {
 } from "lucide-react";
 import { useKnowledge, useT, Busy, Empty } from "../components/common";
 import { Markdown } from "../components/Markdown";
-import type { Collection, Json } from "../core/types";
+import { AIJobStream, useAIJobs } from "../components/AIJobView";
+import { aiJobs, submitAIJob } from "../services/ai-jobs";
+import { diagnostics } from "../services/diagnostics";
 import { store, json } from "../core/store";
-import { gradeSchema, questionSchema, schedule } from "../core/review";
-import { runTask, parseJson } from "../services/ai";
+import type { Collection, Json } from "../core/types";
+import { schedule } from "../core/review";
 import { useConfirmation } from "../hooks/useConfirmation";
-/** Resume unfinished sessions before presenting the due queue; never auto-award a passing score. */
-export function Review({ notify }: { notify: (s: string) => void }) {
+/** Continue review state across navigation; queue requests stay alive until explicitly stopped. */
+export function Review({
+  notify,
+  initialSession = "",
+}: {
+  notify: (text: string) => void;
+  initialSession?: string;
+}) {
   const s = useKnowledge(),
     t = useT(),
-    [selected, setSelected] = useState(""),
+    jobs = useAIJobs();
+  const [selected, setSelected] = useState(initialSession),
     [busy, setBusy] = useState("");
-  const active = useRef<{
-    controller: AbortController;
-    cancellable: boolean;
-  } | null>(null);
+  const working = useRef(false);
   const confirmation = useConfirmation(notify, {
     title: t("确认复习操作", "Confirm review action"),
     confirmLabel: t("确认", "Confirm"),
   });
-  const cancellation = useConfirmation(notify, {
-    title: t("确认复习操作", "Confirm review action"),
-    confirmLabel: t("确认", "Confirm"),
-  });
-  useEffect(
-    () => () => {
-      active.current?.controller.abort();
-      active.current = null;
-    },
-    [],
-  );
+  useEffect(() => {
+    if (initialSession) setSelected(initialSession);
+  }, [initialSession]);
   const unfinished = s.reviews.filter(
-      (r) => r.phase !== "done" && r.phase !== "cancelled",
-    ),
-    session = unfinished.find((r) => r.id === selected) ?? unfinished[0],
-    entry = s.entries.find((e) => e.id === session?.entryId),
-    due = s.entries
-      .filter((e) => e.card.due <= new Date())
-      .sort((a, b) => a.card.due.getTime() - b.card.due.getTime());
-  /** Abort the request and invalidate late responses before returning control to the user. */
-  const stop = () => {
-    const task = active.current;
-    if (!task?.cancellable) return;
-    active.current = null;
-    task.controller.abort();
-    setBusy("");
-  };
-  const act = async (
-    label: string,
-    fn: (signal: AbortSignal) => Promise<void>,
-    cancellable = true,
-  ) => {
-    if (active.current) return;
-    const task = { controller: new AbortController(), cancellable };
-    active.current = task;
+    (r) => !["done", "cancelled"].includes(r.phase),
+  );
+  const session = unfinished.find((r) => r.id === selected) ?? unfinished[0];
+  const entry = s.entries.find((e) => e.id === session?.entryId);
+  const activeJobs = jobs.jobs.filter(
+    (j) =>
+      j.target.page === "review" &&
+      ["queued", "running", "approval"].includes(j.state),
+  );
+  const active =
+    activeJobs.find((j) => j.target.sessionId === (session?.id ?? selected)) ??
+    (!session ? activeJobs[0] : undefined);
+  const due = s.entries
+    .filter((e) => e.card.due <= new Date())
+    .sort((a, b) => a.card.due.getTime() - b.card.due.getTime());
+  const act = async (label: string, work: () => Promise<void>) => {
+    if (working.current) return;
+    working.current = true;
     setBusy(label);
     try {
-      await fn(task.controller.signal);
-    } catch (e) {
-      if (!task.controller.signal.aborted) {
-        diagnostics.error("app", "复习操作失败 / Review action failed", e);
-        notify(e instanceof Error ? e.message : String(e));
-      }
+      await work();
+    } catch (error) {
+      diagnostics.error("app", "复习操作失败 / Review action failed", error);
+      notify(error instanceof Error ? error.message : String(error));
     } finally {
-      if (active.current === task) {
-        active.current = null;
-        setBusy("");
-      }
+      working.current = false;
+      setBusy("");
     }
   };
-  /** Reject answers and AI results after cancellation, replacement or completion of their original question. */
   const currentQuestion = (id: string, question: unknown) => {
-    const current = store.getSnapshot().reviews.find((r) => r.id === id);
+    const r = store.getSnapshot().reviews.find((r) => r.id === id);
     return (
-      current &&
-      current.phase !== "done" &&
-      current.phase !== "cancelled" &&
-      JSON.stringify(current.question) === JSON.stringify(question)
+      !!r &&
+      !["done", "cancelled"].includes(r.phase) &&
+      JSON.stringify(r.question) === JSON.stringify(question)
     );
   };
-  const start = async (id: string, signal: AbortSignal) => {
-    const e = store.getSnapshot().entries.find((e) => e.id === id);
-    if (!e) return;
-    const existing = store
+  const start = async (id: string) => {
+    const r = store
       .getSnapshot()
       .reviews.find(
-        (r) =>
-          r.entryId === id && r.phase !== "done" && r.phase !== "cancelled",
+        (r) => r.entryId === id && !["done", "cancelled"].includes(r.phase),
       );
-    if (existing) {
-      setSelected(existing.id);
+    if (r) {
+      setSelected(r.id);
       return;
     }
-    const question = questionSchema.parse(
-        parseJson(
-          await runTask(
-            "question",
-            { title: e.title, content: e.content },
-            signal,
-          ),
-        ),
-      ),
-      rid = crypto.randomUUID();
-    const committed = await store.patchWhen(
-      "review",
-      rid,
-      json({
-        entryId: id,
-        phase: "question",
-        question,
-        answer: "",
-        grade: null,
-        startedAt: new Date().toISOString(),
-      }) as Record<string, Json>,
-      "review",
-      () =>
-        !signal.aborted &&
-        store.getSnapshot().entries.some((x) => x.id === id) &&
-        !store
-          .getSnapshot()
-          .reviews.some(
-            (r) =>
-              r.entryId === id && r.phase !== "done" && r.phase !== "cancelled",
-          ),
+    const sessionId = crypto.randomUUID();
+    setSelected(sessionId);
+    await submitAIJob(
+      "question",
+      { page: "review", entryId: id, sessionId },
+      { replace: false },
+      false,
     );
-    if (committed && !signal.aborted) setSelected(rid);
   };
-  const regenerate = async (signal: AbortSignal) => {
+  const newQuestion = () => {
     if (!session || !entry) return;
-    const question = questionSchema.parse(
-      parseJson(
-        await runTask(
+    const submit = async () => {
+      await act(t("正在加入出题队列…", "Queueing question…"), async () => {
+        await submitAIJob(
           "question",
-          {
-            title: entry.title,
-            content:
-              entry.content +
-              "\n\n上一题（题目数据）：" +
-              session.question.question +
-              "\n请从不同角度生成另一道题，不重复上一题。",
-          },
-          signal,
-        ),
-      ),
-    );
-    if (question.question.trim() === session.question.question.trim())
-      throw Error(
-        t(
-          "AI 返回了相同题目，请重试。原作答已保留。",
-          "AI returned the same question. Retry; your answer was retained.",
-        ),
-      );
-    await store.patchWhen(
-      "review",
-      session.id,
-      { question: json(question), phase: "question", answer: "", grade: null },
-      "review-new-question",
-      () => !signal.aborted && !!currentQuestion(session.id, session.question),
-    );
-  };
-  const cancel = () =>
-    session &&
-    cancellation.request(
-      t(
-        "结束本次复习？本次回答和评分不会计入复习次数，也不会修改词条或下次复习时间。",
-        "End this session? Its answer and score will not affect your entry or review schedule.",
-      ),
-      async () => {
-        stop();
-        await act(
-          t("取消复习…", "Cancelling review…"),
-          async () => {
-            const committed = await store.patchWhen(
-              "review",
-              session.id,
-              { phase: "cancelled" },
-              "review-cancel",
-              () => !!currentQuestion(session.id, session.question),
-            );
-            if (committed) {
-              setSelected("");
-              notify(t("本次复习已取消", "Review cancelled"));
-            }
-          },
+          { page: "review", entryId: entry.id, sessionId: session.id },
+          { replace: true },
           false,
         );
-      },
-    );
-  const newQuestion = () => {
-    const generate = () =>
-      act(t("正在重新出题…", "Preparing another question…"), regenerate);
-    return session?.answer || session?.grade
+      });
+    };
+    return session.answer || session.grade
       ? confirmation.request(
           t(
             "重新出题会清空本次回答和评分，复习次数保持不变。继续？",
             "Replace this question and clear its answer and score? Your review count stays the same.",
           ),
-          async () => {
-            void generate();
-          },
+          submit,
         )
-      : generate();
+      : submit();
   };
+  const cancel = () =>
+    session &&
+    confirmation.request(
+      t(
+        "结束本次复习？本次回答和评分不会计入复习次数，也不会修改词条或下次复习时间。",
+        "End this session? Its answer and score will not affect your entry or review schedule.",
+      ),
+      async () => {
+        await act(t("取消复习…", "Cancelling review…"), async () => {
+          for (const job of aiJobs
+            .getSnapshot()
+            .jobs.filter(
+              (j) =>
+                j.target.sessionId === session.id &&
+                ["queued", "running", "approval"].includes(j.state),
+            ))
+            await aiJobs.cancel(job.id);
+          const saved = await store.patchWhen(
+            "review",
+            session.id,
+            { phase: "cancelled" },
+            "review-cancel",
+            () => currentQuestion(session.id, session.question),
+          );
+          if (saved) {
+            setSelected("");
+            notify(t("本次复习已取消", "Review cancelled"));
+          }
+        });
+      },
+    );
   const saveAnswer = (answer: string) => {
-    if (!session || busy) return;
+    if (!session || active || busy) return;
     void store
       .patchWhen(
         "review",
@@ -222,38 +157,20 @@ export function Review({ notify }: { notify: (s: string) => void }) {
         { answer, phase: "answer" },
         "review-answer",
         () =>
-          !!currentQuestion(session.id, session.question) &&
+          currentQuestion(session.id, session.question) &&
           store.getSnapshot().reviews.find((r) => r.id === session.id)
             ?.phase !== "graded",
       )
-      .catch((error) => {
-        diagnostics.error("app", "复习作答保存失败", error);
-        notify(String(error));
-      });
+      .catch((error) => notify(String(error)));
   };
   const finish = async () => {
     if (!session?.grade || !entry) return;
-    const patches: {
-      collection: Collection;
-      id: string;
-      patch: Record<string, Json>;
-    }[] = [
-      {
-        collection: "entry" as const,
-        id: entry.id,
-        patch: json({
-          card: schedule(entry.card, session.grade.score),
-          updatedAt: new Date().toISOString(),
-        }) as Record<string, import("../core/types").Json>,
-      },
-      {
-        collection: "review" as const,
-        id: session.id,
-        patch: { phase: "done" },
-      },
-    ];
+    const patch: Record<string, Json> = {
+      card: json(schedule(entry.card, session.grade.score)),
+      updatedAt: new Date().toISOString(),
+    };
     if (session.grade.missing.trim())
-      patches[0].patch.content =
+      patch.content =
         entry.content +
         "\n\n## 复习补充 · " +
         new Date().toLocaleDateString() +
@@ -261,23 +178,27 @@ export function Review({ notify }: { notify: (s: string) => void }) {
         session.grade.missing +
         "\n\n" +
         session.grade.lesson;
-    const committed = await store.batchWhen(
-      patches,
-      "review-assessment",
-      () => {
-        const current = store.getSnapshot(),
-          r = current.reviews.find((r) => r.id === session.id),
-          e = current.entries.find((e) => e.id === entry.id);
-        return (
-          r?.phase === "graded" &&
-          JSON.stringify(r.grade) === JSON.stringify(session.grade) &&
-          JSON.stringify(e?.card) === JSON.stringify(entry.card) &&
-          e?.content === entry.content &&
-          JSON.stringify(r.question) === JSON.stringify(session.question)
-        );
-      },
-    );
-    if (!committed)
+    const patches: {
+      collection: Collection;
+      id: string;
+      patch: Record<string, Json>;
+    }[] = [
+      { collection: "entry", id: entry.id, patch },
+      { collection: "review", id: session.id, patch: { phase: "done" } },
+    ];
+    const saved = await store.batchWhen(patches, "review-assessment", () => {
+      const current = store.getSnapshot(),
+        r = current.reviews.find((r) => r.id === session.id),
+        e = current.entries.find((e) => e.id === entry.id);
+      return (
+        r?.phase === "graded" &&
+        JSON.stringify(r.grade) === JSON.stringify(session.grade) &&
+        JSON.stringify(r.question) === JSON.stringify(session.question) &&
+        JSON.stringify(e?.card) === JSON.stringify(entry.card) &&
+        e?.content === entry.content
+      );
+    });
+    if (!saved)
       throw Error(
         t(
           "复习状态已更新，请检查当前结果后重试。",
@@ -295,7 +216,6 @@ export function Review({ notify }: { notify: (s: string) => void }) {
   return (
     <div className="page">
       {confirmation.dialog}
-      {cancellation.dialog}
       <div className="page-heading">
         <div>
           <div className="eyebrow">REMEMBER WITH UNDERSTANDING</div>
@@ -315,16 +235,34 @@ export function Review({ notify }: { notify: (s: string) => void }) {
       {busy && (
         <div className="notice">
           <Busy label={busy} />
-          {active.current?.cancellable && (
-            <button onClick={stop}>{t("停止本次请求", "Stop request")}</button>
-          )}
         </div>
+      )}
+      {active && (
+        <section className="notice review-live-task">
+          <Busy
+            label={
+              active.state === "queued"
+                ? t("AI 任务排队中…", "AI task queued…")
+                : t("AI 正在输出…", "AI is streaming…")
+            }
+          />
+          <button
+            onClick={() =>
+              void act(t("停止请求…", "Stopping…"), () =>
+                aiJobs.cancel(active.id),
+              )
+            }
+          >
+            {t("停止本次请求", "Stop request")}
+          </button>
+          <AIJobStream job={active} />
+        </section>
       )}
       {session && entry ? (
         <section className="review-workspace">
           <div className="section-heading">
             <span className="category-dot">{entry.title}</span>
-            <small className="muted">
+            <small>
               {t(
                 "上下文自动保存 · 由 AI 出题和评估",
                 "Context saved automatically · AI assessment",
@@ -332,14 +270,14 @@ export function Review({ notify }: { notify: (s: string) => void }) {
             </small>
           </div>
           <div className="actions">
-            <button disabled={!!busy} onClick={() => void newQuestion()}>
+            <button
+              disabled={!!busy || !!active}
+              onClick={() => void newQuestion()}
+            >
               <RefreshCw size={16} />
               {t("重新出题", "New question")}
             </button>
-            <button
-              disabled={!!busy && !active.current?.cancellable}
-              onClick={() => void cancel()}
-            >
+            <button disabled={!!busy} onClick={() => void cancel()}>
               <X size={16} />
               {t("取消本次复习", "Cancel review")}
             </button>
@@ -347,15 +285,15 @@ export function Review({ notify }: { notify: (s: string) => void }) {
           <h2>{session.question.question}</h2>
           {session.question.type === "choice" ? (
             <div className="choices">
-              {session.question.choices.map((c, i) => (
+              {session.question.choices.map((choice, index) => (
                 <button
-                  disabled={!!busy || session.phase === "graded"}
-                  className={session.answer === c ? "selected" : ""}
-                  key={i}
-                  onClick={() => saveAnswer(c)}
+                  key={index}
+                  disabled={!!busy || !!active || session.phase === "graded"}
+                  className={session.answer === choice ? "selected" : ""}
+                  onClick={() => saveAnswer(choice)}
                 >
-                  <span>{String.fromCharCode(65 + i)}</span>
-                  {c}
+                  <span>{String.fromCharCode(65 + index)}</span>
+                  {choice}
                 </button>
               ))}
             </div>
@@ -367,48 +305,27 @@ export function Review({ notify }: { notify: (s: string) => void }) {
                 "Explain in your own words. Try an example…",
               )}
               value={session.answer}
-              disabled={!!busy || session.phase === "graded"}
-              onChange={(e) => saveAnswer(e.target.value)}
+              disabled={!!busy || !!active || session.phase === "graded"}
+              onChange={(event) => saveAnswer(event.target.value)}
             />
-          )}{" "}
+          )}
           {session.phase !== "graded" ? (
             <button
               className="primary"
-              disabled={!!busy || !session.answer.trim()}
+              disabled={!!busy || !!active || !session.answer.trim()}
               onClick={() =>
                 void act(
-                  t("评估理解并整理薄弱点…", "Assessing your understanding…"),
-                  async (signal) => {
-                    const grade = gradeSchema.parse(
-                      parseJson(
-                        await runTask(
-                          "grade",
-                          {
-                            title: entry.title,
-                            content: entry.content,
-                            question: JSON.stringify(session.question),
-                            answer: session.answer,
-                          },
-                          signal,
-                        ),
-                      ),
-                    );
-                    await store.patchWhen(
-                      "review",
-                      session.id,
-                      { grade: json(grade), phase: "graded" },
-                      "ai-grade",
-                      () =>
-                        !signal.aborted &&
-                        !!currentQuestion(session.id, session.question) &&
-                        store
-                          .getSnapshot()
-                          .reviews.find((r) => r.id === session.id)?.phase !==
-                          "graded" &&
-                        store
-                          .getSnapshot()
-                          .reviews.find((r) => r.id === session.id)?.answer ===
-                          session.answer,
+                  t("加入评估队列…", "Queueing assessment…"),
+                  async () => {
+                    await submitAIJob(
+                      "grade",
+                      {
+                        page: "review",
+                        entryId: entry.id,
+                        sessionId: session.id,
+                      },
+                      {},
+                      false,
                     );
                   },
                 )
@@ -445,7 +362,7 @@ export function Review({ notify }: { notify: (s: string) => void }) {
                 )}
                 <div className="actions">
                   <button
-                    disabled={!!busy}
+                    disabled={!!busy || !!active}
                     onClick={() =>
                       void act(
                         t("准备重新作答…", "Preparing retry…"),
@@ -455,11 +372,9 @@ export function Review({ notify }: { notify: (s: string) => void }) {
                             session.id,
                             { phase: "answer", answer: "", grade: null },
                             "review-retry",
-                            () =>
-                              !!currentQuestion(session.id, session.question),
+                            () => currentQuestion(session.id, session.question),
                           );
                         },
-                        false,
                       )
                     }
                   >
@@ -467,16 +382,16 @@ export function Review({ notify }: { notify: (s: string) => void }) {
                   </button>
                   <button
                     className="primary"
-                    disabled={!!busy}
+                    disabled={!!busy || !!active}
                     onClick={() =>
-                      void act(t("保存复习…", "Saving review…"), finish, false)
+                      void act(t("保存复习…", "Saving review…"), finish)
                     }
                   >
                     <CheckCircle2 size={17} />
                     {t("记录结果并继续", "Save result and continue")}
                   </button>
                 </div>
-                <p className="muted">
+                <p>
                   {t(
                     "评分低于60会进入短期重学；你也可以先重新作答。AI 评分仅供学习参考。",
                     "Scores below 60 trigger short-term relearning. You may retry first. AI assessment is guidance.",
@@ -488,19 +403,20 @@ export function Review({ notify }: { notify: (s: string) => void }) {
         </section>
       ) : due.length ? (
         <div className="queue">
-          {due.map((e, i) => (
+          {due.map((e, index) => (
             <button
               key={e.id}
-              disabled={!!busy}
+              disabled={
+                !!busy || activeJobs.some((j) => j.target.entryId === e.id)
+              }
               onClick={() =>
-                void act(
-                  t("正在准备理解题…", "Preparing your question…"),
-                  (signal) => start(e.id, signal),
+                void act(t("准备理解题…", "Preparing question…"), () =>
+                  start(e.id),
                 )
               }
             >
               <span className="queue-number">
-                {String(i + 1).padStart(2, "0")}
+                {String(index + 1).padStart(2, "0")}
               </span>
               <div>
                 <h3>{e.title}</h3>

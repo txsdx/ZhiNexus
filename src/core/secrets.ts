@@ -47,13 +47,14 @@ export async function decryptSecret<T>(
   cipher: string,
   purpose: string,
   customKey = "",
+  maxCipherBytes = 1024 * 1024,
 ): Promise<T> {
   const record = JSON.parse(cipher);
   if (
     record.v !== 1 ||
     typeof record.iv !== "string" ||
     typeof record.data !== "string" ||
-    cipher.length > 1024 * 1024
+    cipher.length > maxCipherBytes
   )
     throw Error("密钥记录格式无效 / Invalid secret envelope");
   const iv = unbase64(record.iv),

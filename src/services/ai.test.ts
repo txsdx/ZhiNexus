@@ -291,3 +291,42 @@ it("passes review cancellation to the active network request", async () => {
   controller.abort();
   await rejected;
 });
+
+it("falls back once only when the provider explicitly rejects streaming", async () => {
+  const { fetcher } = configuredAI();
+  fetcher.mockImplementationOnce(async () =>
+    Response.json(
+      { error: { message: "stream parameter is not supported" } },
+      { status: 400 },
+    ),
+  );
+  await expect(
+    complete("agent", [
+      { role: "user", content: "fallback", jobId: "local-only-id" },
+    ]),
+  ).resolves.toEqual({ content: "ok", calls: [] });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const first = await (fetcher.mock.calls[0][0] as Request).json(),
+    second = await (fetcher.mock.calls[1][0] as Request).json();
+  expect(first.stream).toBe(true);
+  expect(second.stream).toBe(false);
+  expect(first.messages[0]).not.toHaveProperty("jobId");
+});
+it("does not replay generic HTTP errors or disconnected SSE responses", async () => {
+  const { fetcher } = configuredAI();
+  fetcher.mockImplementationOnce(async () =>
+    Response.json({ error: { message: "invalid model" } }, { status: 400 }),
+  );
+  await expect(complete("agent", [])).rejects.toThrow("400");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  fetcher.mockClear();
+  fetcher.mockImplementationOnce(
+    async () =>
+      new Response(
+        'data: {"choices":[{"delta":{"content":"incomplete"}}]}\n\n',
+        { headers: { "Content-Type": "text/event-stream" } },
+      ),
+  );
+  await expect(complete("agent", [])).rejects.toThrow("interrupted");
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

@@ -17,6 +17,40 @@ async function repository<T>(page: Page, fn: string): Promise<T> {
   }, fn);
 }
 
+/** Open the entry assistant through the user-requested selection toolbar. */
+async function entryAssistant(page: Page) {
+  await page.locator(".block-document").evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const node = walker.nextNode();
+    if (!node) throw Error("Missing note text");
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  await page
+    .getByRole("toolbar", { name: "划词工具", exact: true })
+    .getByRole("button", { name: "AI 对话", exact: true })
+    .click();
+}
+/** Adopt captured enrichment only after viewing its durable queue proposal. */
+async function applyEnrichment(page: Page) {
+  await page
+    .getByRole("button", { name: "打开 AI 任务队列", exact: true })
+    .click();
+  await expect(page.locator(".ai-job-card")).toHaveAttribute(
+    "data-job-state",
+    "review",
+  );
+  await page
+    .getByRole("button", { name: "打开相关页面并审阅", exact: true })
+    .click();
+  await page.getByRole("button", { name: "确认并应用", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+
 /** Reproduce Tauri's async confirm override so legacy synchronous guards fail this regression. */
 async function asyncNativeConfirmation(page: Page) {
   await page.addInitScript(() => {
@@ -65,7 +99,7 @@ for (const scope of ["global", "entry"] as const) {
     );
     if (scope === "entry") {
       await page.locator(".entry-title-cell button").click();
-      await page.getByRole("button", { name: /^打开词条助手/ }).click();
+      await entryAssistant(page);
     } else
       await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
     const trigger = page.getByRole("button", {
@@ -111,7 +145,7 @@ for (const scope of ["global", "entry"] as const) {
         .getByRole("button", { name: "我的知识库", exact: true })
         .click();
       await page.locator(".entry-title-cell button").click();
-      await page.getByRole("button", { name: /^打开词条助手/ }).click();
+      await entryAssistant(page);
     } else
       await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
     await trigger.click();
@@ -1032,6 +1066,7 @@ test("configured capture enriches the entry while preserving raw source material
     .getByRole("textbox", { name: "随手记下的理解或原始材料（可选）" })
     .fill("课堂里同时处理太多信息会很累。");
   await page.getByRole("button", { name: "保存到知识库" }).click();
+  await applyEnrichment(page);
   await expect(page.locator(".paper .markdown")).toContainText(
     "工作记忆处理信息所承受的负担",
   );
@@ -1835,6 +1870,10 @@ test("rich editing retains math, Mermaid and local images, and concurrent saved 
     page,
     `const hash=await store.db.putBlob(new Uint8Array([137,80,78,71]),'image/png');return store.createEntry('富文本保真','# 标题\\n\\n$x^2$\\n\\n$$\\nE=mc^2\\n$$\\n\\n~~~mermaid\\nflowchart LR\\n A --> B\\n~~~\\n\\n![asset](asset:'+hash+')');`,
   );
+  await repository(
+    page,
+    `await store.patch('entry','${id}',{summary:'用户设置的一句话'});`,
+  );
   await page.getByRole("button", { name: "我的知识库", exact: true }).click();
   await page.locator(".entry-row").click();
   await expect(page.locator(".rich-editor .katex").first()).toBeVisible();
@@ -1853,9 +1892,9 @@ test("rich editing retains math, Mermaid and local images, and concurrent saved 
   await expect(
     page.getByRole("textbox", { name: "所见即所得编辑器", exact: true }),
   ).toBeFocused();
-  await page
-    .getByRole("textbox", { name: "一句话解释", exact: true })
-    .fill("用户设置的一句话");
+  await expect(
+    page.getByRole("textbox", { name: "一句话解释", exact: true }),
+  ).toHaveCount(0);
   await expect
     .poll(() =>
       page.evaluate(async (entryId) => {
@@ -1982,7 +2021,7 @@ test("an image finishing in a background tab appends to the newest draft without
       .fill("生成前的草稿");
     await page.getByRole("button", { name: "AI 配图", exact: true }).click();
     await page
-      .getByRole("button", { name: "生成并插入草稿", exact: true })
+      .getByRole("button", { name: "生成配图（审阅后插入）", exact: true })
       .click();
     await expect.poll(() => started).toBe(true);
     await page.getByRole("button", { name: "Close", exact: true }).click();
@@ -1992,6 +2031,20 @@ test("an image finishing in a background tab appends to the newest draft without
     await page.getByRole("button", { name: "返回知识库", exact: true }).click();
     await page.locator(".entry-row").filter({ hasText: "其他标签" }).click();
     finishImage();
+    await page
+      .getByRole("button", { name: "打开 AI 任务队列", exact: true })
+      .click();
+    await expect(page.locator(".ai-job-card")).toHaveAttribute(
+      "data-job-state",
+      "review",
+    );
+    await page
+      .getByRole("button", { name: "打开相关页面并审阅", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "确认插入草稿", exact: true })
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("tab", { name: /后台配图/ })).toContainText(
       "●",
     );

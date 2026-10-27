@@ -4,8 +4,10 @@ import { keySyncStatus } from "../../services/key-sync";
 import { KeyRound, RefreshCw } from "lucide-react";
 import { discoverModels } from "../../services/models";
 import { useSettings } from "./context";
+import { useAIJobs } from "../../components/AIJobView";
 /** ModelsPanel exposes one focused settings workflow. */
 export function ModelsPanel() {
+  const { readOnly } = useAIJobs();
   const keyStatus = useSyncExternalStore(
     keySyncStatus.subscribe,
     keySyncStatus.getSnapshot,
@@ -15,6 +17,25 @@ export function ModelsPanel() {
   return (
     <>
       <h2>{t("连接你的 AI", "Connect your AI")}</h2>
+      <label>
+        {t("AI 并发任务上限（本设备）", "AI concurrency limit (this device)")}
+        <input
+          type="number"
+          disabled={readOnly}
+          min="1"
+          max="16"
+          value={device.aiConcurrency ?? 2}
+          onChange={(e) =>
+            setDevice({ ...device, aiConcurrency: Number(e.target.value) })
+          }
+        />
+      </label>
+      <p>
+        {t(
+          "默认 2，最多 16；等待审阅和确认的任务不占用请求名额。",
+          "Default 2, maximum 16. Reviews and approvals do not occupy request slots.",
+        )}
+      </p>
       <p className="muted">
         {t(
           "支持 OpenAI 兼容的 Chat Completions 和 CPA 扩展模型目录。仅使用普通 API Key，不访问管理接口。",

@@ -1,19 +1,24 @@
 /** Global and entry-scoped assistant with isolated persisted topic histories and tool confirmation. */
 import { diagnostics } from "../services/diagnostics";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Bot, MessageSquare, Plus, Trash2 } from "lucide-react";
-import { useKnowledge, useT, Busy, Empty, Modal } from "../components/common";
+import { useKnowledge, useT, Busy, Empty } from "../components/common";
 import { Markdown } from "../components/Markdown";
 import { store } from "../core/store";
 import { resolveModel } from "../core/ai-config";
 import { useConfirmation } from "../hooks/useConfirmation";
-import { chat } from "../services/agent";
+import { submitAIJob, openAIJob } from "../services/ai-jobs";
+import { useAIJobs } from "../components/AIJobView";
 /** Keep all chat scopes independent and preserve conversations across navigation and restarts. */
 export function Agent({
   entryId = "",
   notify,
+  initialTopic = "",
+  quote = "",
 }: {
   entryId?: string;
+  initialTopic?: string;
+  quote?: string;
   notify: (s: string) => void;
 }) {
   const s = useKnowledge(),
@@ -21,21 +26,32 @@ export function Agent({
     topics = s.topics
       .filter((x) => x.entryId === entryId)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [selected, setSelected] = useState(""),
+    [selected, setSelected] = useState(initialTopic),
+    [selectedQuote, setSelectedQuote] = useState(quote),
     [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [model, setModel] = useState(s.ai.tasks.agent.model),
-    [effort, setEffort] = useState(s.ai.tasks.agent.effort),
-    [confirmation, setConfirmation] = useState<{
-      text: string;
-      resolve: (ok: boolean) => void;
-    } | null>(null);
+    [effort, setEffort] = useState(s.ai.tasks.agent.effort);
+  const jobs = useAIJobs();
+  const submitting = useRef(false);
+  useEffect(() => {
+    if (initialTopic) setSelected(initialTopic);
+  }, [initialTopic]);
+  useEffect(() => {
+    setSelectedQuote(quote);
+    if (quote)
+      setText(
+        (previous) =>
+          previous || t("请解释这段内容。", "Please explain this passage."),
+      );
+  }, [quote]);
   const topic = topics.find((x) => x.id === selected) ?? topics[0],
     entry = s.entries.find((e) => e.id === entryId),
     actualModel = resolveModel(s.ai, "agent", model);
   const deletion = useConfirmation(notify);
   const send = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       let current = topic;
@@ -51,23 +67,37 @@ export function Agent({
         current = store.getSnapshot().topics.find((x) => x.id === id)!;
       }
       const input = text;
-      setText("");
-      await chat(
-        current,
-        input,
-        (description) =>
-          new Promise((resolve) =>
-            setConfirmation({ text: description, resolve }),
-          ),
-        { model, effort },
+      await submitAIJob(
+        "chat",
+        { page: "agent", entryId, topicId: current.id },
+        {
+          text:
+            input +
+            (selectedQuote
+              ? "\n\n选中内容（仅作上下文）：\n" + selectedQuote
+              : ""),
+          model,
+          effort,
+        },
+        false,
       );
+      setText((current) => (current === input ? "" : current));
+      setSelectedQuote("");
     } catch (e) {
       diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
       notify(e instanceof Error ? e.message : String(e));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
+  const relevant = jobs.jobs.filter(
+    (j) => j.kind === "chat" && j.target.topicId === topic?.id,
+  );
+  const awaitingApproval = relevant.find((j) => j.state === "approval");
+  useEffect(() => {
+    if (awaitingApproval) openAIJob(awaitingApproval.id);
+  }, [awaitingApproval?.id, awaitingApproval?.state]);
   return (
     <div className="page chat-page">
       <div className="page-heading">
@@ -195,12 +225,76 @@ export function Agent({
                 )}
               />
             )}{" "}
-            {busy && (
-              <Busy
-                label={t("思考与查阅中…", "Thinking and looking things up…")}
-              />
-            )}
+            {relevant
+              .filter((j) =>
+                [
+                  "queued",
+                  "running",
+                  "approval",
+                  "error",
+                  "cancelled",
+                ].includes(j.state),
+              )
+              .map((job) => {
+                const stage = job.stages.at(-1);
+                return (
+                  <div
+                    className="chat-live-job"
+                    key={job.id}
+                    data-chat-job={job.id}
+                  >
+                    {!topic?.messages.some(
+                      (m) => m.role === "user" && m.jobId === job.id,
+                    ) && (
+                      <div className="message user">
+                        <small>{t("你 · 排队中", "You · queued")}</small>
+                        <p>{String(job.input.text)}</p>
+                      </div>
+                    )}
+                    {stage?.content && !stage.finished && (
+                      <div
+                        className="message assistant ai-live-message"
+                        aria-live="polite"
+                      >
+                        <small>ZhiNexus · {t("正在输出", "Streaming")}</small>
+                        <div className="ai-stream-content">{stage.content}</div>
+                      </div>
+                    )}
+                    {["queued", "running"].includes(job.state) && (
+                      <Busy
+                        label={
+                          job.state === "queued"
+                            ? t("已加入队列…", "Queued…")
+                            : t("正在输出…", "Generating…")
+                        }
+                      />
+                    )}
+                    {job.state === "approval" && (
+                      <button onClick={() => openAIJob(job.id)}>
+                        {t("确认 Agent 操作", "Confirm agent action")}
+                      </button>
+                    )}
+                    {job.error && (
+                      <p className="warning">
+                        {job.error}
+                        <button onClick={() => openAIJob(job.id)}>
+                          {t("查看任务", "View task")}
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
           </div>
+          {selectedQuote && (
+            <blockquote className="chat-selection-context">
+              <small>{t("选中内容", "Selected passage")}</small>
+              <p>{selectedQuote}</p>
+              <button onClick={() => setSelectedQuote("")}>
+                {t("移除引用", "Remove quote")}
+              </button>
+            </blockquote>
+          )}
           <form
             className="chat-input"
             onSubmit={(e) => {
@@ -240,36 +334,6 @@ export function Agent({
         </div>
       </div>
       {deletion.dialog}
-      {confirmation && (
-        <Modal
-          title={t("确认 Agent 操作", "Confirm agent action")}
-          onClose={() => {
-            confirmation.resolve(false);
-            setConfirmation(null);
-          }}
-        >
-          <pre>{confirmation.text}</pre>
-          <div className="actions">
-            <button
-              onClick={() => {
-                confirmation.resolve(false);
-                setConfirmation(null);
-              }}
-            >
-              {t("拒绝", "Deny")}
-            </button>
-            <button
-              className="primary"
-              onClick={() => {
-                confirmation.resolve(true);
-                setConfirmation(null);
-              }}
-            >
-              {t("允许本次", "Allow once")}
-            </button>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

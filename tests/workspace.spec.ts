@@ -1098,7 +1098,7 @@ test("one optional synchronization key encrypts every credential automatically a
   const serialized = JSON.stringify(initial);
   const persisted = await repository<string>(
     page,
-    `const rows=await store.db.local('device',{});const {encodeDevice}=await import('/src/core/secrets.ts');return JSON.stringify(await encodeDevice(rows));`,
+    `return JSON.stringify(await store.db.query('SELECT value FROM meta WHERE key=?',['device']));`,
   );
   for (const sentinel of [
     "secret-api-sentinel",

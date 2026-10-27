@@ -284,3 +284,42 @@ test("a remote cancellation cannot be overwritten by an older assessment respons
     await repository(page, "return store.getSnapshot().entries[0].card.reps"),
   ).toBe(0);
 });
+
+test("a pending confirmed replacement question can still be cancelled", async ({
+  page,
+}) => {
+  let release: () => void = () => {},
+    started = false;
+  await page.route("https://ai.example/**", async (route) => {
+    started = true;
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await response(route, question("不应替换的迟到题目"));
+  });
+  await setup(page);
+  await page.getByRole("button", { name: "重新出题", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole("button", { name: "取消本次复习", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(page.locator(".review-workspace")).toHaveCount(0);
+  release();
+  await page.reload();
+  expect(
+    await repository(page, "return store.getSnapshot().reviews[0]"),
+  ).toMatchObject({
+    phase: "cancelled",
+    answer: "已保存的回答",
+    question: { question: question().question },
+  });
+  expect(
+    await repository(page, "return store.getSnapshot().entries[0].card.reps"),
+  ).toBe(0);
+});

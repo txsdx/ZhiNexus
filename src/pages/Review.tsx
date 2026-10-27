@@ -30,6 +30,10 @@ export function Review({ notify }: { notify: (s: string) => void }) {
     title: t("确认复习操作", "Confirm review action"),
     confirmLabel: t("确认", "Confirm"),
   });
+  const cancellation = useConfirmation(notify, {
+    title: t("确认复习操作", "Confirm review action"),
+    confirmLabel: t("确认", "Confirm"),
+  });
   useEffect(
     () => () => {
       active.current?.controller.abort();
@@ -168,7 +172,7 @@ export function Review({ notify }: { notify: (s: string) => void }) {
   };
   const cancel = () =>
     session &&
-    confirmation.request(
+    cancellation.request(
       t(
         "结束本次复习？本次回答和评分不会计入复习次数，也不会修改词条或下次复习时间。",
         "End this session? Its answer and score will not affect your entry or review schedule.",
@@ -203,7 +207,9 @@ export function Review({ notify }: { notify: (s: string) => void }) {
             "重新出题会清空本次回答和评分，复习次数保持不变。继续？",
             "Replace this question and clear its answer and score? Your review count stays the same.",
           ),
-          generate,
+          async () => {
+            void generate();
+          },
         )
       : generate();
   };
@@ -289,6 +295,7 @@ export function Review({ notify }: { notify: (s: string) => void }) {
   return (
     <div className="page">
       {confirmation.dialog}
+      {cancellation.dialog}
       <div className="page-heading">
         <div>
           <div className="eyebrow">REMEMBER WITH UNDERSTANDING</div>

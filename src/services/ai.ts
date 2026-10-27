@@ -30,8 +30,11 @@ export async function complete(
   tools?: ToolSpec[],
   override?: { model: string; effort: string },
   image?: string,
+  signal?: AbortSignal,
 ): Promise<{ content: string; calls: ToolCall[] }> {
+  signal?.throwIfAborted();
   await flushAISettings();
+  signal?.throwIfAborted();
   const { ai, device } = store.getSnapshot(),
     config = {
       ...ai.tasks[task],
@@ -87,6 +90,7 @@ export async function complete(
           Authorization: "Bearer " + normalizeApiKey(device.apiKey),
         },
         body: JSON.stringify(body),
+        signal,
       },
       180000,
     );
@@ -125,14 +129,22 @@ export async function complete(
 export async function runTask(
   task: Task,
   vars: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<string> {
+  signal?.throwIfAborted();
   await flushAISettings();
   const prompt = store.getSnapshot().ai.tasks[task].prompt;
   const result = (
-    await complete(task, [
-      { role: "user", content: renderPrompt(prompt, vars) },
-    ])
+    await complete(
+      task,
+      [{ role: "user", content: renderPrompt(prompt, vars) }],
+      undefined,
+      undefined,
+      undefined,
+      signal,
+    )
   ).content;
+  signal?.throwIfAborted();
   void notifyCompletion("ai", result).catch(() => {});
   return result;
 }

@@ -1,50 +1,115 @@
 /** Resumable AI review sessions with answer persistence, teaching feedback and FSRS commits. */
 import { diagnostics } from "../services/diagnostics";
-import { useState } from "react";
-import { ArrowRight, CheckCircle2, Clock3, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Sparkles,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { useKnowledge, useT, Busy, Empty } from "../components/common";
 import { Markdown } from "../components/Markdown";
 import type { Collection, Json } from "../core/types";
 import { store, json } from "../core/store";
 import { gradeSchema, questionSchema, schedule } from "../core/review";
 import { runTask, parseJson } from "../services/ai";
+import { useConfirmation } from "../hooks/useConfirmation";
 /** Resume unfinished sessions before presenting the due queue; never auto-award a passing score. */
 export function Review({ notify }: { notify: (s: string) => void }) {
   const s = useKnowledge(),
     t = useT(),
     [selected, setSelected] = useState(""),
     [busy, setBusy] = useState("");
-  const unfinished = s.reviews.filter((r) => r.phase !== "done"),
-    session = s.reviews.find((r) => r.id === selected) ?? unfinished[0],
+  const active = useRef<{
+    controller: AbortController;
+    cancellable: boolean;
+  } | null>(null);
+  const confirmation = useConfirmation(notify, {
+    title: t("确认复习操作", "Confirm review action"),
+    confirmLabel: t("确认", "Confirm"),
+  });
+  useEffect(
+    () => () => {
+      active.current?.controller.abort();
+      active.current = null;
+    },
+    [],
+  );
+  const unfinished = s.reviews.filter(
+      (r) => r.phase !== "done" && r.phase !== "cancelled",
+    ),
+    session = unfinished.find((r) => r.id === selected) ?? unfinished[0],
     entry = s.entries.find((e) => e.id === session?.entryId),
     due = s.entries
       .filter((e) => e.card.due <= new Date())
       .sort((a, b) => a.card.due.getTime() - b.card.due.getTime());
-  const act = async (label: string, fn: () => Promise<void>) => {
+  /** Abort the request and invalidate late responses before returning control to the user. */
+  const stop = () => {
+    const task = active.current;
+    if (!task?.cancellable) return;
+    active.current = null;
+    task.controller.abort();
+    setBusy("");
+  };
+  const act = async (
+    label: string,
+    fn: (signal: AbortSignal) => Promise<void>,
+    cancellable = true,
+  ) => {
+    if (active.current) return;
+    const task = { controller: new AbortController(), cancellable };
+    active.current = task;
     setBusy(label);
     try {
-      await fn();
+      await fn(task.controller.signal);
     } catch (e) {
-      diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
-      notify(e instanceof Error ? e.message : String(e));
+      if (!task.controller.signal.aborted) {
+        diagnostics.error("app", "复习操作失败 / Review action failed", e);
+        notify(e instanceof Error ? e.message : String(e));
+      }
     } finally {
-      setBusy("");
+      if (active.current === task) {
+        active.current = null;
+        setBusy("");
+      }
     }
   };
-  const start = async (id: string) => {
-    const e = s.entries.find((e) => e.id === id)!;
-    const existing = unfinished.find((r) => r.entryId === id);
+  /** Reject answers and AI results after cancellation, replacement or completion of their original question. */
+  const currentQuestion = (id: string, question: unknown) => {
+    const current = store.getSnapshot().reviews.find((r) => r.id === id);
+    return (
+      current &&
+      current.phase !== "done" &&
+      current.phase !== "cancelled" &&
+      JSON.stringify(current.question) === JSON.stringify(question)
+    );
+  };
+  const start = async (id: string, signal: AbortSignal) => {
+    const e = store.getSnapshot().entries.find((e) => e.id === id);
+    if (!e) return;
+    const existing = store
+      .getSnapshot()
+      .reviews.find(
+        (r) =>
+          r.entryId === id && r.phase !== "done" && r.phase !== "cancelled",
+      );
     if (existing) {
       setSelected(existing.id);
       return;
     }
     const question = questionSchema.parse(
         parseJson(
-          await runTask("question", { title: e.title, content: e.content }),
+          await runTask(
+            "question",
+            { title: e.title, content: e.content },
+            signal,
+          ),
         ),
       ),
       rid = crypto.randomUUID();
-    await store.patch(
+    const committed = await store.patchWhen(
       "review",
       rid,
       json({
@@ -54,10 +119,111 @@ export function Review({ notify }: { notify: (s: string) => void }) {
         answer: "",
         grade: null,
         startedAt: new Date().toISOString(),
-      }) as Record<string, import("../core/types").Json>,
+      }) as Record<string, Json>,
       "review",
+      () =>
+        !signal.aborted &&
+        store.getSnapshot().entries.some((x) => x.id === id) &&
+        !store
+          .getSnapshot()
+          .reviews.some(
+            (r) =>
+              r.entryId === id && r.phase !== "done" && r.phase !== "cancelled",
+          ),
     );
-    setSelected(rid);
+    if (committed && !signal.aborted) setSelected(rid);
+  };
+  const regenerate = async (signal: AbortSignal) => {
+    if (!session || !entry) return;
+    const question = questionSchema.parse(
+      parseJson(
+        await runTask(
+          "question",
+          {
+            title: entry.title,
+            content:
+              entry.content +
+              "\n\n上一题（题目数据）：" +
+              session.question.question +
+              "\n请从不同角度生成另一道题，不重复上一题。",
+          },
+          signal,
+        ),
+      ),
+    );
+    if (question.question.trim() === session.question.question.trim())
+      throw Error(
+        t(
+          "AI 返回了相同题目，请重试。原作答已保留。",
+          "AI returned the same question. Retry; your answer was retained.",
+        ),
+      );
+    await store.patchWhen(
+      "review",
+      session.id,
+      { question: json(question), phase: "question", answer: "", grade: null },
+      "review-new-question",
+      () => !signal.aborted && !!currentQuestion(session.id, session.question),
+    );
+  };
+  const cancel = () =>
+    session &&
+    confirmation.request(
+      t(
+        "结束本次复习？本次回答和评分不会计入复习次数，也不会修改词条或下次复习时间。",
+        "End this session? Its answer and score will not affect your entry or review schedule.",
+      ),
+      async () => {
+        stop();
+        await act(
+          t("取消复习…", "Cancelling review…"),
+          async () => {
+            const committed = await store.patchWhen(
+              "review",
+              session.id,
+              { phase: "cancelled" },
+              "review-cancel",
+              () => !!currentQuestion(session.id, session.question),
+            );
+            if (committed) {
+              setSelected("");
+              notify(t("本次复习已取消", "Review cancelled"));
+            }
+          },
+          false,
+        );
+      },
+    );
+  const newQuestion = () => {
+    const generate = () =>
+      act(t("正在重新出题…", "Preparing another question…"), regenerate);
+    return session?.answer || session?.grade
+      ? confirmation.request(
+          t(
+            "重新出题会清空本次回答和评分，复习次数保持不变。继续？",
+            "Replace this question and clear its answer and score? Your review count stays the same.",
+          ),
+          generate,
+        )
+      : generate();
+  };
+  const saveAnswer = (answer: string) => {
+    if (!session || busy) return;
+    void store
+      .patchWhen(
+        "review",
+        session.id,
+        { answer, phase: "answer" },
+        "review-answer",
+        () =>
+          !!currentQuestion(session.id, session.question) &&
+          store.getSnapshot().reviews.find((r) => r.id === session.id)
+            ?.phase !== "graded",
+      )
+      .catch((error) => {
+        diagnostics.error("app", "复习作答保存失败", error);
+        notify(String(error));
+      });
   };
   const finish = async () => {
     if (!session?.grade || !entry) return;
@@ -89,7 +255,29 @@ export function Review({ notify }: { notify: (s: string) => void }) {
         session.grade.missing +
         "\n\n" +
         session.grade.lesson;
-    await store.batch(patches, "review-assessment");
+    const committed = await store.batchWhen(
+      patches,
+      "review-assessment",
+      () => {
+        const current = store.getSnapshot(),
+          r = current.reviews.find((r) => r.id === session.id),
+          e = current.entries.find((e) => e.id === entry.id);
+        return (
+          r?.phase === "graded" &&
+          JSON.stringify(r.grade) === JSON.stringify(session.grade) &&
+          JSON.stringify(e?.card) === JSON.stringify(entry.card) &&
+          e?.content === entry.content &&
+          JSON.stringify(r.question) === JSON.stringify(session.question)
+        );
+      },
+    );
+    if (!committed)
+      throw Error(
+        t(
+          "复习状态已更新，请检查当前结果后重试。",
+          "Review state changed. Check the current result and retry.",
+        ),
+      );
     setSelected("");
     notify(
       t(
@@ -100,6 +288,7 @@ export function Review({ notify }: { notify: (s: string) => void }) {
   };
   return (
     <div className="page">
+      {confirmation.dialog}
       <div className="page-heading">
         <div>
           <div className="eyebrow">REMEMBER WITH UNDERSTANDING</div>
@@ -119,6 +308,9 @@ export function Review({ notify }: { notify: (s: string) => void }) {
       {busy && (
         <div className="notice">
           <Busy label={busy} />
+          {active.current?.cancellable && (
+            <button onClick={stop}>{t("停止本次请求", "Stop request")}</button>
+          )}
         </div>
       )}
       {session && entry ? (
@@ -132,20 +324,28 @@ export function Review({ notify }: { notify: (s: string) => void }) {
               )}
             </small>
           </div>
+          <div className="actions">
+            <button disabled={!!busy} onClick={() => void newQuestion()}>
+              <RefreshCw size={16} />
+              {t("重新出题", "New question")}
+            </button>
+            <button
+              disabled={!!busy && !active.current?.cancellable}
+              onClick={() => void cancel()}
+            >
+              <X size={16} />
+              {t("取消本次复习", "Cancel review")}
+            </button>
+          </div>
           <h2>{session.question.question}</h2>
           {session.question.type === "choice" ? (
             <div className="choices">
               {session.question.choices.map((c, i) => (
                 <button
-                  disabled={session.phase === "graded"}
+                  disabled={!!busy || session.phase === "graded"}
                   className={session.answer === c ? "selected" : ""}
                   key={i}
-                  onClick={() =>
-                    void store.patch("review", session.id, {
-                      answer: c,
-                      phase: "answer",
-                    })
-                  }
+                  onClick={() => saveAnswer(c)}
                 >
                   <span>{String.fromCharCode(65 + i)}</span>
                   {c}
@@ -160,13 +360,8 @@ export function Review({ notify }: { notify: (s: string) => void }) {
                 "Explain in your own words. Try an example…",
               )}
               value={session.answer}
-              disabled={session.phase === "graded"}
-              onChange={(e) =>
-                void store.patch("review", session.id, {
-                  answer: e.target.value,
-                  phase: "answer",
-                })
-              }
+              disabled={!!busy || session.phase === "graded"}
+              onChange={(e) => saveAnswer(e.target.value)}
             />
           )}{" "}
           {session.phase !== "graded" ? (
@@ -176,22 +371,37 @@ export function Review({ notify }: { notify: (s: string) => void }) {
               onClick={() =>
                 void act(
                   t("评估理解并整理薄弱点…", "Assessing your understanding…"),
-                  async () => {
+                  async (signal) => {
                     const grade = gradeSchema.parse(
                       parseJson(
-                        await runTask("grade", {
-                          title: entry.title,
-                          content: entry.content,
-                          question: JSON.stringify(session.question),
-                          answer: session.answer,
-                        }),
+                        await runTask(
+                          "grade",
+                          {
+                            title: entry.title,
+                            content: entry.content,
+                            question: JSON.stringify(session.question),
+                            answer: session.answer,
+                          },
+                          signal,
+                        ),
                       ),
                     );
-                    await store.patch(
+                    await store.patchWhen(
                       "review",
                       session.id,
                       { grade: json(grade), phase: "graded" },
                       "ai-grade",
+                      () =>
+                        !signal.aborted &&
+                        !!currentQuestion(session.id, session.question) &&
+                        store
+                          .getSnapshot()
+                          .reviews.find((r) => r.id === session.id)?.phase !==
+                          "graded" &&
+                        store
+                          .getSnapshot()
+                          .reviews.find((r) => r.id === session.id)?.answer ===
+                          session.answer,
                     );
                   },
                 )
@@ -227,24 +437,32 @@ export function Review({ notify }: { notify: (s: string) => void }) {
                   </div>
                 )}
                 <div className="actions">
-                  {session.grade.score < 60 && (
-                    <button
-                      onClick={() =>
-                        void store.patch("review", session.id, {
-                          phase: "answer",
-                          answer: "",
-                          grade: null,
-                        })
-                      }
-                    >
-                      {t("重新作答", "Try again")}
-                    </button>
-                  )}
+                  <button
+                    disabled={!!busy}
+                    onClick={() =>
+                      void act(
+                        t("准备重新作答…", "Preparing retry…"),
+                        async () => {
+                          await store.patchWhen(
+                            "review",
+                            session.id,
+                            { phase: "answer", answer: "", grade: null },
+                            "review-retry",
+                            () =>
+                              !!currentQuestion(session.id, session.question),
+                          );
+                        },
+                        false,
+                      )
+                    }
+                  >
+                    {t("重新作答", "Try again")}
+                  </button>
                   <button
                     className="primary"
                     disabled={!!busy}
                     onClick={() =>
-                      void act(t("保存复习…", "Saving review…"), finish)
+                      void act(t("保存复习…", "Saving review…"), finish, false)
                     }
                   >
                     <CheckCircle2 size={17} />
@@ -268,8 +486,9 @@ export function Review({ notify }: { notify: (s: string) => void }) {
               key={e.id}
               disabled={!!busy}
               onClick={() =>
-                void act(t("正在准备理解题…", "Preparing your question…"), () =>
-                  start(e.id),
+                void act(
+                  t("正在准备理解题…", "Preparing your question…"),
+                  (signal) => start(e.id, signal),
                 )
               }
             >

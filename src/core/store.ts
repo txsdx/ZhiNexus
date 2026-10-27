@@ -18,6 +18,12 @@ import type {
   Topic,
   ReviewSession,
 } from "./types";
+/** One validated document mutation within an atomic operation batch. */
+type StorePatch = {
+  collection: Collection;
+  id: string;
+  patch: Record<string, Json>;
+};
 /** Convert serializable domain objects to the JSON event boundary. */
 export function json(value: unknown): Json {
   return JSON.parse(JSON.stringify(value));
@@ -144,15 +150,13 @@ export class KnowledgeStore {
     return task;
   }
   /** Commit one or several patches as a single user action. */
-  async batch(
-    patches: {
-      collection: Collection;
-      id: string;
-      patch: Record<string, Json>;
-    }[],
-    source = "manual",
-  ) {
+  async batch(patches: StorePatch[], source = "manual") {
+    await this.batchWhen(patches, source, () => true);
+  }
+  /** Check a precondition inside the command queue and skip stale mutations before any writes. */
+  async batchWhen(patches: StorePatch[], source: string, when: () => boolean) {
     return this.serial(async () => {
+      if (!when()) return false;
       if (!this.deviceId)
         throw Error("数据库尚未初始化 / Storage initialization incomplete");
       const events = await this.db.events(),
@@ -175,9 +179,11 @@ export class KnowledgeStore {
         added.push(await validateEnvelope({ op, hash: await sha256(op) }));
       }
       validateDocuments(materialize([...events, ...added]));
+      if (!when()) return false;
       await this.db.append(added);
       await this.reload();
       this.channel?.postMessage("commit");
+      return true;
     });
   }
   /** Patch an entity; unmentioned fields remain untouched and merge independently. */
@@ -188,6 +194,16 @@ export class KnowledgeStore {
     source = "manual",
   ) {
     return this.batch([{ collection, id, patch }], source);
+  }
+  /** Commit a patch only while its original session/question is still current. */
+  async patchWhen(
+    collection: Collection,
+    id: string,
+    patch: Record<string, Json>,
+    source: string,
+    when: () => boolean,
+  ) {
+    return this.batchWhen([{ collection, id, patch }], source, when);
   }
   /** Validate an entire incoming batch before persisting its first operation. */
   async ingest(input: unknown[]) {

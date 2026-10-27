@@ -248,3 +248,46 @@ it("redacts the request's original credential even if it rotates before the resp
   expect(diagnostics.getSnapshot()[0].response).not.toContain("fixture-key");
   expect(diagnostics.getSnapshot()[0].response).toContain("[redacted]");
 });
+
+it("does not send a cancelled review request", async () => {
+  const { fetcher } = configuredAI();
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    complete(
+      "question",
+      [{ role: "user", content: "question" }],
+      undefined,
+      undefined,
+      undefined,
+      controller.signal,
+    ),
+  ).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("passes review cancellation to the active network request", async () => {
+  const { fetcher } = configuredAI();
+  fetcher.mockImplementation(async (_input: Request, options: RequestInit) => {
+    return new Promise((_resolve, reject) => {
+      options.signal!.addEventListener(
+        "abort",
+        () => reject(new DOMException("Aborted", "AbortError")),
+        { once: true },
+      );
+    });
+  });
+  const controller = new AbortController();
+  const result = complete(
+    "grade",
+    [{ role: "user", content: "grade" }],
+    undefined,
+    undefined,
+    undefined,
+    controller.signal,
+  );
+  const rejected = expect(result).rejects.toThrow(/cancel|Abort|取消/i);
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  controller.abort();
+  await rejected;
+});

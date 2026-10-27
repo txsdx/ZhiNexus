@@ -65,7 +65,7 @@ const schemas = {
   }),
   review: z.object({
     entryId: text,
-    phase: z.enum(["question", "answer", "graded", "done"]),
+    phase: z.enum(["question", "answer", "graded", "done", "cancelled"]),
     question: questionSchema,
     answer: text,
     grade: gradeSchema.nullable(),

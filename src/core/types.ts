@@ -184,7 +184,7 @@ export interface Grade {
 export interface ReviewSession {
   id: string;
   entryId: string;
-  phase: "question" | "answer" | "graded" | "done";
+  phase: "question" | "answer" | "graded" | "done" | "cancelled";
   question: Question;
   answer: string;
   grade: Grade | null;

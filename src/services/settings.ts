@@ -6,12 +6,12 @@ import { store } from "../core/store";
 import type { AIConfig, DeviceConfig, Json } from "../core/types";
 import { apiBaseUrl, normalizeApiKey, secureUrl, serviceUrl } from "./network";
 import { normalizeProxy, ensureNativeProxy } from "./proxy";
-import { saveAIAndKey } from "./key-sync";
+import { flushKeySync, saveAIAndKey } from "./key-sync";
 import { enableNotifications } from "./device";
 import { diagnostics } from "./diagnostics";
 import { defaultNotifications } from "./notifications";
 
-/** Working provider and device preferences; vault/backup passphrases are intentionally not preferences. */
+/** Working provider and device preferences; file-backup passphrases are not preferences. */
 export interface SettingsDraft {
   ai: AIConfig;
   device: DeviceConfig;
@@ -132,6 +132,7 @@ async function save(next: SettingsDraft, base: SettingsDraft) {
       }
       await store.updateDevice(notifications);
     });
+  await attempt("Credential sync", flushKeySync);
   if (errors.length) throw Error(errors.join("\n"));
 }
 let editor: AutoSave<SettingsDraft> | undefined;
@@ -152,6 +153,7 @@ export function settingsEditor() {
 /** Complete pending settings before performing an action, exiting or relocating storage. */
 export async function flushSettings() {
   await editor?.flush();
+  await flushKeySync();
 }
 
 /** AI uses valid saved provider settings even when an unrelated settings group still has an invalid draft. */

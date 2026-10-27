@@ -1067,61 +1067,179 @@ test("same-profile tabs preserve simultaneous commits and refreshes", async ({
   ).toBe(16);
 });
 
-test("encrypted credential vault replicates secrets without exposing them or replacing notification preferences", async ({
+test("one optional synchronization key encrypts every credential automatically and preserves local execution consent", async ({
   page,
   browser,
 }) => {
   await page.goto("/");
   await repository(
     page,
-    `await store.saveDevice({...store.getSnapshot().device,apiKey:'secret-api-sentinel',davUrl:'https://dav.example/knowledge/',davUser:'private-user',davPassword:'secret-dav-sentinel',mcp:[{id:'mcp1',name:'Private MCP',url:'https://mcp.example/rpc',token:'secret-mcp-sentinel',enabled:false}]});`,
+    `
+    await store.updateDevice({apiKey:'secret-api-sentinel',davUrl:'https://dav.example/knowledge/',davUser:'private-user',davPassword:'secret-dav-sentinel',syncMinutes:0,mcp:[
+      {id:'mcp1',name:'Private MCP',url:'https://mcp.example/rpc',token:'secret-mcp-sentinel',enabled:true},
+      {id:'local-program',name:'Local program',url:'',token:'',transport:'stdio',command:'fixture',args:['serve'],env:{TOKEN:'secret-env-sentinel'},enabled:true}
+    ]});
+    const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();
+  `,
   );
   await page.getByRole("button", { name: "设置与偏好" }).click();
   await page
     .getByRole("button", { name: "数据库与云同步", exact: true })
     .click();
-  await page
-    .getByLabel("保险箱密码（不保存）")
-    .fill("a unique vault test passphrase");
-  await page.getByRole("button", { name: "封存本机已保存凭证供同步" }).click();
-  await expect(page.locator(".toast")).toContainText("已加密保存");
-  const events = await repository<unknown[]>(
-    page,
-    "return store.getSnapshot().events;",
+  await expect(page.getByLabel("自定义同步密钥（可选）")).toHaveValue("");
+  await expect(page.getByText("跨设备凭证保险箱", { exact: true })).toHaveCount(
+    0,
   );
-  const serialized = JSON.stringify(events);
+  await expect(page.getByRole("button", { name: /封存|解锁/ })).toHaveCount(0);
+  const initial = await repository<unknown[]>(
+    page,
+    "return store.getSnapshot().events",
+  );
+  const serialized = JSON.stringify(initial);
+  const persisted = await repository<string>(
+    page,
+    `const rows=await store.db.local('device',{});const {encodeDevice}=await import('/src/core/secrets.ts');return JSON.stringify(await encodeDevice(rows));`,
+  );
   for (const sentinel of [
     "secret-api-sentinel",
     "secret-dav-sentinel",
     "secret-mcp-sentinel",
-  ])
+    "secret-env-sentinel",
+    "private-user",
+  ]) {
     expect(serialized).not.toContain(sentinel);
+    expect(persisted).not.toContain(sentinel);
+  }
   const context = await browser.newContext({ locale: "zh-CN" }),
     other = await context.newPage();
-  await other.goto("/");
-  await repository(
-    other,
-    `await store.ingest(${serialized});await store.saveDevice({...store.getSnapshot().device,notifications:true,syncMinutes:0});`,
-  );
-  await other.getByRole("button", { name: "设置与偏好" }).click();
-  await other
-    .getByRole("button", { name: "数据库与云同步", exact: true })
-    .click();
-  await other
-    .getByLabel("保险箱密码（不保存）")
-    .fill("a unique vault test passphrase");
-  await other.getByRole("button", { name: "解锁并应用共享凭证" }).click();
-  await expect(other.locator(".toast")).toContainText("已应用保险箱");
-  expect(
-    await repository(other, "return store.getSnapshot().device.apiKey;"),
-  ).toBe("secret-api-sentinel");
-  expect(
-    await repository(other, "return store.getSnapshot().device.mcp[0].token;"),
-  ).toBe("secret-mcp-sentinel");
-  expect(
-    await repository(other, "return store.getSnapshot().device.notifications;"),
-  ).toBe(true);
-  await context.close();
+  try {
+    await other.goto("/");
+    await repository(
+      other,
+      `await store.updateDevice({notifications:true,syncMinutes:0});await store.ingest(${serialized});const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();`,
+    );
+    expect(
+      await repository(other, "return store.getSnapshot().device"),
+    ).toMatchObject({
+      apiKey: "secret-api-sentinel",
+      davUser: "private-user",
+      davPassword: "secret-dav-sentinel",
+      notifications: true,
+      syncMinutes: 0,
+      mcp: [
+        { token: "secret-mcp-sentinel", enabled: true },
+        { enabled: false, env: { TOKEN: "secret-env-sentinel" } },
+      ],
+    });
+    // The same one field rotates API, WebDAV and MCP credentials automatically.
+    await page
+      .getByLabel("自定义同步密钥（可选）")
+      .fill("one-shared-custom-key");
+    await expect(page.locator('[data-save-status="saved"]')).toBeVisible();
+    await repository(
+      page,
+      `const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();`,
+    );
+    const custom = JSON.stringify(
+      await repository(page, "return store.getSnapshot().events"),
+    );
+    expect(custom).not.toContain("one-shared-custom-key");
+    await repository(
+      other,
+      `await store.ingest(${custom});const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();`,
+    );
+    expect(
+      await repository(
+        other,
+        `const {keySyncStatus}=await import('/src/services/key-sync.ts');return keySyncStatus.getSnapshot().status;`,
+      ),
+    ).toBe("locked");
+    await other.getByRole("button", { name: "设置与偏好" }).click();
+    await other
+      .getByRole("button", { name: "数据库与云同步", exact: true })
+      .click();
+    await other.getByLabel("自定义同步密钥（可选）").fill("wrong-key");
+    await expect(other.locator('[data-save-status="error"]')).toBeVisible();
+    expect(
+      await repository(
+        other,
+        'return store.getSnapshot().device.apiKeySyncKey ?? ""',
+      ),
+    ).toBe("");
+    expect(
+      await repository(other, "return store.getSnapshot().device.davPassword"),
+    ).toBe("secret-dav-sentinel");
+    await other
+      .getByLabel("自定义同步密钥（可选）")
+      .fill("one-shared-custom-key");
+    await expect(other.locator('[data-save-status="saved"]')).toBeVisible();
+    expect(
+      await repository(other, "return store.getSnapshot().device"),
+    ).toMatchObject({
+      apiKeySyncKey: "one-shared-custom-key",
+      notifications: true,
+      mcp: [{ enabled: true }, { enabled: false }],
+    });
+    // Receive the other device's writes before rotating, as an ordinary completed exchange would.
+    const observed = JSON.stringify(
+      await repository(other, "return store.getSnapshot().events"),
+    );
+    await repository(
+      page,
+      `await store.ingest(${observed});const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();`,
+    );
+    // Clearing the custom key deliberately re-encrypts all existing groups with the default key.
+    await page.getByLabel("自定义同步密钥（可选）").fill("");
+    await expect(page.locator('[data-save-status="saved"]')).toBeVisible();
+    await repository(
+      page,
+      `const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();`,
+    );
+    const builtin = JSON.stringify(
+      await repository(page, "return store.getSnapshot().events"),
+    );
+    await repository(
+      other,
+      `await store.ingest(${builtin});const {flushKeySync}=await import('/src/services/key-sync.ts');await flushKeySync();`,
+    );
+    expect(
+      await repository(other, "return store.getSnapshot().device.davPassword"),
+    ).toBe("secret-dav-sentinel");
+    expect(
+      await repository(
+        other,
+        `const d=store.getSnapshot().docs.find(x=>x.id==='ai-key-vault');const {decryptSecret}=await import('/src/core/secrets.ts');return [await decryptSecret(d.fields.cipher,'sync-api-key'),await decryptSecret(d.fields.connectionsCipher,'sync-connections')];`,
+      ),
+    ).toMatchObject([
+      { apiKey: "secret-api-sentinel" },
+      {
+        davPassword: "secret-dav-sentinel",
+        mcp: [
+          { token: "secret-mcp-sentinel" },
+          { env: { TOKEN: "secret-env-sentinel" } },
+        ],
+      },
+    ]);
+    await page.reload();
+    expect(
+      await repository(page, "return store.getSnapshot().device.apiKeySyncKey"),
+    ).toBe("");
+    expect(
+      await repository(
+        page,
+        "return store.getSnapshot().device.mcp[1].enabled",
+      ),
+    ).toBe(true);
+    await other.reload();
+    expect(
+      await repository(
+        other,
+        "return store.getSnapshot().device.mcp[1].enabled",
+      ),
+    ).toBe(false);
+  } finally {
+    await context.close();
+  }
 });
 
 test("verified local checkpoint recovers a damaged SQLite image without clearing knowledge", async ({

@@ -1,15 +1,17 @@
 /** Synchronization configuration panel with explicit persistence and verification. */
-import { useState } from "react";
-import { sealCredentials, unlockCredentials } from "../../services/vault";
+import { useSyncExternalStore } from "react";
+import { keySyncStatus } from "../../services/key-sync";
 import { RefreshCw, ShieldCheck } from "lucide-react";
-import { store } from "../../core/store";
 import { synchronize } from "../../services/sync";
 import { useSettings } from "./context";
-/** Manage HTTPS replication and an optional end-to-end encrypted credential vault. */
+/** Configure HTTPS replication and one optional encryption key for all shared credentials. */
 /** SynchronizationPanel exposes one focused settings workflow. */
 export function SynchronizationPanel() {
-  const [vaultPassword, setVaultPassword] = useState("");
-  const { t, device, setDevice, act, notify, busy, setBusy, setReport, s } =
+  const keyStatus = useSyncExternalStore(
+    keySyncStatus.subscribe,
+    keySyncStatus.getSnapshot,
+  );
+  const { t, device, setDevice, act, busy, setBusy, setReport, s } =
     useSettings();
   return (
     <>
@@ -17,8 +19,8 @@ export function SynchronizationPanel() {
       <div className="notice">
         <ShieldCheck size={18} />
         {t(
-          "WebDAV 强制 HTTPS。不可变日志不覆盖整库，并发版本保留；AI Key 自动加密同步；WebDAV/MCP 凭证可用下方保险箱共享。",
-          "HTTPS is mandatory. Immutable logs preserve concurrent versions. AI keys sync encrypted automatically; share WebDAV/MCP credentials using the vault below.",
+          "WebDAV 强制 HTTPS。不可变日志不覆盖整库，并发版本保留；AI Key、WebDAV 和 MCP 凭证自动加密保存并同步。",
+          "HTTPS is mandatory. Immutable logs preserve concurrent versions. AI, WebDAV and MCP credentials are saved and synchronized encrypted automatically.",
         )}
       </div>
       <label>
@@ -88,54 +90,28 @@ export function SynchronizationPanel() {
           ? new Date(s.device.lastSync).toLocaleString()
           : t("尚未同步", "Never")}
       </p>
-      <h3>{t("跨设备凭证保险箱", "Cross-device credential vault")}</h3>
-      <p className="muted">
-        {t(
-          "如需同步全部 AI、WebDAV 和 MCP 凭证，设置至少12位保险箱密码。云端只存 AES-GCM 密文。另一设备先完成 WebDAV 同步，再用同一密码解锁。通知开关仍保持设备独立。密码不会保存，忘记后无法恢复。",
-          "To replicate AI, WebDAV and MCP credentials, use a vault passphrase of at least 12 characters. Only AES-GCM ciphertext is replicated. Sync the other device first, then unlock with the same passphrase. Reminder preferences stay local. The passphrase is never stored.",
-        )}
-      </p>
       <label>
-        {t("保险箱密码（不保存）", "Vault passphrase (not stored)")}
+        {t("自定义同步密钥（可选）", "Custom synchronization key (optional)")}
         <input
           type="password"
           autoComplete="off"
-          value={vaultPassword}
-          onChange={(e) => setVaultPassword(e.target.value)}
+          value={device.apiKeySyncKey ?? ""}
+          onChange={(e) =>
+            setDevice({ ...device, apiKeySyncKey: e.target.value })
+          }
+          placeholder={t(
+            "留空使用默认密钥加密",
+            "Leave blank to encrypt with the default key",
+          )}
         />
       </label>
-      <div className="actions">
-        <button
-          disabled={!!busy || vaultPassword.length < 12}
-          onClick={() =>
-            void act(t("加密凭证…", "Encrypting credentials…"), async () => {
-              await sealCredentials(vaultPassword);
-              setVaultPassword("");
-              notify(
-                t(
-                  "已加密保存；下一次同步将传输密文",
-                  "Vault sealed; next sync will transfer ciphertext",
-                ),
-              );
-            })
-          }
-        >
-          {t("封存本机已保存凭证供同步", "Seal saved credentials for sync")}
-        </button>
-        <button
-          disabled={!!busy || !vaultPassword}
-          onClick={() =>
-            void act(t("解锁凭证…", "Unlocking credentials…"), async () => {
-              await unlockCredentials(vaultPassword);
-              setVaultPassword("");
-              setDevice(structuredClone(store.getSnapshot().device));
-              notify(t("已应用保险箱中的凭证", "Vault credentials applied"));
-            })
-          }
-        >
-          {t("解锁并应用共享凭证", "Unlock and apply shared credentials")}
-        </button>
-      </div>
+      <p className="muted">
+        {t(
+          "留空时使用默认密钥，AI Key、WebDAV 和 MCP 凭证自动加密保存并随数据同步。默认密钥随程序提供；如填写自定义同步密钥，各设备需使用相同的值。首次连接仍需填写 WebDAV 地址和账号。",
+          "Leave blank to use the default key. AI, WebDAV and MCP credentials are encrypted and synchronized automatically. The default key ships with the app; a custom key must match on every device. Enter your WebDAV address and account to connect a new device first.",
+        )}
+      </p>
+      {keyStatus.message && <p role="status">{keyStatus.message}</p>}
       <p className="muted">
         {t(
           "对象存储与专属服务端已预留 Transport 接口，本版不提供连接器。浏览器访问 WebDAV 需要服务端允许 CORS。",

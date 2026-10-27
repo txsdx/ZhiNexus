@@ -131,7 +131,10 @@ export interface AIConfig {
 export interface DeviceConfig {
   apiKey: string;
   apiKeyEndpoint?: string;
+  /** One optional key for all synchronized credentials; empty selects built-in encryption. */
   apiKeySyncKey?: string;
+  /** Durable local outbox flags; encrypted synchronization must finish before these edits can be replaced. */
+  credentialSyncPending?: { api: boolean; connections: boolean };
   proxy?: ProxySettings;
   desktop?: DesktopPreferences;
   davUrl: string;
@@ -149,7 +152,7 @@ export interface DeviceConfig {
   lastSync: string;
   mcp: McpConfig[];
 }
-/** Explicitly enabled HTTPS MCP endpoint with a device-local token. */
+/** Explicit MCP configuration whose credentials synchronize encrypted; program execution consent stays local. */
 export interface McpConfig {
   id: string;
   name: string;

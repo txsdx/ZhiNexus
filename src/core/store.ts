@@ -254,10 +254,42 @@ export class KnowledgeStore {
     );
     await this.updateDevice(patch);
   }
-  /** Apply only intended device fields inside the command queue, preserving concurrent key/notification edits. */
-  async updateDevice(patch: Partial<DeviceConfig>) {
+  /** Apply intended fields serially; credential edits retain durable outbox flags until encrypted publication succeeds. */
+  async updateDevice(
+    patch:
+      | Partial<DeviceConfig>
+      | ((current: DeviceConfig) => Partial<DeviceConfig>),
+    synchronized = false,
+  ) {
     await this.serial(async () => {
-      const device = { ...this.state.device, ...patch };
+      const before = this.state.device;
+      const device = {
+        ...before,
+        ...(typeof patch === "function" ? patch(before) : patch),
+      };
+      if (!synchronized) {
+        const changed = (keys: (keyof DeviceConfig)[]) =>
+          keys.some(
+            (key) =>
+              JSON.stringify(before[key]) !== JSON.stringify(device[key]),
+          );
+        const api =
+          changed(["apiKey"]) ||
+          (changed(["apiKeyEndpoint"]) &&
+            Boolean(before.apiKey || device.apiKey));
+        const connections = changed([
+          "davUrl",
+          "davUser",
+          "davPassword",
+          "mcp",
+        ]);
+        if (api || connections)
+          device.credentialSyncPending = {
+            api: api || !!before.credentialSyncPending?.api,
+            connections:
+              connections || !!before.credentialSyncPending?.connections,
+          };
+      }
       await this.db.setLocal("device", device);
       await this.reload(device);
     });

@@ -45,25 +45,10 @@ export function ModelsPanel() {
           onChange={(e) => setDevice({ ...device, apiKey: e.target.value })}
         />
       </label>
-      <label>
-        {t("自定义同步密钥（可选）", "Custom synchronization key (optional)")}
-        <input
-          type="password"
-          autoComplete="off"
-          value={device.apiKeySyncKey ?? ""}
-          onChange={(e) =>
-            setDevice({ ...device, apiKeySyncKey: e.target.value })
-          }
-          placeholder={t(
-            "留空使用程序内置密钥",
-            "Leave blank for the built-in convenience key",
-          )}
-        />
-      </label>
       <p className="muted">
         {t(
-          "默认无需密码，API Key 自动加密保存并随数据同步。内置密钥随程序提供；填写自定义密钥时，各设备需使用同一个值。",
-          "No password is required by default. The API key is encrypted and synchronized automatically. The built-in key ships with the app; custom keys must match on each device.",
+          "API Key 自动加密保存并同步，默认使用程序提供的密钥；可在“数据库与云同步”中设置自定义同步密钥（可选）。",
+          "The API key is encrypted and synchronized automatically using the default key. An optional custom synchronization key is available under Database & cloud sync.",
         )}
       </p>
       {keyStatus.message && <p role="status">{keyStatus.message}</p>}

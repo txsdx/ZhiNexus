@@ -1,4 +1,4 @@
-/** Convenient AES-GCM wrapping for local API credentials and shared encrypted API-key records. */
+/** AES-GCM wrapping for local and synchronized credentials, using one optional custom sync key. */
 import { base64, unbase64 } from "./crypto";
 import type { DeviceConfig } from "./types";
 /** Public application key by user choice: obfuscation for a private sync directory, not a secret shipped separately. */
@@ -66,7 +66,7 @@ export async function decryptSecret<T>(
   );
   return JSON.parse(new TextDecoder().decode(plain)) as T;
 }
-/** Only runtime projections contain clear API keys; SQLite and its recovery journal receive this wrapped form. */
+/** Keep API, sync-key, WebDAV and MCP credentials out of cleartext SQLite and recovery metadata. */
 export async function encodeDevice(
   device: DeviceConfig | Record<string, unknown>,
 ) {
@@ -74,12 +74,24 @@ export async function encodeDevice(
     "secretsCipher" in device
       ? await decodeDevice(device)
       : (device as DeviceConfig);
-  const { apiKey, apiKeySyncKey = "", ...publicFields } = value;
+  const {
+    apiKey,
+    apiKeySyncKey = "",
+    davUrl,
+    davUser,
+    davPassword,
+    mcp,
+    ...publicFields
+  } = value;
   return {
     ...publicFields,
     apiKey: "",
+    davUrl: "",
+    davUser: "",
+    davPassword: "",
+    mcp: [],
     secretsCipher: await encryptSecret(
-      { apiKey, apiKeySyncKey },
+      { apiKey, apiKeySyncKey, davUrl, davUser, davPassword, mcp },
       "local-device",
     ),
   };
@@ -94,6 +106,10 @@ export async function decodeDevice(
   const secrets = await decryptSecret<{
     apiKey: string;
     apiKeySyncKey: string;
+    davUrl?: string;
+    davUser?: string;
+    davPassword?: string;
+    mcp?: DeviceConfig["mcp"];
   }>(secretsCipher, "local-device");
   if (
     typeof secrets.apiKey !== "string" ||

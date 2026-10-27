@@ -6,6 +6,7 @@ import { assertCausalClosure, validateDocuments } from "../core/validation";
 import { materialize, stateHash } from "../core/crdt";
 import type { Envelope, Json } from "../core/types";
 import { request, boundedText, secureUrl } from "./network";
+import { flushKeySync } from "./key-sync";
 /** Future object-storage and dedicated-server adapters implement this immutable transport contract. */
 export interface SyncTransport {
   init(): Promise<void>;
@@ -122,6 +123,7 @@ export async function synchronize(
   },
 ): Promise<SyncReport> {
   return withSyncLock(async () => {
+    await flushKeySync();
     const { device } = store.getSnapshot();
     const remote =
       transport ??
@@ -141,6 +143,7 @@ export async function synchronize(
         incoming.push(e);
       }
     await store.ingest(incoming);
+    await flushKeySync();
     const all = await store.db.events();
     let sent = 0;
     for (const e of all)

@@ -39,16 +39,51 @@ describe("API credential wrapping", () => {
       decryptSecret(JSON.stringify(envelope), "sync-api-key", "my-private-key"),
     ).rejects.toThrow();
   });
-  it("wraps both local API and custom keys before SQLite/journal persistence", async () => {
+  it("wraps all local credentials and the optional sync key before SQLite/journal persistence", async () => {
     const device = {
         ...defaultDevice,
         apiKey: "local-api-key",
         apiKeySyncKey: "local-custom-key",
+        davUrl: "https://dav.example/knowledge/",
+        davUser: "private-user",
+        davPassword: "local-dav-password",
+        mcp: [
+          {
+            id: "mcp",
+            name: "MCP",
+            url: "https://mcp.example",
+            enabled: true,
+            token: "local-mcp-token",
+            env: { SECRET: "local-env-secret" },
+          },
+        ],
       },
       encoded = await encodeDevice(device);
     expect(JSON.stringify(encoded)).not.toContain("local-api-key");
     expect(JSON.stringify(encoded)).not.toContain("local-custom-key");
+    for (const secret of [
+      "private-user",
+      "local-dav-password",
+      "local-mcp-token",
+      "local-env-secret",
+    ])
+      expect(JSON.stringify(encoded)).not.toContain(secret);
     expect(await decodeDevice(encoded)).toEqual(device);
     expect(await decodeDevice(await encodeDevice(encoded))).toEqual(device);
+  });
+  it("reads existing API-only local wrappers while retaining saved WebDAV/MCP fields", async () => {
+    const old = {
+      ...defaultDevice,
+      davPassword: "existing-dav",
+      secretsCipher: await encryptSecret(
+        { apiKey: "old-api", apiKeySyncKey: "" },
+        "local-device",
+      ),
+    };
+    expect(await decodeDevice(old)).toMatchObject({
+      apiKey: "old-api",
+      davPassword: "existing-dav",
+      mcp: [],
+    });
   });
 });

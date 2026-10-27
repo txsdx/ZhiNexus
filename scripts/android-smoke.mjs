@@ -147,7 +147,7 @@ async function testStreaming(page) {
       .waitFor();
     await page.locator(".sidebar nav button:nth-child(5)").click();
     await page
-      .locator(".chat-model select")
+      .getByRole("combobox", { name: "Chat model", exact: true })
       .selectOption("android-stream-model");
     await page
       .locator(".chat-input textarea")

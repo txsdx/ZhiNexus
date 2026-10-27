@@ -1849,6 +1849,10 @@ test("rich editing retains math, Mermaid and local images, and concurrent saved 
   await expect(
     page.locator('.block-document [data-type="block-math"]'),
   ).toHaveAttribute("data-latex", "F=ma");
+  // Tiptap restores focus on the next animation frame; wait before filling another field.
+  await expect(
+    page.getByRole("textbox", { name: "所见即所得编辑器", exact: true }),
+  ).toBeFocused();
   await page
     .getByRole("textbox", { name: "一句话解释", exact: true })
     .fill("用户设置的一句话");

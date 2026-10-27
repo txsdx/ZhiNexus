@@ -187,6 +187,14 @@ test("AI, tasks, notifications, WebDAV and MCP save automatically and survive na
       repository(page, "return store.getSnapshot().device.mcp[0]?.token"),
     )
     .toBe("auto-mcp-token-sentinel");
+  await expect
+    .poll(() =>
+      repository(
+        page,
+        "return store.getSnapshot().device.credentialSyncPending",
+      ),
+    )
+    .toEqual({ api: false, connections: false });
   const state = await repository<{
     ai: { tasks: { explain: { prompt: string; effort: string } } };
     device: {

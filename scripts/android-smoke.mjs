@@ -94,6 +94,27 @@ async function connect() {
     viewport.height * viewport.dpr <= Number(display[2]) - 24,
     "The native WebView must leave room for system bars instead of drawing underneath them",
   );
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const scale = await page.evaluate(() => window.visualViewport.scale);
+    for (const scaleFactor of [1.8, 0.65]) {
+      await cdp.send("Input.synthesizePinchGesture", {
+        x: viewport.width / 2,
+        y: viewport.height / 2,
+        scaleFactor,
+        relativeSpeed: 400,
+        gestureSourceType: "touch",
+      });
+      assert.ok(
+        Math.abs(
+          (await page.evaluate(() => window.visualViewport.scale)) - scale,
+        ) < 0.01,
+        "Native page magnification must stay disabled after a two-finger pinch",
+      );
+    }
+  } finally {
+    await cdp.detach();
+  }
   return { browser, page };
 }
 /** Verify real chunk delivery across the Android native HTTP bridge before the provider completes. */

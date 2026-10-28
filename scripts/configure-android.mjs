@@ -12,16 +12,36 @@ export function configureAndroid(text, minSdk) {
     compileSdk: sdk,
   };
 }
-/** Preserve Tauri's generated activity and attach native safe areas exactly once after its WebView setup. */
+/** Preserve generated activity behavior and install safe areas plus native page-zoom policy exactly once. */
 export function configureActivity(text) {
   const call = "io.github.txsdx.zhinexus.ui.SystemInsets.apply(this)";
-  if (text.includes(call)) return text;
   const anchor = "super.onCreate(savedInstanceState)";
   if (!text.includes(anchor))
     throw Error(
       "Unsupported Android activity template; review system inset initialization",
     );
-  return text.replace(anchor, anchor + "\n    " + call);
+  if (!text.includes(call))
+    text = text.replace(anchor, anchor + "\n    " + call);
+  const gestureCall = "io.github.txsdx.zhinexus.ui.PageGestures.apply(webView)";
+  if (!text.includes(gestureCall)) {
+    if (
+      /fun\s+onWebViewCreate\s*\(/.test(text) ||
+      !text.trimEnd().endsWith("}")
+    )
+      throw Error(
+        "Unsupported Android WebView hook; review gesture initialization",
+      );
+    const end = text.lastIndexOf("}");
+    text =
+      text.slice(0, end) +
+      `  override fun onWebViewCreate(webView: android.webkit.WebView) {
+    super.onWebViewCreate(webView)
+    ${gestureCall}
+  }
+` +
+      text.slice(end);
+  }
+  return text;
 }
 /** Modify only Tauri's ignored generated project, keeping source requirements and CI metadata synchronized. */
 export function run() {
@@ -46,6 +66,10 @@ export function run() {
   fs.copyFileSync(
     "src-tauri/mobile/android/SystemInsets.kt",
     uiDir + "/SystemInsets.kt",
+  );
+  fs.copyFileSync(
+    "src-tauri/mobile/android/PageGestures.kt",
+    uiDir + "/PageGestures.kt",
   );
   const props = "src-tauri/gen/android/gradle.properties";
   const current = fs.existsSync(props) ? fs.readFileSync(props, "utf8") : "";

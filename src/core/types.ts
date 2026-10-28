@@ -58,6 +58,8 @@ export interface Category {
 }
 /** Serializable OpenAI chat message including complete tool protocol metadata. */
 export interface Message {
+  /** Matches a streamed provider stage to its durable assistant response. */
+  responseId?: string;
   /** Local orchestration metadata, stripped before requests are sent to the provider. */
   jobId?: string;
   role: "user" | "assistant" | "system" | "tool";
@@ -76,6 +78,8 @@ export interface Topic {
   id: string;
   entryId: string;
   title: string;
+  titleMode?: "auto" | "manual";
+  titleGenerated?: boolean;
   messages: Message[];
   updatedAt: string;
 }

@@ -218,14 +218,7 @@ export function Review({
       {confirmation.dialog}
       <div className="page-heading">
         <div>
-          <div className="eyebrow">REMEMBER WITH UNDERSTANDING</div>
           <h1>{t("今日复习", "Your review space")}</h1>
-          <p>
-            {t(
-              "不是再读一遍，而是试着从记忆中找回。",
-              "Don’t just read it again. Try bringing it back from memory.",
-            )}
-          </p>
         </div>
         <span className="pill">
           <Clock3 size={15} />
@@ -342,11 +335,6 @@ export function Review({
                 >
                   <strong>{session.grade.score}</strong>
                   <span>/ 100</span>
-                  <p>
-                    {session.grade.score < 60
-                      ? t("再给理解一点时间", "Let’s work on this together")
-                      : t("理解在逐渐扎根", "Your understanding is growing")}
-                  </p>
                 </div>
                 <Markdown>
                   {session.grade.feedback + "\n\n" + session.grade.lesson}

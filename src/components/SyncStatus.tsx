@@ -78,7 +78,10 @@ export function SyncStatus({ notify }: { notify: (message: string) => void }) {
       onClick={() => void run()}
     >
       <span className="status-dot" />
-      {busy ? t("同步中…", "Syncing…") : elapsed}
+      <span className="sync-status-content">
+        <span>{t("同步过时：", "Sync age: ")}</span>
+        <span>{busy ? t("同步中…", "Syncing…") : elapsed}</span>
+      </span>
     </button>
   );
 }

@@ -55,6 +55,7 @@ async function chatInternal(
       client: Awaited<ReturnType<typeof connectMcp>>;
       name: string;
       label: string;
+      readOnly: boolean;
     }
   >();
   const specs = [...knowledgeTools];
@@ -69,12 +70,20 @@ async function chatInternal(
           client,
           name: t.name,
           label: config.name + "/" + t.name,
+          readOnly:
+            t.annotations?.readOnlyHint === true &&
+            t.annotations?.destructiveHint !== true,
         });
         specs.push({
           type: "function",
           function: {
             name,
-            description: (t.description ?? t.name) + " [外部工具，需确认]",
+            description:
+              (t.description ?? t.name) +
+              (t.annotations?.readOnlyHint === true &&
+              t.annotations?.destructiveHint !== true
+                ? " [只读查询]"
+                : " [外部操作，需确认]"),
             parameters: t.inputSchema as Record<string, unknown>,
           },
         });
@@ -99,6 +108,13 @@ async function chatInternal(
             receipt,
             confirm,
           );
+        if (remote.readOnly && saved?.fields.status !== "pending") {
+          orchestration?.context.check();
+          return await remote.client.callTool({
+            name: remote.name,
+            arguments: args,
+          });
+        }
         const prefix =
           saved?.fields.status === "pending"
             ? "上次执行结果未知，重新执行可能重复操作。确认重试 / Previous result unknown; retry may repeat the action.\n"
@@ -170,6 +186,7 @@ async function chatInternal(
     };
     for (let turn = 0; turn < 6; turn++) {
       orchestration?.context.check();
+      const responseId = crypto.randomUUID();
       const request = (progress?: Parameters<typeof complete>[6]) =>
         complete(
           "agent",
@@ -181,13 +198,15 @@ async function chatInternal(
           progress,
         );
       const response = orchestration
-        ? await orchestration.context.request("agent", (progress) =>
-            request(progress),
-          )
+        ? await orchestration.context.request("agent", (progress) => {
+            progress({ responseId });
+            return request(progress);
+          })
         : await request();
       orchestration?.context.check();
       messages.push({
         role: "assistant",
+        responseId,
         ...(orchestration ? { jobId: orchestration.jobId } : {}),
         content: response.content,
         ...(response.calls.length ? { tool_calls: response.calls } : {}),
@@ -206,6 +225,7 @@ async function chatInternal(
     }
     messages.push({
       role: "assistant",
+      ...(orchestration ? { jobId: orchestration.jobId } : {}),
       content: "本轮已达到工具调用上限，请继续提问。",
     });
     await persist();

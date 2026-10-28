@@ -1,15 +1,19 @@
-/** Global and entry-scoped assistant with isolated persisted topic histories and tool confirmation. */
+/** Full-height conversations with durable streamed tasks, editable titles and an anchored composer. */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { diagnostics } from "../services/diagnostics";
-import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Bot, MessageSquare, Plus, Trash2 } from "lucide-react";
-import { useKnowledge, useT, Busy, Empty } from "../components/common";
-import { Markdown } from "../components/Markdown";
+import { useKnowledge, useT, Busy } from "../components/common";
 import { store } from "../core/store";
-import { resolveModel } from "../core/ai-config";
 import { useConfirmation } from "../hooks/useConfirmation";
-import { submitAIJob, openAIJob } from "../services/ai-jobs";
+import { useChatScroll } from "../hooks/useChatScroll";
+import { aiJobs, submitAIJob, openAIJob } from "../services/ai-jobs";
+import { fallbackTopicTitle, renameTopic } from "../services/topic-titles";
 import { useAIJobs } from "../components/AIJobView";
-/** Keep all chat scopes independent and preserve conversations across navigation and restarts. */
+import { ConversationList } from "../components/chat/ConversationList";
+import { ChatComposer } from "../components/chat/ChatComposer";
+import { ChatMessage } from "../components/chat/ChatMessage";
+
+/** Separate global/entry scopes and keep each topic's unsent draft when switching conversations. */
 export function Agent({
   entryId = "",
   notify,
@@ -19,319 +23,412 @@ export function Agent({
   entryId?: string;
   initialTopic?: string;
   quote?: string;
-  notify: (s: string) => void;
+  notify: (message: string) => void;
 }) {
   const s = useKnowledge(),
     t = useT(),
-    topics = s.topics
-      .filter((x) => x.entryId === entryId)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [selected, setSelected] = useState(initialTopic),
-    [selectedQuote, setSelectedQuote] = useState(quote),
+    jobs = useAIJobs();
+  const topics = useMemo(
+    () =>
+      s.topics
+        .filter((x) => x.entryId === entryId)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [s.topics, entryId],
+  );
+  const [selected, setSelected] = useState(initialTopic),
     [text, setText] = useState(""),
-    [busy, setBusy] = useState(false),
-    [model, setModel] = useState(s.ai.tasks.agent.model),
+    [selectedQuote, setSelectedQuote] = useState(quote),
+    [busy, setBusy] = useState(false);
+  const [model, setModel] = useState(s.ai.tasks.agent.model),
     [effort, setEffort] = useState(s.ai.tasks.agent.effort);
-  const jobs = useAIJobs();
-  const submitting = useRef(false);
+  const [showTopics, setShowTopics] = useState(
+    () => window.matchMedia("(min-width: 900px)").matches,
+  );
+  const topic = topics.find((x) => x.id === selected) ?? topics[0],
+    entry = s.entries.find((e) => e.id === entryId);
+  const submitting = useRef(false),
+    navigation = useRef(0),
+    selectedRef = useRef(topic?.id ?? ""),
+    drafts = useRef(new Map<string, { text: string; quote: string }>()),
+    notifyRef = useRef(notify);
+  selectedRef.current = topic?.id ?? "";
+  notifyRef.current = notify;
+  const feedback = useCallback(
+    (message: string) => notifyRef.current(message),
+    [],
+  );
+  const relevant = jobs.jobs.filter(
+    (j) => j.kind === "chat" && j.target.topicId === topic?.id,
+  );
+  const active =
+    relevant.find((j) => ["running", "approval"].includes(j.state)) ??
+    relevant.find((j) => j.state === "queued");
+  const revision =
+    (topic?.messages.length ?? 0) +
+    ":" +
+    (topic?.messages.at(-1)?.content.length ?? 0) +
+    ":" +
+    relevant
+      .map(
+        (j) =>
+          j.state +
+          ":" +
+          (j.stages.at(-1)?.content.length ?? 0) +
+          ":" +
+          (j.stages.at(-1)?.reasoning.length ?? 0),
+      )
+      .join(",");
+  const scroll = useChatScroll(topic?.id ?? "", revision),
+    deletion = useConfirmation(feedback);
+  const toolResults = useMemo(
+    () => topic?.messages.filter((m) => m.role === "tool") ?? [],
+    [topic?.messages],
+  );
+  const choose = (id: string) => {
+    if (id === topic?.id) return;
+    navigation.current++;
+    drafts.current.set(topic?.id ?? "", { text, quote: selectedQuote });
+    const draft = drafts.current.get(id);
+    setText(draft?.text ?? "");
+    setSelectedQuote(draft?.quote ?? "");
+    selectedRef.current = id;
+    setSelected(id);
+    if (!window.matchMedia("(min-width: 900px)").matches) setShowTopics(false);
+  };
   useEffect(() => {
-    if (initialTopic) setSelected(initialTopic);
+    if (initialTopic && initialTopic !== selectedRef.current)
+      choose(initialTopic);
   }, [initialTopic]);
   useEffect(() => {
-    setSelectedQuote(quote);
-    if (quote)
+    if (quote) {
+      setSelectedQuote(quote);
       setText(
         (previous) =>
           previous || t("请解释这段内容。", "Please explain this passage."),
       );
+    }
   }, [quote]);
-  const topic = topics.find((x) => x.id === selected) ?? topics[0],
-    entry = s.entries.find((e) => e.id === entryId),
-    actualModel = resolveModel(s.ai, "agent", model);
-  const deletion = useConfirmation(notify);
-  const send = async () => {
-    if (!text.trim() || submitting.current) return;
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 900px)"),
+      change = () => setShowTopics(media.matches);
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
+  const create = async () => {
+    if (submitting.current || jobs.readOnly) return;
     submitting.current = true;
     setBusy(true);
     try {
-      let current = topic;
-      if (!current) {
-        const id = crypto.randomUUID();
-        await store.patch("topic", id, {
-          entryId,
-          title: text.slice(0, 40),
-          messages: [],
-          updatedAt: new Date().toISOString(),
-        });
-        setSelected(id);
-        current = store.getSnapshot().topics.find((x) => x.id === id)!;
-      }
-      const input = text;
-      await submitAIJob(
-        "chat",
-        { page: "agent", entryId, topicId: current.id },
-        {
-          text:
-            input +
-            (selectedQuote
-              ? "\n\n选中内容（仅作上下文）：\n" + selectedQuote
-              : ""),
-          model,
-          effort,
-        },
-        false,
-      );
-      setText((current) => (current === input ? "" : current));
-      setSelectedQuote("");
-    } catch (e) {
-      diagnostics.error("ai", "AI 任务失败 / AI task failed", e);
-      notify(e instanceof Error ? e.message : String(e));
+      const id = crypto.randomUUID();
+      await store.patch("topic", id, {
+        entryId,
+        title: t("新的对话", "New conversation"),
+        titleMode: "auto",
+        titleGenerated: false,
+        messages: [],
+        updatedAt: new Date().toISOString(),
+      });
+      choose(id);
+    } catch (error) {
+      feedback(error instanceof Error ? error.message : String(error));
     } finally {
       submitting.current = false;
       setBusy(false);
     }
   };
-  const relevant = jobs.jobs.filter(
-    (j) => j.kind === "chat" && j.target.topicId === topic?.id,
-  );
+  const send = async () => {
+    if (!text.trim() || submitting.current || jobs.readOnly) return;
+    submitting.current = true;
+    setBusy(true);
+    const input = text,
+      passage = selectedQuote,
+      selectedModel = model,
+      selectedEffort = effort;
+    let current = topic;
+    try {
+      if (!current) {
+        const id = crypto.randomUUID();
+        await store.patch("topic", id, {
+          entryId,
+          title: fallbackTopicTitle(input),
+          titleMode: "auto",
+          titleGenerated: false,
+          messages: [],
+          updatedAt: new Date().toISOString(),
+        });
+        drafts.current.set(id, { text: input, quote: passage });
+        choose(id);
+        current = store.getSnapshot().topics.find((x) => x.id === id)!;
+      } else if (
+        !current.messages.length &&
+        current.titleMode !== "manual" &&
+        !relevant.length
+      )
+        await store.patchWhen(
+          "topic",
+          current.id,
+          { title: fallbackTopicTitle(input), titleMode: "auto" },
+          "topic-title-fallback",
+          () =>
+            store.getSnapshot().topics.find((x) => x.id === current!.id)
+              ?.titleMode !== "manual",
+        );
+      await submitAIJob(
+        "chat",
+        { page: "agent", entryId, topicId: current.id },
+        {
+          text:
+            input + (passage ? "\n\n选中内容（仅作上下文）：\n" + passage : ""),
+          model: selectedModel,
+          effort: selectedEffort,
+        },
+        false,
+      );
+      const saved = drafts.current.get(current.id);
+      if (saved?.text === input)
+        drafts.current.set(current.id, { text: "", quote: "" });
+      if (selectedRef.current === current.id) {
+        setText((value) => (value === input ? "" : value));
+        setSelectedQuote((value) => (value === passage ? "" : value));
+        scroll.bottom();
+      }
+    } catch (error) {
+      diagnostics.error(
+        "ai",
+        "AI 对话发送失败 / Chat submission failed",
+        error,
+      );
+      feedback(error instanceof Error ? error.message : String(error));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  };
   const awaitingApproval = relevant.find((j) => j.state === "approval");
   useEffect(() => {
     if (awaitingApproval) openAIJob(awaitingApproval.id);
   }, [awaitingApproval?.id, awaitingApproval?.state]);
   return (
     <div className="page chat-page">
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">THINK TOGETHER</div>
-          <h1>
-            {entry
-              ? entry.title + " · " + t("词条助手", "Entry assistant")
-              : t("学习伙伴", "Learning companion")}
-          </h1>
-          <p>
-            {t(
-              "好问题，比标准答案更接近理解。",
-              "A good question takes you further than a perfect answer.",
-            )}
-          </p>
-        </div>
-      </div>
-      <div className="chat-shell">
-        <aside className="topic-list">
-          <button
-            disabled={busy}
-            className="full"
-            onClick={() => {
-              const id = crypto.randomUUID();
-              void store
-                .patch("topic", id, {
-                  entryId,
-                  title: t("新的对话", "New conversation"),
-                  messages: [],
-                  updatedAt: new Date().toISOString(),
-                })
-                .then(() => setSelected(id));
-            }}
-          >
-            <Plus size={16} />
-            {t("新话题", "New conversation")}
-          </button>
-          {topics.map((x) => (
-            <div
-              className={"topic " + (x.id === topic?.id ? "active" : "")}
-              key={x.id}
-            >
-              <button disabled={busy} onClick={() => setSelected(x.id)}>
-                <MessageSquare size={15} />
-                {x.title}
-              </button>
-              <button
-                className="icon"
-                disabled={busy}
-                aria-label="Delete topic"
-                onClick={() => {
-                  void deletion.request(
-                    t("删除此对话？", "Delete conversation?"),
-                    () => store.patch("topic", x.id, { deleted: true }),
-                  );
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
-        </aside>
-        <div className="conversation">
-          <div className="chat-model">
-            <Bot size={18} />
-            <select
-              aria-label="Chat model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-            >
-              <option value="">
-                {t("默认模型", "Default model")}
-                {s.ai.defaultModel ? ` (${s.ai.defaultModel})` : ""}
-              </option>
-              {model && !s.ai.models.some((m) => m.id === model) && (
-                <option value={model}>{model}</option>
-              )}
-              {s.ai.models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.id}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Reasoning effort"
-              value={effort}
-              onChange={(e) => setEffort(e.target.value)}
-            >
-              {[
-                ...new Set([
-                  effort,
-                  ...(s.ai.models.find((m) => m.id === actualModel)?.efforts ??
-                    []),
-                ]),
-              ].map((e) => (
-                <option key={e}>{e}</option>
-              ))}
-            </select>
-          </div>
-          <div className="messages">
-            {topic?.messages
-              .filter((m) => m.role === "user" || m.role === "assistant")
-              .map((m, i) => (
-                <div className={"message " + m.role} key={i}>
-                  <small>
-                    {m.role === "user" ? t("你", "You") : "ZhiNexus"}
-                    {m.tool_calls?.length ? " · tools" : ""}
-                  </small>
-                  <Markdown>
-                    {m.content ||
-                      t("正在查阅知识库…", "Consulting your knowledge…")}
-                  </Markdown>
-                </div>
-              ))}
-            {!topic?.messages.length && (
-              <Empty
-                title={t(
-                  "让我们一起，把知识想明白。",
-                  "Let’s make sense of it together.",
-                )}
-                description={t(
-                  "试着问：“找出我关于记忆的笔记”，或“用生活中的例子解释这个概念”。",
-                  "Try “Find my notes about memory” or “Explain this concept with a real-life example.”",
-                )}
-              />
-            )}{" "}
-            {relevant
-              .filter((j) =>
-                [
-                  "queued",
-                  "running",
-                  "approval",
-                  "error",
-                  "cancelled",
-                ].includes(j.state),
-              )
-              .map((job) => {
-                const stage = job.stages.at(-1);
-                return (
-                  <div
-                    className="chat-live-job"
-                    key={job.id}
-                    data-chat-job={job.id}
-                  >
-                    {!topic?.messages.some(
-                      (m) => m.role === "user" && m.jobId === job.id,
-                    ) && (
-                      <div className="message user">
-                        <small>{t("你 · 排队中", "You · queued")}</small>
-                        <p>{String(job.input.text)}</p>
-                      </div>
-                    )}
-                    {stage?.content && !stage.finished && (
-                      <div
-                        className="message assistant ai-live-message"
-                        aria-live="polite"
-                      >
-                        <small>ZhiNexus · {t("正在输出", "Streaming")}</small>
-                        <div className="ai-stream-content">{stage.content}</div>
-                      </div>
-                    )}
-                    {["queued", "running"].includes(job.state) && (
-                      <Busy
-                        label={
-                          job.state === "queued"
-                            ? t("已加入队列…", "Queued…")
-                            : t("正在输出…", "Generating…")
-                        }
-                      />
-                    )}
-                    {job.state === "approval" && (
-                      <button onClick={() => openAIJob(job.id)}>
-                        {t("确认 Agent 操作", "Confirm agent action")}
-                      </button>
-                    )}
-                    {job.error && (
-                      <p className="warning">
-                        {job.error}
-                        <button onClick={() => openAIJob(job.id)}>
-                          {t("查看任务", "View task")}
-                        </button>
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-          {selectedQuote && (
-            <blockquote className="chat-selection-context">
-              <small>{t("选中内容", "Selected passage")}</small>
-              <p>{selectedQuote}</p>
-              <button onClick={() => setSelectedQuote("")}>
-                {t("移除引用", "Remove quote")}
-              </button>
-            </blockquote>
-          )}
-          <form
-            className="chat-input"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send();
-            }}
-          >
-            <textarea
-              rows={2}
-              placeholder={t(
-                "提出一个问题，让理解更进一步…",
-                "Ask a question. Take your understanding further…",
-              )}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-            />
+      <div className={"chat-shell" + (showTopics ? " topics-visible" : "")}>
+        {showTopics && (
+          <>
             <button
-              className="primary icon"
-              aria-label="Send"
-              disabled={busy || !text.trim()}
+              className="topics-backdrop"
+              aria-label={t("关闭会话列表", "Close conversations")}
+              onClick={() => setShowTopics(false)}
+            />
+            <ConversationList
+              topics={topics}
+              selected={topic?.id}
+              busy={busy || jobs.readOnly}
+              onNew={() => void create()}
+              onSelect={choose}
+              onRename={renameTopic}
+              onDelete={(value) =>
+                void deletion.request(
+                  t("删除此对话？", "Delete conversation?"),
+                  async () => {
+                    const wasActive = selectedRef.current === value.id,
+                      version = navigation.current;
+                    await store.patch("topic", value.id, { deleted: true });
+                    drafts.current.delete(value.id);
+                    if (!wasActive || navigation.current !== version) return;
+                    const next = store
+                      .getSnapshot()
+                      .topics.filter((item) => item.entryId === entryId)
+                      .sort((a, b) =>
+                        b.updatedAt.localeCompare(a.updatedAt),
+                      )[0];
+                    const draft = drafts.current.get(next?.id ?? "");
+                    setText(draft?.text ?? "");
+                    setSelectedQuote(draft?.quote ?? "");
+                    selectedRef.current = next?.id ?? "";
+                    setSelected(next?.id ?? "");
+                  },
+                )
+              }
+            />
+          </>
+        )}
+        <section
+          className="conversation"
+          aria-label={t("AI 对话", "AI conversation")}
+        >
+          <header className="chat-thread-header">
+            <button
+              className="icon"
+              aria-label={
+                showTopics
+                  ? t("收起会话列表", "Hide conversations")
+                  : t("展开会话列表", "Show conversations")
+              }
+              onClick={() => setShowTopics((value) => !value)}
             >
-              <ArrowUp size={20} />
+              {showTopics ? (
+                <PanelLeftClose size={18} />
+              ) : (
+                <PanelLeftOpen size={18} />
+              )}
             </button>
-          </form>
-          <small className="chat-disclaimer">
-            {t(
-              "AI 可能出错，请核对重要信息。写入和外部工具调用需要你的确认。",
-              "AI can make mistakes. Writes and external tools require confirmation.",
+            <h1>{topic?.title ?? t("新对话", "New conversation")}</h1>
+            {entry && <span className="chat-entry-context">{entry.title}</span>}
+          </header>
+          <div className="chat-message-region">
+            <div
+              className="messages"
+              ref={scroll.viewport}
+              onScroll={scroll.onScroll}
+              onClickCapture={(event) => {
+                if ((event.target as HTMLElement).closest("summary"))
+                  scroll.pause();
+              }}
+            >
+              <div className="messages-inner" ref={scroll.content}>
+                {topic?.messages
+                  .filter((m) => m.role === "user" || m.role === "assistant")
+                  .map((message, index) => (
+                    <ChatMessage
+                      key={index}
+                      message={message}
+                      results={toolResults}
+                      notify={feedback}
+                    />
+                  ))}
+                {relevant
+                  .filter((j) =>
+                    [
+                      "queued",
+                      "running",
+                      "approval",
+                      "error",
+                      "cancelled",
+                    ].includes(j.state),
+                  )
+                  .map((job) => {
+                    const stage = job.stages.at(-1);
+                    const persisted =
+                      stage?.content &&
+                      topic?.messages.some(
+                        (message) =>
+                          message.role === "assistant" &&
+                          message.jobId === job.id &&
+                          (stage.responseId
+                            ? message.responseId === stage.responseId
+                            : message.content === stage.content),
+                      );
+                    return (
+                      <div
+                        className="chat-live-job"
+                        key={job.id}
+                        data-chat-job={job.id}
+                      >
+                        {!topic?.messages.some(
+                          (m) => m.role === "user" && m.jobId === job.id,
+                        ) && (
+                          <ChatMessage
+                            message={{
+                              role: "user",
+                              content: String(job.input.text),
+                            }}
+                            notify={feedback}
+                          />
+                        )}
+                        {(stage?.content || stage?.reasoning) && !persisted && (
+                          <>
+                            {stage.reasoning && (
+                              <details className="chat-reasoning">
+                                <summary>{t("思考过程", "Reasoning")}</summary>
+                                <pre>{stage.reasoning}</pre>
+                              </details>
+                            )}
+                            {stage.content && (
+                              <ChatMessage
+                                message={{
+                                  role: "assistant",
+                                  content: stage.content,
+                                }}
+                                streaming={
+                                  job.state === "running" ||
+                                  job.state === "queued"
+                                }
+                                notify={feedback}
+                              />
+                            )}
+                          </>
+                        )}
+                        {["queued", "running"].includes(job.state) &&
+                          !stage?.content && (
+                            <Busy
+                              label={
+                                job.state === "queued"
+                                  ? t("排队中…", "Queued…")
+                                  : t("生成中…", "Generating…")
+                              }
+                            />
+                          )}
+                        {job.state === "approval" && (
+                          <button onClick={() => openAIJob(job.id)}>
+                            {t("确认 Agent 操作", "Confirm agent action")}
+                          </button>
+                        )}
+                        {job.error && (
+                          <p className="warning" role="alert">
+                            {job.error}
+                            <button onClick={() => openAIJob(job.id)}>
+                              {t("查看任务", "View task")}
+                            </button>
+                          </p>
+                        )}
+                        {job.state === "cancelled" && (
+                          <button
+                            onClick={() =>
+                              void aiJobs
+                                .retry(job.id)
+                                .catch((error) => feedback(String(error)))
+                            }
+                          >
+                            {t("重新生成", "Retry generation")}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+            {scroll.away && (
+              <button
+                className="chat-jump-bottom"
+                aria-label={t("回到最新消息", "Jump to latest message")}
+                onClick={scroll.bottom}
+              >
+                <ArrowDown size={16} />
+                {t("最新消息", "Latest")}
+              </button>
             )}
-          </small>
-        </div>
+          </div>
+          <ChatComposer
+            text={text}
+            onText={setText}
+            quote={selectedQuote}
+            onRemoveQuote={() => setSelectedQuote("")}
+            model={model}
+            onModel={setModel}
+            effort={effort}
+            onEffort={setEffort}
+            ai={s.ai}
+            busy={busy}
+            readOnly={jobs.readOnly}
+            active={!!active}
+            onSend={() => void send()}
+            onStop={() => {
+              if (active)
+                void aiJobs
+                  .cancel(active.id)
+                  .catch((error) => feedback(String(error)));
+            }}
+          />
+        </section>
       </div>
       {deletion.dialog}
     </div>

@@ -55,7 +55,7 @@ export function DesktopPanel() {
     );
   return (
     <>
-      <h2>{t("随时记下一点新知", "Capture knowledge anytime")}</h2>
+      <h2>{t("后台与快捷键", "Background & shortcuts")}</h2>
       <label className="toggle">
         <input
           type="checkbox"

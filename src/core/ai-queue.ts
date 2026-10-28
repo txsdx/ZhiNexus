@@ -33,6 +33,7 @@ export class AIQueue {
     private storage: AIQueueStorage,
     private execute: AIExecutor,
     private errorText: (error: unknown) => string = String,
+    private autoClear: (job: AIJob) => boolean = () => false,
   ) {}
   /** Stable snapshots allow subscriptions without rerender loops. */
   getSnapshot = () => this.snapshot;
@@ -67,7 +68,12 @@ export class AIQueue {
           : "",
       };
       this.emit();
-      if (!readOnly) await this.flush();
+      if (!readOnly) {
+        await this.flush();
+        for (const job of [...this.rows])
+          if (job.state === "review" && this.autoClear(job))
+            await this.remove(job.id).catch(() => {});
+      }
     } catch (error) {
       this.blocked = true;
       this.initialized = true;
@@ -344,6 +350,8 @@ export class AIQueue {
         });
         this.controllers.delete(id);
         await this.flush().catch(() => {});
+        if (this.autoClear(this.find(id)))
+          await this.remove(id).catch(() => {});
       } catch (error) {
         if (this.controllers.get(id) === controller) {
           this.controllers.delete(id);

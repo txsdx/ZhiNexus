@@ -10,6 +10,8 @@ export interface AITarget {
 }
 /** One genuine provider response, incrementally accumulated from SSE frames. */
 export interface AIStage {
+  /** Identifies the persisted assistant response even while the queue snapshot is throttled. */
+  responseId?: string;
   task: Task;
   model: string;
   content: string;
@@ -27,6 +29,7 @@ export type AIJobKind =
   | "image"
   | "ocr"
   | "chat"
+  | "title"
   | "question"
   | "grade";
 /** Waiting for review consumes no provider concurrency slot. */

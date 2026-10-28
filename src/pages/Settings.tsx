@@ -57,14 +57,7 @@ export function Settings({
       >
         <div className="page-heading">
           <div>
-            <div className="eyebrow">MAKE IT YOURS</div>
             <h1>{t("设置", "Settings")}</h1>
-            <p>
-              {t(
-                "让工具适应你的习惯，让学习回归你自己。",
-                "Shape your workspace around the way you learn.",
-              )}
-            </p>
           </div>
           {busy && <Busy label={busy} />}
         </div>

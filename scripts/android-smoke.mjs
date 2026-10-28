@@ -114,6 +114,27 @@ async function testStreaming(page) {
       const body = JSON.parse(raw);
       assert.equal(body.stream, true);
       assert.equal(body.model, "android-stream-model");
+      if (body.messages?.[0]?.content?.startsWith("为这段对话生成一个简短")) {
+        response.writeHead(200, { "Content-Type": "text/event-stream" });
+        response.end(
+          "data: " +
+            JSON.stringify({
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    content: JSON.stringify({
+                      title: "Android generated title",
+                    }),
+                  },
+                  finish_reason: "stop",
+                },
+              ],
+            }) +
+            "\n\ndata: [DONE]\n\n",
+        );
+        return;
+      }
       requests++;
       response.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -152,7 +173,7 @@ async function testStreaming(page) {
     await page
       .locator(".chat-input textarea")
       .fill("Android streaming verification");
-    await page.locator(".chat-input button").click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     await waitFor(() =>
       page
         .locator(".ai-live-message")
@@ -173,11 +194,13 @@ async function testStreaming(page) {
       .locator(".message.assistant")
       .filter({ hasText: "Android streaming partial complete" })
       .waitFor();
+    await page
+      .locator(".chat-thread-header h1")
+      .filter({ hasText: "Android generated title" })
+      .waitFor();
     await page.locator(".ai-queue-button").click();
-    await page.locator('.ai-job-card[data-job-state="review"]').waitFor();
-    await page.locator(".ai-job-card .actions button").first().click();
-    await page.locator(".ai-result-review .primary").click();
-    await page.locator(".modal").waitFor({ state: "hidden" });
+    await page.locator(".ai-task-center").waitFor();
+    await page.locator(".ai-job-card").waitFor({ state: "hidden" });
     captureScreen("streaming-reviewed");
   } finally {
     fixture.closeAllConnections();

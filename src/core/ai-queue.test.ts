@@ -180,3 +180,74 @@ it("serializes turns in the same topic while other topics can make progress", as
   await vi.waitFor(() => expect(env.queue.find(second).state).toBe("review"));
   expect(started).toEqual(["first", "other", "second"]);
 });
+
+it("automatically retires completed conversation work while preserving unapplied proposals", async () => {
+  const env = setup(async () => ({ content: "persisted" }));
+  const execute = vi.fn(async () => ({ content: "persisted" }));
+  const queue = new AIQueue(
+    env.storage,
+    execute,
+    String,
+    (job) => job.kind === "chat",
+  );
+  await queue.init();
+  await queue.submit({
+    ...input,
+    kind: "chat",
+    target: { page: "agent", topicId: "topic" },
+  });
+  await vi.waitFor(() => expect(queue.getSnapshot().jobs).toHaveLength(0));
+  await queue.submit(input);
+  await vi.waitFor(() =>
+    expect(queue.getSnapshot().jobs[0].state).toBe("review"),
+  );
+  expect(execute).toHaveBeenCalledTimes(2);
+});
+
+it("a failed automatic cleanup retains the completed result and cleanup never repeats execution", async () => {
+  let saved: AIJob[] = [],
+    fail = false;
+  const execute = vi.fn(async () => ({ content: "saved transcript" }));
+  const storage = {
+    load: async () => structuredClone(saved),
+    save: vi.fn(async (rows: AIJob[]) => {
+      if (fail && rows.length === 0) throw Error("cleanup failed");
+      saved = structuredClone(rows);
+      if (rows.some((j) => j.state === "review")) fail = true;
+    }),
+  };
+  const queue = new AIQueue(storage, execute, String, () => true);
+  await queue.init();
+  const id = await queue.submit({ ...input, kind: "chat" });
+  await vi.waitFor(() =>
+    expect(queue.getSnapshot().storageError).toContain("cleanup failed"),
+  );
+  expect(queue.find(id)).toMatchObject({
+    state: "review",
+    result: { content: "saved transcript" },
+  });
+  fail = false;
+  await queue.remove(id);
+  expect(queue.getSnapshot().jobs).toHaveLength(0);
+  expect(execute).toHaveBeenCalledOnce();
+});
+
+it("retiring an older completed chat on reload does not restart a provider request", async () => {
+  const env = setup(async () => ({ topicId: "topic" }));
+  await env.queue.init();
+  await env.queue.submit({ ...input, kind: "chat" });
+  await vi.waitFor(() =>
+    expect(env.queue.getSnapshot().jobs[0].state).toBe("review"),
+  );
+  await env.queue.flush();
+  const execute = vi.fn(async () => ({}));
+  const restored = new AIQueue(
+    env.storage,
+    execute,
+    String,
+    (job) => job.kind === "chat",
+  );
+  await restored.init();
+  expect(restored.getSnapshot().jobs).toHaveLength(0);
+  expect(execute).not.toHaveBeenCalled();
+});

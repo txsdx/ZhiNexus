@@ -93,7 +93,6 @@ export function AITaskCenter({
     <div className="page ai-task-center">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">AI WORKSPACE</div>
           <h1>{t("AI 任务队列", "AI task queue")}</h1>
           <p>
             {t(
@@ -511,7 +510,7 @@ export function AIJobReview({
                 ? t("确认清除任务", "Confirm task cleanup")
                 : reviewDestination
                   ? t("前往复习审阅", "Review at destination")
-                  : job.kind === "chat"
+                  : job.kind === "chat" || job.kind === "title"
                     ? t("已阅并清除任务", "Reviewed; clear task")
                     : job.kind === "image"
                       ? t("确认插入草稿", "Insert into draft")

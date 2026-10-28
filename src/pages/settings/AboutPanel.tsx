@@ -31,13 +31,7 @@ export function AboutPanel() {
     <>
       <img className="about-icon" src="/app-icon.png" alt="ZhiNexus" />
       <h2>知枢 · ZhiNexus</h2>
-      <p>{current} · Local-first learning workspace</p>
-      <p>
-        {t(
-          "让零散的知识，生长为自己的理解。",
-          "Turn scattered knowledge into your own understanding.",
-        )}
-      </p>
+      <p>{current}</p>
       <div className="actions">
         <button
           disabled={!!busy}

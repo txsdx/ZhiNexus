@@ -13,6 +13,7 @@ import { validateClassification } from "./classification";
 const applying = new Set<string>();
 /** Compare generation context with the current knowledge rather than overwriting later edits silently. */
 export function aiJobIsStale(job: AIJob): boolean {
+  if (job.kind === "chat" || job.kind === "title") return false;
   const s = store.getSnapshot();
   if (job.kind === "classification")
     return (
@@ -60,7 +61,7 @@ export async function applyAIJob(id: string, force = false): Promise<AITarget> {
     const job = aiJobs.find(id);
     if (job.state !== "review") throw Error("任务尚未完成 / Task is not ready");
     if (job.kind === "question" || job.kind === "grade") return job.target;
-    if (job.kind === "chat") {
+    if (job.kind === "chat" || job.kind === "title") {
       await aiJobs.remove(id);
       return job.target;
     }

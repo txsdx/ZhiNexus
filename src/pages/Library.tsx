@@ -46,23 +46,11 @@ export function Library({
     <div className="page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">YOUR SECOND BRAIN</div>
           <h1>
             {dashboard
-              ? t("让知识，真正属于你。", "Make knowledge your own.")
+              ? t("学习概览", "Overview")
               : t("我的知识库", "Your knowledge library")}
           </h1>
-          <p>
-            {dashboard
-              ? t(
-                  "记录每一次好奇，让理解在连接中生长。",
-                  "Capture your curiosity. Build understanding through connections.",
-                )
-              : t(
-                  "每一个被理解的概念，都是思维的一块拼图。",
-                  "Every concept understood is another piece of the puzzle.",
-                )}
-          </p>
         </div>
         <button className="primary" onClick={onCreate}>
           <Plus size={17} />
@@ -126,20 +114,9 @@ export function Library({
               <Sparkles size={28} />
             </div>
             <div>
-              <span className="eyebrow">A LITTLE EVERY DAY</span>
-              <h2>
-                {due.length
-                  ? t("趁记忆还温热，再见一面。", "A good moment to remember.")
-                  : t(
-                      "给理解一点时间，给记忆一点空间。",
-                      "Give understanding time to grow.",
-                    )}
-              </h2>
+              <h2>{t("复习队列", "Review queue")}</h2>
               <p>
-                {t(
-                  `今天有 ${due.length} 个概念等你唤醒。主动回忆，让知识留得更久。`,
-                  `${due.length} concepts are ready. A little active recall goes a long way.`,
-                )}
+                {t(`${due.length} 个待复习词条`, `${due.length} entries due`)}
               </p>
             </div>
             <button onClick={onReview}>
@@ -171,7 +148,7 @@ export function Library({
           title={
             query
               ? t("没有匹配的词条", "No matching entries")
-              : t("从一个好奇的问题开始", "Begin with a curious question")
+              : t("暂无词条", "No entries")
           }
           description={t(
             "添加自己的知识，或载入三个示例，体验解释、公式和关系图。",
@@ -189,13 +166,6 @@ export function Library({
           )}
         </Empty>
       )}
-      <div className="page-note">
-        <span className="status-dot" />
-        {t(
-          "保存在本机 · 离线也能保持好奇",
-          "Stored on this device · Stay curious, even offline",
-        )}
-      </div>
     </div>
   );
 }

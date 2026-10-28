@@ -9,7 +9,6 @@ import {
   BookOpen,
   Brain,
   ChevronRight,
-  Cloud,
   Command,
   GitBranch,
   Home,
@@ -18,7 +17,6 @@ import {
   Plus,
   Search,
   Settings2,
-  Sparkles,
   X,
   ListTodo,
   PanelLeftClose,
@@ -499,7 +497,8 @@ function Shell() {
     <div
       className={
         "app-shell" +
-        (sidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded")
+        (sidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded") +
+        (page === "agent" ? " chat-workspace" : "")
       }
     >
       <aside className="sidebar">
@@ -582,18 +581,6 @@ function Shell() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="local-card">
-            <span className="status-dot" />
-            <div>
-              <strong>
-                {t("本地优先，安心记录", "Local first. Yours always.")}
-              </strong>
-              <small>
-                {t("你的知识，由你掌握", "Your knowledge, in your hands")}
-              </small>
-            </div>
-            <Cloud size={17} />
-          </div>
           <button
             className={page === "settings" ? "active" : ""}
             onClick={() => navigate("settings")}
@@ -601,16 +588,6 @@ function Shell() {
             <Settings2 size={19} />
             <span>{t("设置与偏好", "Settings & preferences")}</span>
           </button>
-          <div className="profile">
-            <span>知</span>
-            <div>
-              <strong>{t("保持好奇", "Stay curious")}</strong>
-              <small>
-                {t("每一天，理解多一点", "A little wiser, every day")}
-              </small>
-            </div>
-            <Sparkles size={16} />
-          </div>
         </div>
       </aside>
       <main className="main">
@@ -673,16 +650,18 @@ function Shell() {
             </button>
             <SyncStatus notify={notify} />
           </header>
-          <EntryTabs
-            notify={notify}
-            workspace={workspace}
-            active={page === "entry"}
-            onOpen={open}
-            onClose={(id) => {
-              const next = workspace.controller.close(id);
-              if (page === "entry" && !next) navigate("library");
-            }}
-          />
+          {page !== "agent" && (
+            <EntryTabs
+              notify={notify}
+              workspace={workspace}
+              active={page === "entry"}
+              onOpen={open}
+              onClose={(id) => {
+                const next = workspace.controller.close(id);
+                if (page === "entry" && !next) navigate("library");
+              }}
+            />
+          )}
           {page === "home" && (
             <Library
               dashboard

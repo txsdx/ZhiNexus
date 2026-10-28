@@ -79,20 +79,20 @@ test("the status shows minutes and seconds, synchronizes on click, prevents dupl
       name: "点击立即同步",
       exact: true,
     });
-    await expect(button).toHaveText("1分5秒");
+    await expect(button).toHaveText("同步过时：1分5秒");
     await page.clock.setFixedTime(new Date("2026-10-28T06:00:56.000Z"));
-    await expect(button).toHaveText("2分1秒");
+    await expect(button).toHaveText("同步过时：2分1秒");
     await button.click();
     await expect(button).toBeDisabled();
-    await expect(button).toHaveText("同步中…");
+    await expect(button).toHaveText("同步过时：同步中…");
     await expect.poll(() => writes).toBe(1);
     finish();
     await expect(button).toBeEnabled();
-    await expect(button).toHaveText("0分0秒");
+    await expect(button).toHaveText("同步过时：0分0秒");
     expect(writes).toBe(1);
     await expect(page.locator(".toast")).toHaveCount(0);
     await page.reload();
-    await expect(button).toHaveText("0分0秒");
+    await expect(button).toHaveText("同步过时：0分0秒");
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(button).toBeVisible();
     expect(
@@ -121,7 +121,7 @@ test("a failed manual exchange keeps the last successful timestamp and remains r
   await button.click();
   await expect(page.locator(".toast")).toContainText("503");
   await expect(button).toBeEnabled();
-  await expect(button).toHaveText("1分5秒");
+  await expect(button).toHaveText("同步过时：1分5秒");
   expect(
     await page.evaluate(async () => {
       const { store } = await import("/src/core/store.ts" as string);
@@ -143,11 +143,11 @@ test("automatic synchronization updates the timer without a completion toast", a
   await configure(page, 1);
   await expect(
     page.getByRole("button", { name: "点击立即同步", exact: true }),
-  ).toHaveText("1分5秒");
+  ).toHaveText("同步过时：1分5秒");
   await page.clock.fastForward(61000);
   await expect.poll(() => writes).toBe(1);
   await expect(
     page.getByRole("button", { name: "点击立即同步", exact: true }),
-  ).toHaveText("0分0秒");
+  ).toHaveText("同步过时：0分0秒");
   await expect(page.locator(".toast")).toHaveCount(0);
 });

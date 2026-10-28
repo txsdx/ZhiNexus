@@ -1,83 +1,14 @@
 /** Genuine streamed AI, reviewable durable jobs and selection-driven document layout regressions. */
-import { test, expect, type Page } from "@playwright/test";
-import { createServer, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
-/** Inspect application repositories without adding production test hooks. */
-async function repository<T>(page: Page, code: string): Promise<T> {
-  await expect(page.locator(".app-shell")).toBeVisible();
-  return page.evaluate(async (source) => {
-    const { store } = await import("/src/core/store.ts" as string);
-    return new Function("store", `return (async()=>{${source}})()`)(store);
-  }, code);
-}
-/** An actual chunked HTTP service prevents a buffered route fixture from falsely proving streaming. */
-async function streamingServer(
-  handle: (
-    body: { messages: { role: string; content: string }[]; stream?: boolean },
-    res: ServerResponse,
-  ) => void,
-) {
-  const server = createServer((req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization",
-    );
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    if (req.method === "OPTIONS") {
-      res.writeHead(204).end();
-      return;
-    }
-    let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk;
-    });
-    req.on("end", () => {
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-      });
-      res.flushHeaders();
-      handle(JSON.parse(raw), res);
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return {
-    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.closeAllConnections();
-        server.close((error) => (error ? reject(error) : resolve()));
-      }),
-  };
-}
-/** Emit one real Chat Completions delta. */
-function delta(res: ServerResponse, text: string) {
-  res.write(
-    "data: " +
-      JSON.stringify({ choices: [{ index: 0, delta: { content: text } }] }) +
-      "\n\n",
-  );
-}
-/** Finish a stream explicitly so truncated responses remain inapplicable. */
-function done(res: ServerResponse) {
-  res.end(
-    "data: " +
-      JSON.stringify({
-        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-      }) +
-      "\n\ndata: [DONE]\n\n",
-  );
-}
-/** Configure raw IDs and an ordinary local fixture key. */
-async function configure(page: Page, url: string, concurrency = 2) {
-  await repository(
-    page,
-    `const ai=structuredClone(store.getSnapshot().ai);ai.baseUrl=${JSON.stringify(url)};ai.defaultModel='raw-stream-model';await store.saveAI(ai);await store.updateDevice({apiKey:'stream-key-sentinel',apiKeyEndpoint:ai.baseUrl,aiConcurrency:${concurrency},syncMinutes:0});`,
-  );
-}
-
-test("chat displays real partial output, survives navigation, and clears only after explicit review", async ({
+import { test, expect } from "@playwright/test";
+import type { ServerResponse } from "node:http";
+import {
+  repository,
+  streamingServer,
+  delta,
+  done,
+  configure,
+} from "./helpers/ai-stream";
+test("chat displays real partial output, survives navigation, and clears completed work automatically", async ({
   page,
 }) => {
   let finish = () => {},
@@ -110,25 +41,15 @@ test("chat displays real partial output, survives navigation, and clears only af
     await expect(page.locator(".ai-job-card")).toHaveCount(1);
     await expect(page.locator(".ai-job-card")).toContainText("先输出");
     finish();
-    await expect(page.locator(".ai-job-card")).toHaveAttribute(
-      "data-job-state",
-      "review",
-    );
+    await expect(page.locator(".ai-job-card")).toHaveCount(0);
     await page.reload();
     await page
       .getByRole("button", { name: "打开 AI 任务队列", exact: true })
       .click();
-    await expect(page.locator(".ai-job-card")).toContainText(
-      "先输出，再完成。",
-    );
+    await expect(page.locator(".ai-job-card")).toHaveCount(0);
     expect(calls).toBe(1);
-    await page
-      .getByRole("button", { name: "打开相关页面并审阅", exact: true })
-      .click();
+    await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
     await expect(page.locator(".chat-page")).toBeVisible();
-    await page
-      .getByRole("button", { name: "已阅并清除任务", exact: true })
-      .click();
     await expect
       .poll(() =>
         page.evaluate(async () => {

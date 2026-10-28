@@ -1,3 +1,4 @@
+import { isTitleRequest } from "./helpers/ai-stream";
 /** End-to-end contracts: persistence, rendering, AI review, incremental replication and backup recovery. */
 import {
   test,
@@ -368,7 +369,20 @@ test("raw model IDs and live global defaults persist without overwriting task or
         },
       });
     } else {
-      requests.push(route.request().postDataJSON());
+      const body = route.request().postDataJSON();
+      if (isTitleRequest(body)) {
+        await route.fulfill({
+          json: {
+            choices: [
+              {
+                message: { content: JSON.stringify({ title: "自动对话标题" }) },
+              },
+            ],
+          },
+        });
+        return;
+      }
+      requests.push(body);
       await route.fulfill({
         json: { choices: [{ message: { content: "完成" } }] },
       });
@@ -991,6 +1005,16 @@ test("assistant tool writes require confirmation and topic context survives relo
   );
   await page.route("https://ai.example/**", async (route) => {
     const body = route.request().postDataJSON();
+    if (isTitleRequest(body)) {
+      await route.fulfill({
+        json: {
+          choices: [
+            { message: { content: JSON.stringify({ title: "自动对话标题" }) } },
+          ],
+        },
+      });
+      return;
+    }
     const done = body.messages.some((m: { role: string }) => m.role === "tool");
     await route.fulfill({
       json: {

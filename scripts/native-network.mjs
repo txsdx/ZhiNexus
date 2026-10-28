@@ -23,6 +23,29 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
           const body = JSON.parse(raw);
           assert.equal(body.stream, true);
           assert.equal(body.model, "native-model-fixture");
+          if (
+            body.messages?.[0]?.content?.startsWith("为这段对话生成一个简短")
+          ) {
+            response.writeHead(200, { "Content-Type": "text/event-stream" });
+            response.end(
+              "data: " +
+                JSON.stringify({
+                  choices: [
+                    {
+                      index: 0,
+                      delta: {
+                        content: JSON.stringify({
+                          title: "Native generated title",
+                        }),
+                      },
+                      finish_reason: "stop",
+                    },
+                  ],
+                }) +
+                "\n\ndata: [DONE]\n\n",
+            );
+            return;
+          }
           streamRequests++;
           response.writeHead(200, {
             "Content-Type": "text/event-stream",
@@ -152,18 +175,17 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
         'return [...document.querySelectorAll(".message.assistant")].some(e=>e.innerText.includes("Native streaming partial complete"))',
       ),
     );
+    await waitFor(() =>
+      script(
+        'return document.querySelector(".chat-thread-header h1")?.innerText.includes("Native generated title")',
+      ),
+    );
     await click(".ai-queue-button");
     await waitFor(() =>
       script(
-        'return document.querySelector(".ai-job-card")?.getAttribute("data-job-state")==="review"',
+        'return !!document.querySelector(".ai-task-center")&&!document.querySelector(".ai-job-card")',
       ),
     );
-    await click(".ai-job-card .actions button");
-    await waitFor(() =>
-      script('return !!document.querySelector(".ai-result-review .primary")'),
-    );
-    await click(".ai-result-review .primary");
-    await waitFor(() => script('return !document.querySelector(".modal")'));
     await click(".sidebar-bottom>button");
   } finally {
     if (

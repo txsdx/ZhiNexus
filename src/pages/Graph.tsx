@@ -78,7 +78,6 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
     <div className="page graph-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">CONNECT THE DOTS</div>
           <h1>{t("知识星图", "Knowledge graph")}</h1>
           <p>
             {t(

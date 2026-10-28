@@ -10,6 +10,7 @@ import { diagnosticText } from "../core/diagnostics";
 import { diagnostics } from "./diagnostics";
 import { executeAIJob } from "./ai-workflows";
 import { notifyCompletion } from "./notifications";
+import { topicTitleSeed } from "./topic-titles";
 let queueChannel: BroadcastChannel | undefined;
 /** Validate the local queue boundary before interpreting saved work or offering retry. */
 const records = z
@@ -24,6 +25,7 @@ const records = z
         "image",
         "ocr",
         "chat",
+        "title",
         "question",
         "grade",
       ]),
@@ -47,6 +49,7 @@ const records = z
       ]),
       stages: z.array(
         z.object({
+          responseId: z.string().optional(),
           task: z.enum([
             "explain",
             "question",
@@ -129,7 +132,15 @@ export const aiJobs = new AIQueue(
     ];
     try {
       const result = await executeAIJob(job, context);
-      if (job.kind !== "chat")
+      if (job.kind === "chat")
+        void scheduleTitle(job).catch((error) =>
+          diagnostics.error(
+            "ai",
+            "生成对话标题失败 / Conversation title failed",
+            error,
+          ),
+        );
+      if (job.kind !== "chat" && job.kind !== "title")
         void notifyCompletion(
           job.kind === "ocr" ? "ocr" : "ai",
           job.title + " · 待审阅 / Ready for review",
@@ -145,7 +156,37 @@ export const aiJobs = new AIQueue(
     }
   },
   safeError,
+  (job) => job.kind === "chat" || job.kind === "title",
 );
+const titleScheduling = new Set<string>();
+/** Schedule at most one automatic title per conversation without blocking the completed answer. */
+async function scheduleTitle(job: AIJob) {
+  const id = job.target.topicId;
+  if (!id || titleScheduling.has(id)) return;
+  titleScheduling.add(id);
+  try {
+    const topic = store.getSnapshot().topics.find((t) => t.id === id);
+    if (
+      !topic ||
+      topic.titleMode === "manual" ||
+      topic.titleGenerated ||
+      aiJobs
+        .getSnapshot()
+        .jobs.some((j) => j.kind === "title" && j.target.topicId === id)
+    )
+      return;
+    const seed = topicTitleSeed(topic);
+    if (seed)
+      await submitAIJob(
+        "title",
+        { page: "agent", entryId: topic.entryId, topicId: id },
+        { seed, model: job.input.model ?? "" },
+        false,
+      );
+  } finally {
+    titleScheduling.delete(id);
+  }
+}
 const cleaning = new Set<string>();
 /** Clear reviewed results only after the related explicit review commit, cancellation or replacement. */
 function retireReviewed() {
@@ -292,6 +333,7 @@ export async function submitAIJob(
     image: "教学配图 / Illustration",
     ocr: "AI 识别 / OCR",
     chat: "AI 对话 / Conversation",
+    title: "对话标题 / Conversation title",
     question: "复习出题 / Review question",
     grade: "复习评估 / Assessment",
   };

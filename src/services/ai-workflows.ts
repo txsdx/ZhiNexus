@@ -9,6 +9,7 @@ import { questionSchema, gradeSchema } from "../core/review";
 import { complete, runTask, generateImage, parseJson } from "./ai";
 import { validateClassification } from "./classification";
 import { chat } from "./agent";
+import { generateTopicTitle } from "./topic-titles";
 /** Strict, reusable relationship proposals; only known entry IDs are eligible for application. */
 export const relationsSchema = z.object({
   prerequisites: z.array(z.string()).max(8),
@@ -41,11 +42,16 @@ export async function executeAIJob(
   job: AIJob,
   context: AIJobContext,
 ): Promise<Json> {
-  const e = job.target.entryId ? capturedEntry(job) : undefined;
+  const e =
+    job.target.entryId && !["chat", "title"].includes(job.kind)
+      ? capturedEntry(job)
+      : undefined;
   const vars: Record<string, string> = e
     ? { title: e.title, content: e.content }
     : {};
   switch (job.kind) {
+    case "title":
+      return generateTopicTitle(job, context);
     case "explain":
       return { content: await generate(context, "explain", vars) };
     case "relations":

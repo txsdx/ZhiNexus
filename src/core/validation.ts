@@ -16,6 +16,7 @@ const card = z.object({
   last_review: z.string().optional(),
 });
 const message = z.object({
+  responseId: z.string().optional(),
   jobId: z.string().optional(),
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: text,
@@ -60,6 +61,8 @@ const schemas = {
   topic: z.object({
     entryId: text,
     title: text,
+    titleMode: z.enum(["auto", "manual"]).optional(),
+    titleGenerated: z.boolean().optional(),
     messages: z.array(message),
     updatedAt: z.iso.datetime(),
     deleted: z.boolean().optional(),

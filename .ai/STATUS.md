@@ -28,9 +28,13 @@
 
 ## 0.17 本轮验证（2026-10-28）
 
+- **正式 Release [v0.17.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.17.0) 已发布**（非草稿/非预发布），北京时间 2026-10-28 22:38，打包源码 `2f6a240`。Windows protable/setup、Ubuntu DEB、Android arm64 开发签名 APK 与 latest.json 共 5 项资产已上传；读回清单后，三平台版本、四个 URL/安装包 SHA-256 与清单自身摘要全部一致，Release tag 指向该源码。
+- 最终 [Build and release 40706301585](https://github.com/txsdx/ZhiNexus/actions/runs/40706301585) 全组成功：前端 `122879253485`、Windows `122879703534`、Ubuntu `122879703839`、Android `122879703652`、发布 `122885147531`，含上传与缓存收尾。Windows/Ubuntu 真实打包程序的存储/恢复测试通过；Android 仅 arm64 编译与签名/包验证，无模拟器/x86_64 测试。
+- 最终 [Validate 40706281174](https://github.com/txsdx/ZhiNexus/actions/runs/40706281174) 全部成功：145 单元、27 发布脚本、73 浏览器全量、4 原生认证回归、前端构建与 locked Rust check。正式发布说明已补全本轮变化、统一更新客户端要求和 Android 开发签名边界。
+
 - 创建日期/更新时间改为两行小字；默认 Android Action 移除模拟器、x86_64 APK、KVM/镜像缓存，保留 arm64 编译与签名验证。压缩同步、SFTPGo 原子发布与旧文件回收已实现。
 - 最终本地 145 单元、27 脚本、73 Playwright 全量、前端构建、locked Rust check、4 原生认证回归全部通过；修改文件格式/差异检查通过。资源密集测试与多个浏览器/原生构建同时运行时首轮触发 5 秒超时，隔离运行全量通过，并将两项千条规模测试单独设置 15 秒预算，保留全部断言。补查已修复“无可信副本前先替换损坏记录”的风险，回归保证修复事务前阻止。
-- 真实本地 SFTPGo 2.7.6 复测通过：3 客户端并发、清理后离线合并、新设备重建、附件和真实 gzip；1007 操作、7 packs、1 checkpoint，368829 字节正文压至约 56 KB。没有访问用户自建服务器。完整构建与正式发布待完成。
+- 真实本地 SFTPGo 2.7.6 复测通过：3 客户端并发、清理后离线合并、新设备重建、附件和真实 gzip；1007 操作、7 packs、1 checkpoint，368829 字节正文压至约 56 KB。没有访问用户自建服务器。三平台构建和正式发布均完成，证据见本节开头。
 
 ## 0.16 本轮验证（2026-10-28）
 

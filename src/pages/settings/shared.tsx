@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Trash2, GripVertical } from "lucide-react";
 import { requestCategoryDeletion } from "../../components/CategoryDeletion";
-import { editCategory } from "../../services/categories";
+import { editCategory, taxonomySignature } from "../../services/categories";
 import { categoryCount } from "../../services/categories";
 import { useT } from "../../components/common";
 import { native } from "../../core/database";
@@ -23,10 +23,30 @@ export function CategoryTree({
     if (!editable) return;
     event.preventDefault();
     event.stopPropagation();
-    const id = event.dataTransfer.getData("application/x-zhinexus-category");
-    const category = categories.find((c) => c.id === id);
-    if (!category) return;
-    void editCategory(id, category.name, parent).then(
+    let payload: { id: string; signature: string };
+    try {
+      payload = JSON.parse(
+        event.dataTransfer.getData("application/x-zhinexus-category"),
+      );
+      if (
+        typeof payload.id !== "string" ||
+        typeof payload.signature !== "string"
+      )
+        return;
+    } catch {
+      return;
+    }
+    const category = categories.find((c) => c.id === payload.id);
+    if (!category) {
+      setError(t("分类已改变，请重试", "Category changed; retry"));
+      return;
+    }
+    void editCategory(
+      payload.id,
+      category.name,
+      parent,
+      payload.signature,
+    ).then(
       () => setError(""),
       (error) => setError(String(error.message)),
     );
@@ -42,14 +62,17 @@ export function CategoryTree({
         return (
           <li key={c.id}>
             <span
-              data-category-id={c.id}
+              data-category-id={editable ? c.id : undefined}
               draggable={editable}
               onDragStart={(e) => {
                 if (editable) {
                   e.stopPropagation();
                   e.dataTransfer.setData(
                     "application/x-zhinexus-category",
-                    c.id,
+                    JSON.stringify({
+                      id: c.id,
+                      signature: taxonomySignature(),
+                    }),
                   );
                   e.dataTransfer.effectAllowed = "move";
                 }

@@ -1,7 +1,7 @@
 import { useKnowledge } from "../common";
 import { reviewTarget, nextReviewAt } from "../../core/review-policy";
 /** Dense, keyboard-accessible taxonomy table with real memory estimates and per-column sorting. */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import type { Entry, Category } from "../../core/types";
 import {
@@ -26,6 +26,19 @@ export function KnowledgeTable({
   compact?: boolean;
 }) {
   const targetRetention = reviewTarget(useKnowledge().docs);
+  const scroller = useRef<HTMLDivElement>(null),
+    [horizontalOverflow, setHorizontalOverflow] = useState(false);
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    const measure = () =>
+      setHorizontalOverflow(node.scrollWidth > node.clientWidth + 1);
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    if (node.firstElementChild) observer.observe(node.firstElementChild);
+    measure();
+    return () => observer.disconnect();
+  }, []);
   const t = useT(),
     [collapsed, setCollapsed] = useState<Set<string>>(new Set()),
     [sort, setSort] = useState("review"),
@@ -217,7 +230,13 @@ export function KnowledgeTable({
           {t("遗忘程度：黑 → 黄 → 红", "Forgetting: black → yellow → red")}
         </label>
       </div>
-      <div className="knowledge-table-scroll">
+      <div
+        ref={scroller}
+        className={
+          "knowledge-table-scroll" +
+          (horizontalOverflow ? " horizontal-overflow" : "")
+        }
+      >
         <table
           role="treegrid"
           aria-label={t("分类知识树", "Knowledge taxonomy")}

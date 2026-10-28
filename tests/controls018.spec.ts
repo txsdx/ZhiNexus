@@ -116,6 +116,46 @@ test("confirmation ignores composing, repeated and modified Enter, and explicit 
   ).toEqual([0, 0]);
 });
 
+test("a taxonomy change during dragging rejects the old gesture, and right-clicking its SVG icon keeps the category menu", async ({
+  page,
+}) => {
+  await entry(page);
+  await page.getByRole("button", { name: "设置与偏好" }).click();
+  await page.getByRole("button", { name: "知识分类", exact: true }).click();
+  const child = page.locator('.category-tree [data-category-id="child"]');
+  await child.evaluate(async (element) => {
+    const transfer = new DataTransfer();
+    element.dispatchEvent(
+      new DragEvent("dragstart", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer,
+      }),
+    );
+    const { store } = await import("/src/core/store.ts" as string);
+    await store.patch("category", "root", { name: "已改名的父分类" });
+    document.querySelector(".tree-root-drop")!.dispatchEvent(
+      new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer,
+      }),
+    );
+  });
+  await expect(page.getByRole("alert")).toContainText("分类已改变");
+  expect(
+    await repository(
+      page,
+      "return store.getSnapshot().categories.find(c=>c.id==='child').parent",
+    ),
+  ).toBe("root");
+  await child.locator("svg").first().click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "移动分类到…", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
 test("entry chat sees the selected passage and unsaved draft, reviews edits into a local draft, and saves only explicitly", async ({
   page,
 }) => {

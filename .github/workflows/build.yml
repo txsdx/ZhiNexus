@@ -76,7 +76,7 @@ jobs:
             exit 1
           fi
           sudo apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=30 install --no-install-recommends -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf webkit2gtk-driver xvfb dbus-x11 libpipewire-0.3-dev libgbm-dev libxcb-randr0-dev libclang-dev tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=30 install --no-install-recommends -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libpipewire-0.3-dev libgbm-dev libxcb-randr0-dev libclang-dev
       - run: npm ci
       - uses: actions/download-artifact@v4
         with:
@@ -112,14 +112,8 @@ jobs:
       - name: Test real Windows storage and portable recovery
         if: runner.os == 'Windows'
         run: node scripts/native-smoke.mjs
-      - name: Prepare native driver and extract Ubuntu DEB
-        if: runner.os == 'Linux'
-        run: bash scripts/start-linux-driver.sh
-      - name: Test the packaged Ubuntu executable and portable recovery
-        if: runner.os == 'Linux'
-        run: node scripts/native-smoke.mjs
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && runner.os == 'Windows'
         with:
           name: ${{ runner.os }}-native-test-results
           path: |

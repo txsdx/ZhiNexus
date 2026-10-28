@@ -49,12 +49,19 @@ export function validateCategoryMove(
   }
 }
 /** Rename or move an existing category without changing its identity or entry references. */
-export async function editCategory(id: string, name: string, parent: string) {
+export async function editCategory(
+  id: string,
+  name: string,
+  parent: string,
+  expected = taxonomySignature(),
+) {
   const s = store.getSnapshot();
   if (!s.categories.some((c) => c.id === id) || !name.trim())
     throw Error("分类或名称无效 / Invalid category");
   validateCategoryMove(s.categories, id, parent);
-  const signature = taxonomySignature();
+  const signature = expected;
+  if (signature !== taxonomySignature())
+    throw Error("分类已改变，请重试 / Category changed; retry");
   if (
     !(await store.batchWhen(
       [{ collection: "category", id, patch: { name: name.trim(), parent } }],

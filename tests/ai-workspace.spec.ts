@@ -313,6 +313,23 @@ test("streamed classification remains unapplied through reload and failed cleanu
     await expect(
       page.getByRole("dialog", { name: "确认知识分类变更", exact: true }),
     ).toBeVisible();
+    const preview = page.getByRole("dialog", {
+      name: "确认知识分类变更",
+      exact: true,
+    });
+    await expect(preview.locator('[draggable="true"]')).toHaveCount(0);
+    await preview
+      .locator(".category-tree li > span")
+      .filter({ hasText: "人工大类" })
+      .first()
+      .click({ button: "right" });
+    await expect(
+      page.getByRole("menuitem", { name: "删除分类…", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("menuitem", { name: "移动分类到…", exact: true }),
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await repository(
       page,
       "store.db.savedSetLocal=store.db.setLocal;store.db.setLocal=async(key,value)=>{if(key==='ai-jobs')throw Error('fixture cleanup disk failure');return store.db.savedSetLocal(key,value)};",

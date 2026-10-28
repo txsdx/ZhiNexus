@@ -37,14 +37,32 @@ export function CategoriesPanel() {
         </label>
       </div>
       <button
-        disabled={!categoryName.trim()}
+        disabled={!categoryName.trim() || !!busy}
         onClick={() =>
-          void store
-            .patch("category", crypto.randomUUID(), {
-              name: categoryName.trim(),
-              parent,
-            })
-            .then(() => setCategoryName(""))
+          void act(t("添加分类…", "Adding category…"), async () => {
+            const name = categoryName;
+            const committed = await store.batchWhen(
+              [
+                {
+                  collection: "category",
+                  id: crypto.randomUUID(),
+                  patch: { name: name.trim(), parent },
+                },
+              ],
+              "category-create",
+              () =>
+                !parent ||
+                store.getSnapshot().categories.some((c) => c.id === parent),
+            );
+            if (!committed)
+              throw Error(
+                t(
+                  "父分类已不存在，请重新选择",
+                  "Parent category no longer exists",
+                ),
+              );
+            setCategoryName((current) => (current === name ? "" : current));
+          })
         }
       >
         {t("添加分类", "Add category")}

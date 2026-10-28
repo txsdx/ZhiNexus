@@ -134,6 +134,26 @@ test("context menus persist soft colors; graph is a full viewport without header
   await expect(page.locator(".knowledge-table th")).toHaveCount(4);
   await expect(page.getByRole("button", { name: /下次复习/ })).toBeVisible();
   await expect(page.locator(".next-review-cell")).toContainText("天");
+  const scroller = page.locator(".knowledge-table-scroll");
+  await expect(scroller).not.toHaveClass(/horizontal-overflow/);
+  await scroller.evaluate((element: HTMLElement) => {
+    element.style.maxWidth = "400px";
+  });
+  await expect(scroller).toHaveClass(/horizontal-overflow/);
+  expect(
+    await row.locator(".entry-title-cell button").evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return [2, rect.height / 2, rect.height - 2].every((offset) =>
+        button.contains(
+          document.elementFromPoint(rect.x + rect.width / 2, rect.y + offset),
+        ),
+      );
+    }),
+  ).toBe(true);
+  await scroller.evaluate((element: HTMLElement) => {
+    element.style.maxWidth = "";
+  });
+  await expect(scroller).not.toHaveClass(/horizontal-overflow/);
   await page.getByRole("button", { name: "知识星图", exact: true }).click();
   await expect(page.locator(".react-flow")).toBeVisible();
   await expect(

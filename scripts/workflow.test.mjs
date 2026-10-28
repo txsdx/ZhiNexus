@@ -21,7 +21,7 @@ test("one manual entry builds every target with only publication and draft optio
         parse(fs.readFileSync(".github/workflows/" + name, "utf8")).on
           ?.workflow_dispatch !== undefined,
     );
-  assert.deepEqual(manual, ["build.yml"]);
+  assert.deepEqual(manual.sort(), ["build.yml", "native-ui.yml"]);
   assert.deepEqual(workflow.jobs.desktop.strategy.matrix.include, [
     { platform: "windows", os: "windows-latest" },
     { platform: "ubuntu", os: "ubuntu-24.04" },
@@ -90,4 +90,41 @@ test("only a complete successful native build can publish using automatic reposi
   assert.equal(publish.env.GH_TOKEN, "${{ github.token }}");
   assert.equal(publish.env.RELEASE_DRAFT, "${{ inputs.draft }}");
   assert.ok(!JSON.stringify(workflow).includes("RELEASE_TOKEN"));
+});
+
+test("Ubuntu UI diagnostics are opt-in, use the pinned built artifact and cannot publish", () => {
+  const diagnostic = parse(
+    fs.readFileSync(".github/workflows/native-ui.yml", "utf8"),
+  );
+  assert.ok(diagnostic.on.workflow_dispatch);
+  assert.deepEqual(diagnostic.permissions, {
+    contents: "read",
+    actions: "read",
+  });
+  assert.ok(
+    !workflow.jobs.desktop.steps.some((step) =>
+      step.name?.includes("packaged Ubuntu executable"),
+    ),
+  );
+  assert.ok(
+    !workflow.jobs.desktop.steps.some(
+      (step) => step.run === "bash scripts/start-linux-driver.sh",
+    ),
+  );
+  const steps = diagnostic.jobs.ubuntu.steps;
+  assert.ok(
+    steps.some(
+      (step) =>
+        step.uses === "actions/download-artifact@v4" &&
+        step.with.name === "ZhiNexus-ubuntu-24.04-x64",
+    ),
+  );
+  assert.ok(steps.some((step) => step.run === "node scripts/native-smoke.mjs"));
+  assert.ok(
+    !steps.some(
+      (step) =>
+        String(step.uses).includes("tauri-action") ||
+        String(step.run).includes("release create"),
+    ),
+  );
 });

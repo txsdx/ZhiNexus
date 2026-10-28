@@ -51,6 +51,10 @@
 .knowledge-table-scroll {
   overflow: auto;
 }
+.knowledge-table-scroll.horizontal-overflow {
+  /* GTK overlay scrollbars otherwise intercept clicks on the final row. */
+  padding-bottom: 16px;
+}
 .knowledge-table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -72,6 +76,8 @@
   background: none;
   padding: 0;
   justify-content: start;
+  max-width: 100%;
+  white-space: normal;
 }
 .knowledge-table th:nth-child(1) {
   width: 36%;
@@ -110,7 +116,8 @@
   background: var(--soft);
 }
 .entry-title-cell button {
-  display: inline;
+  display: inline-block;
+  max-width: 100%;
   text-align: left;
   border: 0;
   background: none;

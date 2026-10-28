@@ -1,0 +1,74 @@
+# Optional real-WebKit diagnostics reuse a built DEB; the default release does not install a GUI driver.
+name: Ubuntu native diagnostics (on demand)
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Build and release run ID containing the Ubuntu artifact to test
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  ubuntu:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve the build source
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIAGNOSTIC_BUILD_ID: ${{ inputs.build_run_id }}
+        run: |
+          [[ "$DIAGNOSTIC_BUILD_ID" =~ ^[0-9]+$ ]]
+          metadata=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DIAGNOSTIC_BUILD_ID")
+          [[ $(jq -r .path <<< "$metadata") == '.github/workflows/build.yml' ]]
+          [[ $(jq -r .head_repository.full_name <<< "$metadata") == "$GITHUB_REPOSITORY" ]]
+          diagnostic_sha=$(jq -r .head_sha <<< "$metadata")
+          [[ "$diagnostic_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$diagnostic_sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: optional-tauri-driver-${{ runner.os }}-v2
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+          name: ZhiNexus-ubuntu-24.04-x64
+          path: src-tauri/target/release/bundle/deb
+      - name: Check the package version and record its digest
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import {execFileSync} from 'node:child_process';
+          const root='src-tauri/target/release/bundle/deb', files=fs.readdirSync(root).filter(f=>f.endsWith('.deb'));
+          if(files.length!==1)throw Error('Expected exactly one Ubuntu package');
+          const file=root+'/'+files[0], version=execFileSync('dpkg-deb',['-f',file,'Version'],{encoding:'utf8'}).trim();
+          if(version!==JSON.parse(fs.readFileSync('versions.json','utf8')).platforms.ubuntu)throw Error('Package/source version mismatch');
+          console.log(files[0],version,createHash('sha256').update(fs.readFileSync(file)).digest('hex'));
+          JS
+      - name: Prepare the optional native UI runtime
+        run: |
+          sudo sed -E -i 's|mirror\+file:/etc/apt/apt-mirrors(-security)?\.txt|https://archive.ubuntu.com/ubuntu|g; s|https?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get -o Acquire::Retries=2 update
+          sudo apt-get -o Acquire::Retries=2 install --no-install-recommends -y webkit2gtk-driver xvfb dbus-x11 libxdo3 libayatana-appindicator3-1 libpipewire-0.3-0t64 libgbm1 libxcb-randr0 tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim
+      - run: bash scripts/start-linux-driver.sh
+      - run: node scripts/native-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Ubuntu-optional-native-diagnostics
+          path: |
+            native-test-results/
+            ${{ runner.temp }}/tauri-driver.log

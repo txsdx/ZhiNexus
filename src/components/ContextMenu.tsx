@@ -36,7 +36,7 @@ export function ContextMenu({ notify }: { notify: (message: string) => void }) {
     const fallback = (event: MouseEvent) => {
       if (contextMenuHandled(event)) return;
       const target =
-          event.target instanceof HTMLElement ? event.target : document.body,
+          event.target instanceof Element ? event.target : document.body,
         s = store.getSnapshot();
       const input = target.closest("textarea,input") as
         HTMLTextAreaElement | HTMLInputElement | null;
@@ -125,7 +125,10 @@ export function ContextMenu({ notify }: { notify: (message: string) => void }) {
             input.select();
           },
         });
-      if (!input && !target.isContentEditable) {
+      if (
+        !input &&
+        !(target instanceof HTMLElement && target.isContentEditable)
+      ) {
         const entryId =
           target.closest<HTMLElement>("[data-entry-id]")?.dataset.entryId;
         const entry = s.entries.find((e) => e.id === entryId);

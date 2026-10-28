@@ -64,11 +64,24 @@ async function click(selector) {
     return ready ? element(selector) : false;
   });
   await new Promise((resolve) => setTimeout(resolve, 100));
-  await command(
-    "POST",
-    "/element/" + e["element-6066-11e4-a52e-4f735466cecf"] + "/click",
-    {},
-  );
+  try {
+    await command(
+      "POST",
+      "/element/" + e["element-6066-11e4-a52e-4f735466cecf"] + "/click",
+      {},
+    );
+  } catch (error) {
+    const geometry = await script(
+      'const e=document.querySelector(arguments[0]);if(!e)return {missing:true};const r=e.getBoundingClientRect(),s=getComputedStyle(e),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {rect:r.toJSON(),rects:[...e.getClientRects()].map(r=>r.toJSON()),display:s.display,visibility:s.visibility,hit:hit?.tagName,hitClass:hit?.getAttribute("class"),connected:e.isConnected};',
+      [selector],
+    ).catch(() => null);
+    fs.mkdirSync("native-test-results", { recursive: true });
+    fs.writeFileSync(
+      "native-test-results/click-geometry.json",
+      JSON.stringify({ selector, geometry }, null, 2),
+    );
+    throw error;
+  }
 }
 /** Enter text with standard WebDriver keyboard events so React receives actual input. */
 async function type(selector, text, normalizedValues = []) {
@@ -429,7 +442,28 @@ try {
   );
   await type(".search-box input", "Native portable recovery");
   await waitFor(() =>
-    script('return document.querySelectorAll(".entry-row").length===1'),
+    script(
+      'const rows=document.querySelectorAll(".entry-row");return rows.length===1&&rows[0].querySelector(".entry-title-cell button")?.textContent==="Native portable recovery";',
+    ),
+  );
+  // Exercise WebKit's overflow hit testing even when the desktop's localized headers fit.
+  await script(
+    'document.querySelector(".knowledge-table-scroll").style.maxWidth="420px";return true;',
+  );
+  const hitTest = await waitFor(() =>
+    script(
+      'const scroller=document.querySelector(".knowledge-table-scroll"),button=scroller.querySelector(".entry-title-cell button"),rect=button.getBoundingClientRect();const hittable=[2,rect.height/2,rect.height-2].every(offset=>button.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+offset)));return hittable?{overflow:scroller.scrollWidth>scroller.clientWidth,hittable}:false;',
+    ),
+  );
+  assert.equal(
+    hitTest.overflow,
+    true,
+    "The narrow-table fixture must exercise horizontal overflow",
+  );
+  assert.equal(
+    hitTest.hittable,
+    true,
+    "Visible entry buttons must remain pointer targets inside the scroller",
   );
   await click(".entry-title-cell button");
   await waitFor(() =>

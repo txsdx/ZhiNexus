@@ -40,6 +40,17 @@ test("both adaptive launcher shapes replace generated placeholder artwork, inclu
         ),
       );
     }
+    assert.match(
+      fs.readFileSync(path.join(adaptive, "ic_launcher.xml"), "utf8"),
+      /@drawable\/zhinexus_launcher_foreground/,
+    );
+    assert.match(
+      fs.readFileSync(
+        path.join(fixture, "drawable/zhinexus_launcher_foreground.xml"),
+        "utf8",
+      ),
+      /android:inset="21dp"/,
+    );
     for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
       for (const name of [
         "ic_launcher",

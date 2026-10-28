@@ -380,6 +380,55 @@ test("mobile chat keeps the composer visible and conversation navigation in an o
   await page.screenshot({ path: "test-results/chat-mobile-0.15.png" });
 });
 
+test("transient feedback never covers the composer or intercepts sending on desktop and mobile", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await topics(page, true);
+  await configure(page, "https://ai.example/v1");
+  let requests = 0,
+    sent = 0;
+  await page.route("https://ai.example/**", (route) => {
+    requests++;
+    return route.fulfill({
+      json: {
+        choices: [{ message: { content: "发送成功", tool_calls: null } }],
+      },
+    });
+  });
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => {} },
+    }),
+  );
+  await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page
+      .getByRole("button", { name: "复制回复", exact: true })
+      .last()
+      .click();
+    await expect(page.locator(".toast")).toBeVisible();
+    const feedback = await page.locator(".toast").boundingBox(),
+      composer = await page.locator(".chat-input").boundingBox();
+    expect(feedback!.y + feedback!.height).toBeLessThan(composer!.y);
+    await page.locator(".chat-input textarea").fill("提示显示时也能发送");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => requests).toBe(++sent);
+    await expect(page.locator(".message.assistant").last()).toContainText(
+      "发送成功",
+    );
+    await page
+      .locator(".toast")
+      .getByRole("button", { name: "Dismiss", exact: true })
+      .click();
+  }
+});
+
 test("stopping a streamed reply retains the question and partial answer without accepting a late completion", async ({
   page,
 }) => {

@@ -2895,3 +2895,21 @@ fieldset.ai-result-review {
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* Keep transient feedback out of the composer and its send/stop controls. */
+.chat-workspace .toast {
+  top: 144px;
+  bottom: auto;
+  pointer-events: none;
+}
+.chat-workspace .toast button {
+  pointer-events: auto;
+}
+@media (max-width: 900px) {
+  .chat-workspace .toast {
+    top: 124px;
+  }
+  [data-mobile="top"] .chat-workspace .toast {
+    top: 180px;
+  }
+}

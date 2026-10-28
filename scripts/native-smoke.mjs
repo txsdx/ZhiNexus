@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { testNativeShortcuts } from "./native-shortcuts.mjs";
 import { testNativeNetwork } from "./native-network.mjs";
 import { testNativeOcr } from "./native-ocr.mjs";
+import { testNativeUpdates } from "./native-updates.mjs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
@@ -243,6 +244,7 @@ try {
   await click('.settings-tabs [data-settings-tab="database"]');
   await testNativeShortcuts({ click, script, waitFor, command });
   await testNativeNetwork({ click, type, script, waitFor });
+  await testNativeUpdates({ click, script, waitFor });
   await testNativeOcr({ command, script, click, type, waitFor });
   await click(".sidebar-bottom>button");
   await click('[data-settings-tab="database"]');

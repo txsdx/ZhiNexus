@@ -267,12 +267,23 @@ try {
   await waitFor(() => device("shell", "dumpsys", "alarm").includes(pkg));
   captureScreen("sync-reminders");
   await testStreaming(page);
+  await page.locator(".mobile-settings").click();
+  await page.locator('[data-settings-tab="about"]').click();
+  await page.locator(".settings-content .actions button").first().click();
+  await page
+    .locator(".settings-content>section>h3")
+    .waitFor({ timeout: 90000 });
+  assert.match(
+    await page.locator(".settings-content>section>h3").innerText(),
+    /^\d+\.\d+\.\d+\s*→\s*\d+\.\d+\.\d+$/,
+  );
+  captureScreen("private-release-updater");
   fs.writeFileSync(
     "android-test-results/result.txt",
     "PASS: Android native WebView, SQLite capture, rich blocks, restored tabs, mobile navigation, process restart, per-device reminder, OS alarm registration and genuine SSE chat before completion.\n",
   );
   console.log(
-    "PASS: Android native storage, restart, OS notification scheduling and genuine SSE chat",
+    "PASS: Android native storage, restart, OS notification scheduling, genuine SSE chat and authenticated private Release manifest download",
   );
 } catch (error) {
   fs.writeFileSync(

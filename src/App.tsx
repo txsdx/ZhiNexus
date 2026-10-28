@@ -1,5 +1,6 @@
 /** Application shell, responsive navigation, capture flow and per-device background services. */
 import { diagnostics } from "./services/diagnostics";
+import { SyncStatus } from "./components/SyncStatus";
 import { aiJobs } from "./services/ai-jobs";
 import { AIJobReview, AITaskCenter, useAIJobs } from "./components/AIJobView";
 import type { AITarget, AIJob } from "./core/ai-jobs";
@@ -55,7 +56,7 @@ const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings })),
 );
 import { store } from "./core/store";
-import { synchronize } from "./services/sync";
+import { syncActivity, synchronize } from "./services/sync";
 import { notifyCompletion } from "./services/notifications";
 import { remind } from "./services/device";
 /** Collect new concepts while treating fuzzy duplicates as a request to revisit existing knowledge. */
@@ -424,13 +425,12 @@ function Shell() {
     if (!s.ready || !s.device.davUrl || s.device.syncMinutes <= 0) return;
     const timer = setInterval(
       () => {
-        void synchronize()
-          .then(() => notify(t("增量同步完成", "Incremental sync complete")))
-          .catch((e) => {
-            diagnostics.error("app", "自动同步失败 / Automatic sync failed", e);
-            notify(String(e.message));
-            void notifyCompletion("sync", String(e.message)).catch(() => {});
-          });
+        if (syncActivity.getSnapshot()) return;
+        void synchronize().catch((e) => {
+          diagnostics.error("app", "自动同步失败 / Automatic sync failed", e);
+          notify(String(e.message));
+          void notifyCompletion("sync", String(e.message)).catch(() => {});
+        });
       },
       Math.max(1, s.device.syncMinutes) * 60000,
     );
@@ -671,10 +671,7 @@ function Shell() {
                 {t("AI 任务", "AI tasks")} {jobs.jobs.length || ""}
               </span>
             </button>
-            <span className="topbar-status">
-              <span className="status-dot" />
-              {t("本地已保存", "Saved locally")}
-            </span>
+            <SyncStatus notify={notify} />
           </header>
           <EntryTabs
             notify={notify}

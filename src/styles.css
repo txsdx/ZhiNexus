@@ -2490,3 +2490,24 @@ fieldset.ai-result-review {
   margin: 0;
   min-width: 0;
 }
+.topbar .sync-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+.topbar .search-box {
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .topbar .breadcrumb,
+  .topbar .ai-queue-button span {
+    display: none;
+  }
+  .topbar .sync-status {
+    gap: 4px;
+    font-size: 0.75rem;
+  }
+}

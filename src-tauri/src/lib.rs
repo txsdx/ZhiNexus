@@ -5,6 +5,7 @@ mod android_updates;
 mod capture;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod desktop;
+mod github_release;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod mcp;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -55,6 +56,7 @@ pub fn run() {
         capture::capture_knowledge,
         network::configure_network,
         updates::update_identity,
+        updates::read_update_manifest,
         updates::install_platform_update,
         paths::storage_configuration,
         storage::prepare_storage,
@@ -87,6 +89,7 @@ pub fn run() {
         capture::capture_knowledge,
         network::configure_network,
         updates::update_identity,
+        updates::read_update_manifest,
         updates::install_platform_update,
         paths::storage_configuration,
         storage::prepare_storage,

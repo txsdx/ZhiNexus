@@ -7580,6 +7580,7 @@ dependencies = [
  "futures-util",
  "image",
  "minisign-verify",
+ "percent-encoding",
  "regex",
  "reqwest 0.12.28",
  "semver",

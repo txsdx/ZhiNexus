@@ -99,14 +99,27 @@ export class WebDAV implements SyncTransport {
   }
 }
 let syncing = false;
+const syncListeners = new Set<() => void>();
+/** Observe the shared exchange/audit lock so every sync control reflects in-flight work. */
+export const syncActivity = {
+  getSnapshot: () => syncing,
+  subscribe: (listener: () => void) => {
+    syncListeners.add(listener);
+    return () => {
+      syncListeners.delete(listener);
+    };
+  },
+};
 /** Share one gate between automatic exchange and explicit deep audit. */
 export async function withSyncLock<T>(work: () => Promise<T>): Promise<T> {
   if (syncing) throw Error("同步或校验正在进行 / Sync or audit in progress");
   syncing = true;
+  syncListeners.forEach((listener) => listener());
   try {
     return await work();
   } finally {
     syncing = false;
+    syncListeners.forEach((listener) => listener());
   }
 }
 export interface SyncReport {

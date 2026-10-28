@@ -40,6 +40,13 @@ pub fn update_identity(app: tauri::AppHandle) -> serde_json::Value {
             .is_some_and(|s| s.to_string_lossy().ends_with("_protable"));
     serde_json::json!({"platform":if cfg!(target_os="windows"){"windows-x86_64"}else if cfg!(target_os="android"){"android-arm64"}else{"linux-x86_64"},"version":app.package_info().version.to_string(),"portable":portable})
 }
+/// Read the private repository manifest without exposing the embedded credential to the webview.
+#[tauri::command]
+pub async fn read_update_manifest(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    crate::github_release::ReleaseClient::new(&app, std::time::Duration::from_secs(60))?
+        .latest_manifest()
+        .await
+}
 /// Validate repository ownership and platform compatibility before any outbound request or file write.
 fn validate(update: &PlatformUpdate) -> Result<&'static str, String> {
     let url = reqwest::Url::parse(&update.url).map_err(|e| e.to_string())?;
@@ -140,33 +147,10 @@ pub async fn install_platform_update(
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let file = root.join(format!("{}.{extension}", update.sha256));
     let pending = file.with_extension("partial");
-    let redirect = reqwest::redirect::Policy::custom(|attempt| {
-        let url = attempt.url();
-        let host = url.host_str().unwrap_or_default();
-        if attempt.previous().len() > 8
-            || url.scheme() != "https"
-            || !(host == "github.com"
-                || host == "release-assets.githubusercontent.com"
-                || host == "objects.githubusercontent.com")
-        {
-            attempt.error("Untrusted update redirect")
-        } else {
-            attempt.follow()
-        }
-    });
-    let client = crate::network::client(&app, std::time::Duration::from_secs(900))?
-        .https_only(true)
-        .redirect(redirect)
-        .timeout(std::time::Duration::from_secs(900))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let response = client
-        .get(&update.url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?;
+    let response =
+        crate::github_release::ReleaseClient::new(&app, std::time::Duration::from_secs(900))?
+            .download(&update.url)
+            .await?;
     if response.content_length().unwrap_or(0) > 512 * 1024 * 1024 {
         return Err("Update exceeds size limit".into());
     }
@@ -175,7 +159,7 @@ pub async fn install_platform_update(
     let mut size = 0usize;
     let mut stream = response.bytes_stream();
     while let Some(bytes) = stream.next().await {
-        let bytes = bytes.map_err(|e| e.to_string())?;
+        let bytes = bytes.map_err(|e| e.without_url().to_string())?;
         size += bytes.len();
         if size > 512 * 1024 * 1024 {
             return Err("Update exceeds size limit".into());

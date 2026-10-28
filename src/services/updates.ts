@@ -1,7 +1,7 @@
 /** Platform-aware update discovery: one Release JSON, independent patch versions and verified installation requests. */
 import { z } from "zod";
 import { native } from "../core/database";
-import { boundedText, nativeFetch } from "./network";
+import { boundedText } from "./network";
 import { ensureNativeProxy } from "./proxy";
 import versions from "../../versions.json";
 const artifact = z.object({
@@ -94,7 +94,7 @@ export function selectUpdate(
     available: isNewer(entry.version, identity.version),
   };
 }
-/** Read the public Release manifest with bounded redirects independently of authenticated AI/provider traffic. */
+/** Native packages read private Releases with their embedded credential; browser previews retain public discovery. */
 export async function checkUpdates(): Promise<UpdateInfo | null> {
   let identity = {
     platform: "windows-x86_64",
@@ -103,25 +103,16 @@ export async function checkUpdates(): Promise<UpdateInfo | null> {
   };
   if (native) {
     const { invoke } = await import("@tauri-apps/api/core");
+    await ensureNativeProxy();
     identity = await invoke("update_identity");
+    return selectUpdate(await invoke("read_update_manifest"), identity);
   }
   const url =
     "https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json";
-  let res: Response;
-  if (native) {
-    res = await nativeFetch(
-      url,
-      {
-        redirect: "follow",
-        signal: AbortSignal.timeout(60000),
-      },
-      5,
-    );
-  } else
-    res = await fetch(url, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(60000),
-    });
+  const res = await fetch(url, {
+    redirect: "follow",
+    signal: AbortSignal.timeout(60000),
+  });
   const final = new URL(res.url);
   if (
     final.protocol !== "https:" ||

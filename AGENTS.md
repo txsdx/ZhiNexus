@@ -1,6 +1,6 @@
 # ZhiNexus contributor and AI entry point
 
-Read `.ai/USER_REQUIREMENTS.md`, `.ai/ARCHITECTURE.md`, `.ai/STATUS.md` and `.ai/KNOWN_ISSUES.md` before changing code. Update `.ai/CHANGELOG.md`, status and issues after each meaningful iteration. Development prompts are in `.ai/DEVELOPMENT_PROMPT.md`; runtime prompts are editable defaults in `src/core/defaults.ts` and synchronized per-task settings.
+Read `.ai/初始提示词.txt`, `.ai/USER_REQUIREMENTS.md`, `.ai/ARCHITECTURE.md`, `.ai/STATUS.md` and `.ai/KNOWN_ISSUES.md` before changing code. Update `.ai/CHANGELOG.md`, status and issues after each meaningful iteration. Development prompts are in `.ai/DEVELOPMENT_PROMPT.md`; runtime prompts are editable defaults in `src/core/defaults.ts` and synchronized per-task settings.
 
 Use the existing checkout. Cloud tasks already have isolated environments: do not create worktrees unless the user requests one. Do not commit, push, publish releases or contact third parties unless explicitly authorized.
 
@@ -11,3 +11,5 @@ Use established libraries and stable public APIs. Keep lockfiles and SemVer-comp
 Required checks: `npm test`, `npm run build`, `npx playwright test`; for native changes, `cargo check --locked --manifest-path src-tauri/Cargo.toml`. Android releases require arm64 compilation and package/signature verification. Do not run an emulator, build an x86_64 test APK or cache system images in the default Action; device/emulator validation is optional and runs only when specifically requested. Signed updater changes still require the relevant platform checks. Mock-provider tests do not establish real provider compatibility. Record unrun checks accurately.
 
 Version discipline is required on every implementation iteration: run `npm run version:bump -- shared` for shared application changes, `-- windows`, `-- android`, or `-- ubuntu` for changes isolated to that platform. `-- major` advances a breaking release line. `versions.json` is authoritative: all platforms share major.minor and maintain independent patch versions. Never trigger updates on untouched platforms by replacing their version with the repository Release tag. CI prepares each platform's manifest version from this file. Output formats are Windows `*_protable.exe` and `*_setup.exe`, Android `.apk`, Ubuntu `.deb`; preserve the user-requested `protable` spelling.
+
+The user requires `.ai/初始提示词.txt` to remain a complete, current reproduction specification. Merge every new requirement, correction and workflow instruction into that file, including this maintenance rule. Keep a numbered acceptance checklist with separate implementation, verification and release states; new steering does not erase unfinished tasks. Do not mark source integration as verified completion.

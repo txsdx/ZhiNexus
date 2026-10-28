@@ -271,8 +271,11 @@ try {
   await page.locator('[data-settings-tab="about"]').click();
   await page.locator(".settings-content .actions button").first().click();
   await page
-    .locator(".settings-content>section>h3")
+    .locator(".settings-content>section>h3,.settings-content>[role=alert]")
+    .first()
     .waitFor({ timeout: 90000 });
+  const updateFailure = page.locator(".settings-content>[role=alert]");
+  if (await updateFailure.count()) throw Error(await updateFailure.innerText());
   assert.match(
     await page.locator(".settings-content>section>h3").innerText(),
     /^\d+\.\d+\.\d+\s*→\s*\d+\.\d+\.\d+$/,

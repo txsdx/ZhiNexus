@@ -5,14 +5,15 @@ import assert from "node:assert/strict";
 export async function testNativeUpdates({ click, script, waitFor }) {
   await click('[data-settings-tab="about"]');
   await click(".settings-content .actions button");
-  const heading = await waitFor(
+  const result = await waitFor(
     () =>
       script(
-        'return document.querySelector(".settings-content>section>h3")?.innerText',
+        'const error=document.querySelector(".settings-content>[role=alert]")?.innerText;const heading=document.querySelector(".settings-content>section>h3")?.innerText;return error?{error}:heading?{heading}:false;',
       ),
     90000,
   );
-  assert.match(heading, /^\d+\.\d+\.\d+\s*→\s*\d+\.\d+\.\d+$/);
+  assert.ok(!result.error, result.error);
+  assert.match(result.heading, /^\d+\.\d+\.\d+\s*→\s*\d+\.\d+\.\d+$/);
   console.log(
     "PASS: embedded GitHub credential reads the private Release and downloads latest.json through the native updater",
   );

@@ -133,7 +133,8 @@ test("a failed manual exchange keeps the last successful timestamp and remains r
 test("automatic synchronization updates the timer without a completion toast", async ({
   page,
 }) => {
-  await page.clock.install({ time: new Date("2026-10-28T06:00:00.000Z") });
+  await page.clock.install({ time: new Date("2026-10-28T05:00:00.000Z") });
+  await page.clock.pauseAt(new Date("2026-10-28T06:00:00.000Z"));
   let writes = 0;
   await dav(page, async (path) => {
     if (path.startsWith("devices/")) writes++;

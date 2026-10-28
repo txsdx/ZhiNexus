@@ -15,6 +15,7 @@ import { useConfirmation } from "../../hooks/useConfirmation";
 export function AboutPanel() {
   const { t, busy, act, notify } = useSettings(),
     [update, setUpdate] = useState<UpdateInfo | null>(null),
+    [updateError, setUpdateError] = useState(""),
     [current, setCurrent] = useState(versions.platforms.windows);
   const confirmation = useConfirmation(notify, {
     title: t("确认更新", "Confirm update"),
@@ -42,7 +43,16 @@ export function AboutPanel() {
           disabled={!!busy}
           onClick={() =>
             void act(t("读取更新信息…", "Checking updates…"), async () => {
-              const info = await checkUpdates();
+              setUpdateError("");
+              let info: UpdateInfo | null;
+              try {
+                info = await checkUpdates();
+              } catch (error) {
+                setUpdateError(
+                  error instanceof Error ? error.message : String(error),
+                );
+                throw error;
+              }
               setUpdate(info);
               notify(
                 info?.available
@@ -87,6 +97,11 @@ export function AboutPanel() {
           {t("一键更新", "Update now")}
         </button>
       </div>
+      {updateError && (
+        <p role="alert" className="warning">
+          {updateError}
+        </p>
+      )}
       {update && (
         <section>
           <h3>

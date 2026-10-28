@@ -78,6 +78,23 @@ pub fn client(app: &tauri::AppHandle, timeout: Duration) -> Result<reqwest::Clie
     let mut builder = reqwest::Client::builder()
         .timeout(timeout)
         .user_agent(concat!("ZhiNexus/", env!("CARGO_PKG_VERSION")));
+    // rustls-native-certs' Unix probe only knows Termux paths on Android. Load the
+    // actual system/Conscrypt roots without changing TLS or hostname validation.
+    #[cfg(target_os = "android")]
+    for directory in [
+        "/apex/com.android.conscrypt/cacerts",
+        "/system/etc/security/cacerts",
+    ] {
+        if let Ok(entries) = fs::read_dir(directory) {
+            for entry in entries.flatten() {
+                if let Ok(pem) = fs::read(entry.path()) {
+                    if let Ok(certificate) = reqwest::Certificate::from_pem(&pem) {
+                        builder = builder.add_root_certificate(certificate);
+                    }
+                }
+            }
+        }
+    }
     if settings.mode != "system" {
         let mut proxy =
             reqwest::Proxy::all(&settings.url).map_err(|_| "Unable to configure proxy")?;

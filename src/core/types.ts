@@ -41,6 +41,8 @@ export interface Entry {
   title: string;
   content: string;
   summary?: string;
+  /** Soft row/document background chosen from the built-in palette. */
+  color?: import("./entry-colors").EntryColor;
   editorDocument?: { schema: 1; markdown: string; json: Json };
   category: string;
   tags: string[];
@@ -48,6 +50,8 @@ export interface Entry {
   createdAt: string;
   updatedAt: string;
   card: Card;
+  /** Completed review sessions, excluding the implicit initial learning event at creation. */
+  reviewCount?: number;
   deleted?: boolean;
 }
 /** User-controlled taxonomy node; an empty parent denotes a top-level category. */
@@ -60,6 +64,8 @@ export interface Category {
 export interface Message {
   /** Matches a streamed provider stage to its durable assistant response. */
   responseId?: string;
+  /** Namespaces tool receipts per assistant response while preserving earlier committed receipts. */
+  toolReceiptVersion?: 2;
   /** Local orchestration metadata, stripped before requests are sent to the provider. */
   jobId?: string;
   role: "user" | "assistant" | "system" | "tool";
@@ -135,6 +141,15 @@ export interface AIConfig {
 }
 /** Local credentials and device-specific scheduling and notification preferences. */
 export interface DeviceConfig {
+  /** Check and stage updates in the background; Windows installs on a normal safe exit. */
+  autoUpdate?: boolean;
+  /** Local curve display preferences; time panning remains transient. */
+  curveView?: {
+    limit: number;
+    maxRecall: number;
+    past: number;
+    future: number;
+  };
   /** Per-device limit for active AI HTTP generation requests; waiting reviews consume no slot. */
   aiConcurrency?: number;
   /** Remember the full/compact navigation rail on this device. */
@@ -198,5 +213,7 @@ export interface ReviewSession {
   question: Question;
   answer: string;
   grade: Grade | null;
+  /** Learner-confirmed FSRS recall rating, separate from the AI assessment score. */
+  rating?: 1 | 2 | 3 | 4;
   startedAt: string;
 }

@@ -18,6 +18,7 @@ import { ModelsPanel } from "./settings/ModelsPanel";
 import { PromptsPanel } from "./settings/PromptsPanel";
 import { saveFile } from "./settings/shared";
 import { useConfirmation } from "../hooks/useConfirmation";
+import { ReviewPolicyPanel } from "./settings/ReviewPolicyPanel";
 import { LogsPanel } from "./settings/LogsPanel";
 /** Render independent settings panels and reviewable taxonomy/backup confirmations. */
 export function Settings({
@@ -105,6 +106,7 @@ export function Settings({
             {tab === "desktop" && <DesktopPanel />}
             {tab === "notifications" && <NotificationsPanel />}
             {tab === "database" && <DatabasePanel />}
+            {tab === "memory" && <ReviewPolicyPanel />}
             {tab === "about" && <AboutPanel />}
             {tab === "logs" && <LogsPanel />}
             {report && <pre className="report">{report}</pre>}

@@ -52,9 +52,12 @@ export async function traceAI<T>(
     diagnostics.update(id, { level: "info", durationMs: Date.now() - start });
     return result;
   } catch (error) {
+    const prior = diagnostics.getSnapshot().find((row) => row.id === id)?.error;
     diagnostics.update(id, {
       level: "error",
-      error: diagnosticText(error, [...activeSecrets, ...secrets()]),
+      error: [prior, diagnosticText(error, [...activeSecrets, ...secrets()])]
+        .filter(Boolean)
+        .join("\n"),
       durationMs: Date.now() - start,
     });
     throw error;
@@ -63,7 +66,7 @@ export async function traceAI<T>(
   }
 }
 
-/** Capture bounded raw provider text before HTTP/JSON/schema validation, including non-JSON errors. */
+/** Parse provider payloads without retaining raw JSON; failures retain a readable message and status only. */
 export async function diagnosticJson(
   response: Response,
   id: string,
@@ -71,33 +74,86 @@ export async function diagnosticJson(
 ): Promise<unknown> {
   diagnostics.update(id, { status: response.status });
   const text = await boundedText(response);
-  diagnostics.update(id, {
-    status: response.status,
-    response: diagnosticText(text, [
-      ...(requestSecrets.get(id) ?? []),
-      ...secrets(),
-    ]),
-  });
-  if (!response.ok && !allowHTTPError)
-    throw Error(`AI HTTP ${response.status}; 请查看日志 / See logs`);
+  let value: unknown;
   try {
-    return JSON.parse(text);
+    value = JSON.parse(text);
   } catch {
+    const detail = diagnosticText(
+      text.replace(/<[^>]*>/g, " ").slice(0, 2000),
+      [...(requestSecrets.get(id) ?? []), ...secrets()],
+    );
+    diagnostics.update(id, { error: `AI HTTP ${response.status}: ${detail}` });
     throw Error(
-      "AI 返回的内容不是有效 JSON，请查看日志 / Invalid provider JSON; see logs",
+      `AI HTTP ${response.status}: 响应不是有效 JSON / Invalid provider JSON`,
     );
   }
+  if (response.ok && value && typeof value === "object" && "choices" in value) {
+    const choices = (value as { choices?: unknown }).choices;
+    const message = Array.isArray(choices) ? choices[0]?.message : undefined;
+    if (message && typeof message === "object")
+      diagnosticStream(id, response.status, {
+        content: typeof message.content === "string" ? message.content : "",
+        reasoning:
+          typeof message.reasoning_content === "string"
+            ? message.reasoning_content
+            : typeof message.reasoning === "string"
+              ? message.reasoning
+              : "",
+        calls: Array.isArray(message.tool_calls)
+          ? message.tool_calls.filter(
+              (call: import("../core/types").ToolCall) =>
+                call?.function &&
+                typeof call.function.name === "string" &&
+                typeof call.function.arguments === "string",
+            )
+          : [],
+      });
+  }
+  if (!response.ok) {
+    const data = value as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+    };
+    const error =
+      typeof data?.error === "string"
+        ? data.error
+        : (data?.error?.message ??
+          data?.message ??
+          `AI HTTP ${response.status}`);
+    diagnostics.update(id, {
+      error: diagnosticText(error, [
+        ...(requestSecrets.get(id) ?? []),
+        ...secrets(),
+      ]),
+    });
+    if (!allowHTTPError)
+      throw Error(`AI HTTP ${response.status}; 请查看日志 / See logs`);
+  }
+  return value;
 }
-
-/** Record parsed SSE frames with the original request's credential redaction inputs. */
+/** Keep assembled reasoning, text and complete tool arguments, never individual SSE frames. */
 export function diagnosticStream(
   id: string,
   status: number,
-  events: unknown[],
+  output: {
+    content: string;
+    reasoning: string;
+    calls: import("../core/types").ToolCall[];
+  },
 ) {
+  const parts = [
+    output.reasoning ? "思考 / Reasoning:\n" + output.reasoning : "",
+    output.content,
+    output.calls.length
+      ? "工具调用 / Tool calls:\n" +
+        output.calls
+          .map((call) => `${call.function.name}(${call.function.arguments})`)
+          .join("\n")
+      : "",
+  ].filter(Boolean);
   diagnostics.update(id, {
     status,
-    response: diagnosticText(events, [
+    response: diagnosticText(parts.join("\n\n"), [
       ...(requestSecrets.get(id) ?? []),
       ...secrets(),
     ]),

@@ -1,3 +1,5 @@
+import { useKnowledge } from "../common";
+import { reviewTarget, nextReviewAt } from "../../core/review-policy";
 /** Dense, keyboard-accessible taxonomy table with real memory estimates and per-column sorting. */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
@@ -23,10 +25,11 @@ export function KnowledgeTable({
   onOpen: (id: string) => void;
   compact?: boolean;
 }) {
+  const targetRetention = reviewTarget(useKnowledge().docs);
   const t = useT(),
     [collapsed, setCollapsed] = useState<Set<string>>(new Set()),
-    [sort, setSort] = useState("memory"),
-    [ascending, setAscending] = useState(false),
+    [sort, setSort] = useState("review"),
+    [ascending, setAscending] = useState(true),
     [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -45,8 +48,8 @@ export function KnowledgeTable({
           : sort === "created"
             ? a.createdAt.localeCompare(b.createdAt)
             : sort === "review"
-              ? (a.card.last_review?.getTime() ?? 0) -
-                (b.card.last_review?.getTime() ?? 0)
+              ? nextReviewAt(a, targetRetention).getTime() -
+                nextReviewAt(b, targetRetention).getTime()
               : sort === "memory"
                 ? 1 -
                   (retention.get(a.id) ?? 2) -
@@ -65,9 +68,6 @@ export function KnowledgeTable({
           year: "numeric",
           month: "2-digit",
           day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
         })}
       </time>
     ) : (
@@ -80,6 +80,8 @@ export function KnowledgeTable({
       <tr
         key={e.id}
         className="entry-row"
+        data-entry-id={e.id}
+        data-entry-color={e.color ?? "none"}
         role="row"
         aria-level={depth + 1}
         tabIndex={0}
@@ -96,7 +98,6 @@ export function KnowledgeTable({
           style={{ paddingInlineStart: 16 + depth * 18 }}
         >
           <button
-            style={{ color: memoryColor(r) }}
             onClick={(event) => {
               event.stopPropagation();
               onOpen(e.id);
@@ -110,31 +111,23 @@ export function KnowledgeTable({
             <span className="muted">{t("待补充解释", "Add a summary")}</span>
           )}
         </td>
-        <td>{date(e.createdAt)}</td>
-        <td>{date(e.card.last_review)}</td>
+        <td className="entry-created-cell">{date(e.createdAt)}</td>
         <td
-          className="memory-cell"
+          className="next-review-cell"
           style={{ color: memoryColor(r) }}
-          title={
-            r === null
-              ? t(
-                  "首次复习后才有可靠的记忆估计",
-                  "Recall can be estimated after the first review",
-                )
-              : t(
-                  `FSRS 预计记得 ${(r * 100).toFixed(1)}%，遗忘 ${((1 - r) * 100).toFixed(1)}%`,
-                  `FSRS estimated recall ${(r * 100).toFixed(1)}%, forgotten ${((1 - r) * 100).toFixed(1)}%`,
-                )
-          }
+          title={nextReviewAt(e, targetRetention).toLocaleString()}
           data-retention={r ?? "unknown"}
         >
-          <span className="memory-dot" />
-          {r === null
-            ? t("待首次复习", "First review due")
-            : t(
-                `遗忘 ${Math.round((1 - r) * 100)}%`,
-                `${Math.round((1 - r) * 100)}% forgotten`,
-              )}
+          <strong>
+            {(() => {
+              const difference =
+                (nextReviewAt(e, targetRetention).getTime() - now.getTime()) /
+                86400000;
+              const value = Math.round(difference * 100) / 100;
+              return difference < 0 && value === 0 ? -0.01 : value;
+            })()}{" "}
+            {t("天", "days")}
+          </strong>
         </td>
       </tr>
     );
@@ -145,12 +138,13 @@ export function KnowledgeTable({
     return [
       <tr
         className="category-row"
+        data-category-id={branch.id}
         key={"category-" + branch.id}
         role="row"
         aria-level={depth + 1}
         aria-expanded={!closed}
       >
-        <td colSpan={5}>
+        <td colSpan={4}>
           <button
             style={{ paddingInlineStart: 10 + depth * 18 }}
             onClick={() =>
@@ -234,8 +228,7 @@ export function KnowledgeTable({
               <th>{header("title", t("条目标题", "Title"))}</th>
               <th>{t("一句话解释", "One-line explanation")}</th>
               <th>{header("created", t("创建时间", "Created"))}</th>
-              <th>{header("review", t("上次复习", "Last review"))}</th>
-              <th>{header("memory", t("记忆状态", "Memory"))}</th>
+              <th>{header("review", t("下次复习", "Next review"))}</th>
             </tr>
           </thead>
           <tbody>

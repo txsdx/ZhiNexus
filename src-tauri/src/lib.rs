@@ -30,7 +30,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init());
+        .plugin(tauri_plugin_fs::init())
+        .manage(updates::UpdateState::default());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder
@@ -58,6 +59,7 @@ pub fn run() {
         updates::update_identity,
         updates::read_update_manifest,
         updates::install_platform_update,
+        updates::prepare_platform_update,
         paths::storage_configuration,
         storage::prepare_storage,
         storage::recover_storage,
@@ -91,6 +93,7 @@ pub fn run() {
         updates::update_identity,
         updates::read_update_manifest,
         updates::install_platform_update,
+        updates::prepare_platform_update,
         paths::storage_configuration,
         storage::prepare_storage,
         storage::recover_storage,

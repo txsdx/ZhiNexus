@@ -166,7 +166,7 @@ async function testStreaming(page) {
       .locator(".model-list strong")
       .filter({ hasText: "android-stream-model" })
       .waitFor();
-    await page.locator(".sidebar nav button:nth-child(5)").click();
+    await page.locator(".sidebar nav button[data-nav=agent]").click();
     await page
       .getByRole("combobox", { name: "Chat model", exact: true })
       .selectOption("android-stream-model");
@@ -272,7 +272,7 @@ try {
       "Rich blocks were edited on Android.",
     ),
   );
-  await page.locator(".sidebar nav button:nth-child(2)").click();
+  await page.locator(".sidebar nav button[data-nav=library]").click();
   await page.locator(".search-box input").fill("Android native memory");
   await page.locator(".entry-title-cell button").click();
   assert.ok(
@@ -323,7 +323,7 @@ try {
     await connected.page
       .evaluate(() => {
         const button = document.querySelector(
-          ".sidebar nav button:nth-child(2)",
+          ".sidebar nav button[data-nav=library]",
         );
         const bounds = button?.getBoundingClientRect();
         return {

@@ -1,4 +1,6 @@
 /** Searchable knowledge library and a live, local-first learning overview. */
+import { needsReview, reviewTarget } from "../core/review-policy";
+import { useReviewClock } from "../hooks/useReviewClock";
 import { useMemo } from "react";
 import Fuse from "fuse.js";
 import {
@@ -29,7 +31,10 @@ export function Library({
 }) {
   const s = useKnowledge(),
     t = useT();
-  const due = s.entries.filter((e) => e.card.due <= new Date());
+  const now = useReviewClock();
+  const due = s.entries.filter((e) =>
+    needsReview(e, reviewTarget(s.docs), now),
+  );
   const results = useMemo(() => {
     let rows = query.trim()
       ? new Fuse(s.entries, {

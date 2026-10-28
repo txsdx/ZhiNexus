@@ -53,8 +53,8 @@ export function LogsPanel() {
       <h2>{t("日志", "Logs")}</h2>
       <p>
         {t(
-          "记录 AI 请求的提示词、模型、原始响应、耗时和错误。仅保存在本设备，最多保留最近 100 条（总量 4 MiB）；密钥和图片二进制不记录，过长内容会标明截断。导出前请检查是否包含私人学习内容。",
-          "AI prompts, models, raw responses, timing and errors are stored on this device only. Keeps up to 100 recent records (4 MiB). Keys and binary images are excluded; long content is marked as truncated. Review private learning content before sharing an export.",
+          "记录 AI 请求的提示词、模型、拼接后的完整输出、耗时和错误。仅保存在本设备，最多保留最近 100 条（总量 32 MiB）；密钥和图片二进制不记录，过长内容会标明截断。导出前请检查是否包含私人学习内容。",
+          "AI prompts, models, assembled complete output, timing and errors are stored on this device only. Keeps up to 100 recent records (32 MiB). Keys and binary images are excluded; long content is marked as truncated. Review private learning content before sharing an export.",
         )}
       </p>
       {diagnostics.storageError && (
@@ -131,7 +131,7 @@ export function LogsPanel() {
           )}
           {row.response && (
             <>
-              <h3>{t("原始响应", "Raw response")}</h3>
+              <h3>{t("拼接后的完整输出", "Complete output")}</h3>
               <pre>{row.response}</pre>
             </>
           )}

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import assert from "node:assert/strict";
 /** Use normal window switching and the overlay's constrained IPC rather than bypassing its window/token checks. */
 export async function testNativeOcr({ command, script, click, type, waitFor }) {
-  await click(".sidebar nav button:first-child");
+  await click(".sidebar nav button[data-nav=home]");
   const main = await command("GET", "/window");
   const start = await command("POST", "/execute/async", {
     script:

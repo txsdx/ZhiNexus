@@ -1,4 +1,7 @@
+import { reviewTarget, nextReviewAt } from "../core/review-policy";
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
+import { CategoryPicker } from "../components/CategoryPicker";
+import { moveEntry } from "../services/categories";
 import { diagnostics } from "../services/diagnostics";
 import { useEntryDocument } from "../hooks/useEntryDocument";
 import { useConfirmation } from "../hooks/useConfirmation";
@@ -6,9 +9,10 @@ import { BlockEditor } from "../components/editor/BlockEditor";
 import { DocumentOutline } from "../components/editor/DocumentOutline";
 import { documentBlocks } from "../components/editor/document";
 import { RevisionDiff } from "../components/RevisionDiff";
-import { useState, type ChangeEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type ChangeEvent } from "react";
 import {
   ArrowLeft,
+  X,
   Edit3,
   History,
   ImagePlus,
@@ -24,18 +28,21 @@ import { store } from "../core/store";
 import { renderPrompt } from "../services/ai";
 import { submitAIJob } from "../services/ai-jobs";
 import { json } from "../core/store";
+const EntryAgent = lazy(() =>
+  import("./Agent").then((m) => ({ default: m.Agent })),
+);
 /** Render and edit one entry; save only changed fields so concurrent category changes are preserved. */
 export function EntryPage({
   id,
+  chatRequest,
   active = true,
   onBack,
-  onChat,
   notify,
 }: {
   id: string;
+  chatRequest?: { topicId?: string; nonce: number; open?: boolean };
   active?: boolean;
   onBack: () => void;
-  onChat: (id: string, quote?: string) => void;
   notify: (s: string) => void;
 }) {
   const s = useKnowledge(),
@@ -67,6 +74,48 @@ export function EntryPage({
     appendImage,
     locate,
   } = useEntryDocument(id, entry, notify);
+  const [chatOpen, setChatOpen] = useState(false),
+    [chatQuote, setChatQuote] = useState(""),
+    [chatTopic, setChatTopic] = useState("");
+  const openChat = (quote = "") => {
+    setChatQuote(quote);
+    setChatOpen(true);
+  };
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          entryId: string;
+          quote?: string;
+          topicId?: string;
+        }>
+      ).detail;
+      if (detail.entryId === id) {
+        setChatTopic(detail.topicId ?? "");
+        openChat(detail.quote);
+      }
+    };
+    window.addEventListener("zhinexus:entry-chat", receive);
+    return () => window.removeEventListener("zhinexus:entry-chat", receive);
+  }, [id]);
+  useEffect(() => {
+    if (chatRequest) {
+      setChatTopic(chatRequest.topicId ?? "");
+      setChatOpen(chatRequest.open !== false);
+    }
+  }, [chatRequest]);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ entryId: string; selector?: string }>
+      ).detail;
+      if (detail.entryId === id && detail.selector?.includes("data-blockid"))
+        setFocusId(null);
+    };
+    window.addEventListener("zhinexus:restore-position", receive);
+    return () =>
+      window.removeEventListener("zhinexus:restore-position", receive);
+  }, [id]);
   const [history, setHistory] = useState(false),
     [busy, setBusy] = useState(""),
     [imagePrompt, setImagePrompt] = useState<string | null>(null),
@@ -110,7 +159,11 @@ export function EntryPage({
     appendImage(hash, file.name.replace(/[\[\]\n]/g, ""));
   };
   return (
-    <div className="page entry-page">
+    <div
+      className={"page entry-page" + (chatOpen ? " with-entry-chat" : "")}
+      data-entry-id={id}
+      data-entry-color={entry.color ?? "none"}
+    >
       <button
         className="back"
         onClick={() => {
@@ -141,7 +194,7 @@ export function EntryPage({
             <button
               title={t("与当前词条对话", "Chat about this entry")}
               disabled={saving}
-              onClick={() => onChat(id)}
+              onClick={() => setChatOpen((value) => !value)}
             >
               <MessageSquare size={16} />
               {t("AI 对话", "AI chat")}
@@ -170,84 +223,117 @@ export function EntryPage({
             ) : (
               <h1>{entry.title}</h1>
             )}
-            <p className="entry-timestamps">
-              <span>
-                {t("创建于", "Created")}{" "}
-                <time dateTime={entry.createdAt}>
-                  {new Date(entry.createdAt).toLocaleDateString()}
-                </time>
-              </span>
-              <span>
-                {t("最近更新", "Updated")}{" "}
-                <time dateTime={entry.updatedAt}>
-                  {new Date(entry.updatedAt).toLocaleString()}
-                </time>
-              </span>
-            </p>
+            <div className="entry-facts">
+              <p className="entry-timestamps">
+                <span>
+                  {t("创建于", "Created")}{" "}
+                  <time dateTime={entry.createdAt}>
+                    {new Date(entry.createdAt).toLocaleDateString()}
+                  </time>
+                </span>
+                <span>
+                  {t("最近更新", "Updated")}{" "}
+                  <time dateTime={entry.updatedAt}>
+                    {new Date(entry.updatedAt).toLocaleString()}
+                  </time>
+                </span>
+              </p>
+              <p className="entry-review-facts">
+                <span>
+                  {t("复习次数", "Reviews")}:{" "}
+                  {entry.reviewCount ?? entry.card.reps}
+                </span>
+                <span>
+                  {t("下次复习", "Next review")}:{" "}
+                  <time
+                    dateTime={nextReviewAt(
+                      entry,
+                      reviewTarget(s.docs),
+                    ).toISOString()}
+                  >
+                    {nextReviewAt(entry, reviewTarget(s.docs)).toLocaleString()}
+                  </time>
+                </span>
+              </p>
+            </div>
           </div>
-          <section
-            className="entry-meta"
-            aria-label={t("词条信息", "Entry details")}
-          >
-            <label>
-              {t("所属分类", "Category")}
-              <select
-                value={entry.category}
-                onChange={(e) =>
-                  void store.patch("entry", id, { category: e.target.value })
-                }
-              >
-                <option value="">{t("未分类", "Uncategorized")}</option>
-                {s.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("标签（逗号分隔）", "Tags (comma separated)")}
-              <input
-                defaultValue={entry.tags.join(", ")}
-                key={entry.id + entry.tags.join(",")}
-                onBlur={(e) =>
-                  void store.patch("entry", id, {
-                    tags: json(
-                      e.target.value
-                        .split(/[,，]/)
-                        .map((x) => x.trim())
-                        .filter(Boolean),
-                    ),
-                  })
-                }
-              />
-            </label>
-            <p>
-              {t("复习次数", "Reviews")}: {entry.card.reps}
-              <br />
-              {t("下次复习", "Next review")}: {entry.card.due.toLocaleString()}
-            </p>
-            <button
-              className="danger full"
-              onClick={() => {
-                void confirmation.request(
-                  t(
-                    "删除此条目？日志将保留，可在数据库管理中恢复。",
-                    "Delete this entry? Its history remains recoverable.",
-                  ),
-                  async () => {
-                    await store.patch("entry", id, { deleted: true });
-                    onBack();
-                  },
-                );
-              }}
+          {editing && (
+            <section
+              className="entry-meta"
+              aria-label={t("词条信息", "Entry details")}
             >
-              <Trash2 size={15} />
-              {t("删除词条", "Delete entry")}
-            </button>
-          </section>
+              <label>
+                {t("所属分类", "Category")}
+                <CategoryPicker
+                  value={entry.category}
+                  onChange={(category) => moveEntry(id, category)}
+                />
+              </label>
+              <label>
+                {t("标签（逗号分隔）", "Tags (comma separated)")}
+                <input
+                  defaultValue={entry.tags.join(", ")}
+                  key={entry.id + entry.tags.join(",")}
+                  onBlur={(e) =>
+                    void store.patch("entry", id, {
+                      tags: json(
+                        e.target.value
+                          .split(/[,，]/)
+                          .map((x) => x.trim())
+                          .filter(Boolean),
+                      ),
+                    })
+                  }
+                />
+              </label>
+              <button
+                className="danger full"
+                onClick={() => {
+                  void confirmation.request(
+                    t(
+                      "删除此条目？日志将保留，可在数据库管理中恢复。",
+                      "Delete this entry? Its history remains recoverable.",
+                    ),
+                    async () => {
+                      await store.patch("entry", id, { deleted: true });
+                      onBack();
+                    },
+                  );
+                }}
+              >
+                <Trash2 size={15} />
+                {t("删除词条", "Delete entry")}
+              </button>
+            </section>
+          )}
         </div>
       </div>
+      {chatOpen && (
+        <aside
+          className="entry-chat-panel"
+          aria-label={t("词条 AI 侧栏", "Entry AI sidebar")}
+        >
+          <header>
+            <strong>{t("词条 AI 对话", "Entry AI chat")}</strong>
+            <button
+              className="icon"
+              aria-label={t("关闭 AI 侧栏", "Close AI sidebar")}
+              onClick={() => setChatOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          </header>
+          <Suspense fallback={<p>{t("加载对话…", "Loading chat…")}</p>}>
+            <EntryAgent
+              entryId={id}
+              initialTopic={chatTopic}
+              quote={chatQuote}
+              embedded
+              notify={notify}
+            />
+          </Suspense>
+        </aside>
+      )}
       {Object.keys(doc?.conflicts ?? {}).length > 0 && (
         <div className="warning">
           {t(
@@ -401,7 +487,7 @@ export function EntryPage({
               document={document}
               editable={editing && !saving}
               focus={focus}
-              onChat={(text) => onChat(id, text)}
+              onChat={(text) => openChat(text)}
               onFeedback={notify}
               onAnnotate={(json, markdown) => {
                 if (!editing)

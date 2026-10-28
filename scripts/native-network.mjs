@@ -147,7 +147,7 @@ export async function testNativeNetwork({ click, type, script, waitFor }) {
       "Model catalog must show the raw ID instead of the provider display name",
     );
     assert.equal(requests, 1);
-    await click(".sidebar nav button:nth-child(5)");
+    await click(".sidebar nav button[data-nav=agent]");
     await waitFor(() =>
       script('return !!document.querySelector(".chat-model select")'),
     );

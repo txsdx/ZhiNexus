@@ -1,65 +1,86 @@
-/** Platform-specific version and update controls backed by the shared GitHub Release manifest. */
-import { useState, useEffect } from "react";
+/** Shared automatic-update status and device-local preferences; downloads survive route changes and restart. */
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { RefreshCw, Download } from "lucide-react";
 import { native } from "../../core/database";
-import {
-  checkUpdates,
-  applyUpdate,
-  type UpdateInfo,
-} from "../../services/updates";
+import { autoUpdates, installReadyUpdate } from "../../services/auto-updates";
 import { Markdown } from "../../components/Markdown";
 import { useSettings } from "./context";
 import versions from "../../../versions.json";
-import { useConfirmation } from "../../hooks/useConfirmation";
-/** Show only the running platform's patch changes; installers retain normal operating-system consent prompts. */
+/** Show the same background task as the shell; system-required installation consent is preserved. */
 export function AboutPanel() {
-  const { t, busy, act, notify } = useSettings(),
-    [update, setUpdate] = useState<UpdateInfo | null>(null),
-    [updateError, setUpdateError] = useState(""),
-    [current, setCurrent] = useState(versions.platforms.windows);
-  const confirmation = useConfirmation(notify, {
-    title: t("确认更新", "Confirm update"),
-    confirmLabel: t("下载并安装", "Download and install"),
-  });
+  const { t, act, notify, device, setDevice } = useSettings();
+  const state = useSyncExternalStore(
+    autoUpdates.subscribe,
+    autoUpdates.getSnapshot,
+  );
+  const [current, setCurrent] = useState(versions.platforms.windows);
+  const working = ["checking", "downloading", "installing"].includes(
+    state.phase,
+  );
   useEffect(() => {
     if (native)
       void import("@tauri-apps/api/core")
         .then(({ invoke }) => invoke<{ version: string }>("update_identity"))
-        .then((r) => setCurrent(r.version));
+        .then((r) => setCurrent(r.version))
+        .catch((error) => notify(String(error)));
   }, []);
+  const labels = {
+    idle: t("等待检查", "Waiting to check"),
+    checking: t("正在后台检查更新…", "Checking in the background…"),
+    downloading: t(
+      "正在后台下载并校验…",
+      "Downloading and verifying in the background…",
+    ),
+    ready:
+      state.update?.kind === "setup" || state.update?.kind === "portable"
+        ? t(
+            "更新已就绪，正常退出时自动安装",
+            "Update ready; installs on normal exit",
+          )
+        : t(
+            "更新已就绪，等待系统安装授权",
+            "Update ready; OS installation approval required",
+          ),
+    installing: t("正在启动安装…", "Starting installation…"),
+    current: t(
+      "此平台已是最新版本，或尚无可用产物",
+      "Already current, or no artifact is published",
+    ),
+    error: t("更新未完成，可重试", "Update incomplete; retry available"),
+  };
   return (
     <>
       <img className="about-icon" src="/app-icon.png" alt="ZhiNexus" />
       <h2>知枢 · ZhiNexus</h2>
       <p>{current}</p>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={device.autoUpdate !== false}
+          onChange={(e) =>
+            setDevice({ ...device, autoUpdate: e.target.checked })
+          }
+        />
+        {t(
+          "自动检查并后台下载更新",
+          "Automatically check and download updates",
+        )}
+      </label>
+      <p role="status" data-update-phase={state.phase}>
+        {state.phase === "ready" && device.autoUpdate === false
+          ? t(
+              "更新已就绪，可手动安装",
+              "Update ready; manual installation available",
+            )
+          : labels[state.phase]}
+      </p>
       <div className="actions">
         <button
-          disabled={!!busy}
+          disabled={working}
           onClick={() =>
-            void act(t("读取更新信息…", "Checking updates…"), async () => {
-              setUpdateError("");
-              let info: UpdateInfo | null;
-              try {
-                info = await checkUpdates();
-              } catch (error) {
-                setUpdateError(
-                  error instanceof Error ? error.message : String(error),
-                );
-                throw error;
-              }
-              setUpdate(info);
-              notify(
-                info?.available
-                  ? t(
-                      "发现此平台的新版本",
-                      "A new version is available for this platform",
-                    )
-                  : t(
-                      "此平台已是最新版本，或尚无可用产物",
-                      "Already current, or no artifact is published for this platform",
-                    ),
-              );
-            })
+            void act(t("读取更新信息…", "Checking updates…"), () =>
+              autoUpdates.check().then(() => {}),
+            )
           }
         >
           <RefreshCw size={16} />
@@ -67,47 +88,32 @@ export function AboutPanel() {
         </button>
         <button
           className="primary"
-          disabled={!!busy || !native || !update?.available}
-          onClick={() => {
-            if (!update) return;
-            void confirmation.request(
-              t(
-                "下载并校验更新，然后打开安装程序？系统可能要求确认权限。",
-                "Download and verify the update, then open its installer? The OS may require consent.",
-              ),
-              async () => {
-                await act(
-                  t("下载并校验…", "Downloading and verifying…"),
-                  async () => {
-                    await applyUpdate(update);
-                    notify(t("已启动更新安装程序", "Update installer started"));
-                  },
-                );
-              },
-            );
-          }}
+          disabled={!native || state.phase !== "ready"}
+          onClick={() =>
+            void act(t("安装更新…", "Installing update…"), installReadyUpdate)
+          }
         >
           <Download size={16} />
-          {t("一键更新", "Update now")}
+          {t("立即安装更新", "Install update now")}
         </button>
       </div>
-      {updateError && (
+      {state.error && (
         <p role="alert" className="warning">
-          {updateError}
+          {state.error}
         </p>
       )}
-      {update && (
+      {state.update && (
         <section>
           <h3>
-            {update.current} → {update.version}
+            {state.update.current} → {state.update.version}
           </h3>
-          <Markdown>{update.notes}</Markdown>
+          <Markdown>{state.update.notes}</Markdown>
         </section>
       )}
       <p className="muted">
         {t(
-          "所有产物必须通过 HTTPS 来源与 SHA-256 校验；配置发布者公钥时还强制验证签名。安装版 Windows、Android 和 Ubuntu 会打开系统安装程序，便携版 Windows 会安全替换自身并重启。",
-          "All artifacts require trusted HTTPS and SHA-256 verification; publisher signatures are enforced when a key is configured. Installed Windows, Android and Ubuntu builds open their OS installer. Windows portable builds replace themselves and restart.",
+          "启动后自动检查，联网后重试；后台下载经过摘要和已配置的发布者签名校验。Windows 正常退出时安装，不打断编辑；Android 和 Ubuntu 安装仍需系统授权。",
+          "Checks after startup and retries when online. Background downloads require digest and configured publisher-signature verification. Windows installs on normal exit without interrupting editing; Android and Ubuntu require OS installation approval.",
         )}
       </p>
       <a
@@ -117,7 +123,6 @@ export function AboutPanel() {
       >
         GitHub ↗
       </a>
-      {confirmation.dialog}
     </>
   );
 }

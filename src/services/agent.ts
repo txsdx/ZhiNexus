@@ -1,4 +1,5 @@
 /** Bounded, persisted agent tool loop with explicit confirmation for writes and external MCP execution. */
+import { entryWorkspace } from "../core/workspace";
 import { sha256 } from "../core/crypto";
 import { diagnostics } from "./diagnostics";
 import { executeKnowledgeTool, knowledgeTools } from "./agent-tools";
@@ -91,9 +92,23 @@ async function chatInternal(
     }
     const execute = async (
       call: import("../core/types").ToolCall,
+      scope?: string,
     ): Promise<unknown> => {
       orchestration?.context.check();
-      const receipt = "tool-" + (await sha256([topic.id, call.id]));
+      const legacyReceipt = "tool-" + (await sha256([topic.id, call.id]));
+      const receipt = scope
+        ? "tool-" + (await sha256([topic.id, scope, call.id]))
+        : legacyReceipt;
+      const legacyPending =
+        scope &&
+        store
+          .getSnapshot()
+          .docs.some(
+            (d) =>
+              d.collection === "setting" &&
+              d.id === legacyReceipt &&
+              d.fields.status === "pending",
+          );
       const saved = store
         .getSnapshot()
         .docs.find((d) => d.collection === "setting" && d.id === receipt);
@@ -107,8 +122,15 @@ async function chatInternal(
             args,
             receipt,
             confirm,
+            () =>
+              !orchestration?.context.signal.aborted &&
+              store.getSnapshot().topics.some((t) => t.id === topic.id),
           );
-        if (remote.readOnly && saved?.fields.status !== "pending") {
+        if (
+          remote.readOnly &&
+          saved?.fields.status !== "pending" &&
+          !legacyPending
+        ) {
           orchestration?.context.check();
           return await remote.client.callTool({
             name: remote.name,
@@ -116,7 +138,7 @@ async function chatInternal(
           });
         }
         const prefix =
-          saved?.fields.status === "pending"
+          saved?.fields.status === "pending" || legacyPending
             ? "上次执行结果未知，重新执行可能重复操作。确认重试 / Previous result unknown; retry may repeat the action.\n"
             : "";
         if (
@@ -171,7 +193,14 @@ async function chatInternal(
           messages.splice(insertion++, 0, {
             role: "tool",
             tool_call_id: call.id,
-            content: JSON.stringify(await execute(call)).slice(0, 40000),
+            content: JSON.stringify(
+              await execute(
+                call,
+                message.toolReceiptVersion === 2
+                  ? message.responseId
+                  : undefined,
+              ),
+            ).slice(0, 40000),
           });
           await persist();
         }
@@ -180,7 +209,7 @@ async function chatInternal(
       role: "system",
       content: renderPrompt(s.ai.tasks.agent.prompt, {
         content: entry
-          ? entry.title + "\n" + entry.content
+          ? `词条ID：${entry.id}\n${entryWorkspace.getSnapshot().drafts[entry.id]?.editing ? entryWorkspace.getSnapshot().drafts[entry.id].title : entry.title}\n${entryWorkspace.getSnapshot().drafts[entry.id]?.editing ? entryWorkspace.getSnapshot().drafts[entry.id].content : entry.content}\n当前正文可能包含未保存草稿。帮助编辑解释优先调用 edit_explanation，经用户审阅后更新草稿，用户保存后写入知识。`
           : "当前在全局学习助手中。",
       }),
     };
@@ -207,6 +236,7 @@ async function chatInternal(
       messages.push({
         role: "assistant",
         responseId,
+        toolReceiptVersion: 2,
         ...(orchestration ? { jobId: orchestration.jobId } : {}),
         content: response.content,
         ...(response.calls.length ? { tool_calls: response.calls } : {}),
@@ -216,7 +246,10 @@ async function chatInternal(
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: JSON.stringify(await execute(call)).slice(0, 40000),
+          content: JSON.stringify(await execute(call, responseId)).slice(
+            0,
+            40000,
+          ),
         });
         await persist();
       }

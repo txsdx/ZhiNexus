@@ -23,7 +23,7 @@ async function configure(page: Page) {
   );
 }
 
-test("null tool_calls no longer breaks enrichment; logs retain prompts, raw responses and errors after reload without secrets", async ({
+test("null tool_calls no longer breaks enrichment; logs retain prompts, assembled output and errors after reload without secrets", async ({
   page,
 }) => {
   let failure = false;
@@ -91,7 +91,8 @@ test("null tool_calls no longer breaks enrichment; logs retain prompts, raw resp
     .filter({ hasText: "AI explain" });
   await explanation.locator("summary").click();
   await expect(explanation).toContainText("必须保留的原始材料");
-  await expect(explanation).toContainText('"tool_calls": null');
+  await expect(explanation).toContainText("自动整理已经成功");
+  await expect(explanation).not.toContainText('"tool_calls": null');
   await expect(explanation).toContainText("raw-fixture");
   failure = true;
   await page.evaluate(async () => {
@@ -130,9 +131,10 @@ test("null tool_calls no longer breaks enrichment; logs retain prompts, raw resp
   expect(contents).not.toContain("log-api-key-sentinel");
   expect(
     JSON.parse(contents).some((r: { response?: string }) =>
-      r.response?.includes('"tool_calls": null'),
+      r.response?.includes("自动整理已经成功"),
     ),
   ).toBe(true);
+  expect(contents).not.toContain('\\"tool_calls\\": null');
   await page.getByRole("button", { name: "清空日志", exact: true }).click();
   await page
     .getByRole("dialog", { name: "确认清空日志" })

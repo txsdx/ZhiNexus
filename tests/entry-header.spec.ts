@@ -24,21 +24,18 @@ async function openEntry(page: import("@playwright/test").Page, title: string) {
   await expect(page.locator(".entry-heading")).toBeVisible();
 }
 
-test("entry metadata shares the title row and actions stay together without overflowing smaller screens", async ({
+test("reading keeps a full-width long title and aligned facts; property editing reuses the picker without overflow", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/");
   await seed(page);
   await openEntry(page, "安全过滤器");
-  for (const width of [1920, 1440]) {
-    await page.setViewportSize({ width, height: 1080 });
-    const title = await page.locator(".entry-heading h1").boundingBox(),
-      meta = await page.locator(".entry-meta").boundingBox();
-    expect(meta!.x).toBeGreaterThan(title!.x + title!.width);
-    expect(meta!.y).toBeLessThan(title!.y + title!.height);
-    expect(meta!.y + meta!.height).toBeGreaterThan(title!.y);
-  }
+  await expect(page.locator(".entry-meta")).toHaveCount(0);
+  const title = await page.locator(".entry-heading h1").boundingBox();
+  const facts = await page.locator(".entry-review-facts").boundingBox();
+  expect(title!.width).toBeGreaterThan(900);
+  expect(facts!.x).toBeGreaterThan(title!.x);
   const times = page.locator(".entry-timestamps > span");
   await expect(times.nth(0)).toContainText("创建于");
   await expect(times.nth(1)).toContainText("最近更新");
@@ -52,11 +49,10 @@ test("entry metadata shares the title row and actions stay together without over
       .getByRole("button", { name: "AI 对话", exact: true })
       .boundingBox();
   expect(Math.abs(edit!.y - chat!.y)).toBeLessThan(1);
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
   await expect(
-    page
-      .getByRole("region", { name: "词条信息", exact: true })
-      .getByLabel("所属分类"),
-  ).toHaveValue("controls");
+    page.getByRole("button", { name: "选择所属分类" }),
+  ).toContainText("机器人安全与控制");
   await expect(
     page.locator(".entry-meta").getByLabel("标签（逗号分隔）"),
   ).toHaveValue("控制, 安全");
@@ -100,7 +96,7 @@ test("entry AI button opens its own history and provider context, while returnin
     .locator(".entry-heading .title-input")
     .fill("安全过滤器（本机草稿）");
   await page.getByRole("button", { name: "AI 对话", exact: true }).click();
-  await expect(page.locator(".topic-title")).toHaveText("过滤器讨论");
+  await expect(page.locator(".chat-thread-header h1")).toHaveText("过滤器讨论");
   await expect(page.locator(".messages")).toContainText("A 专属记录");
   await expect(page.locator(".messages")).not.toContainText("B 专属记录");
   await expect(page.locator(".messages")).not.toContainText("全局记录");
@@ -117,9 +113,7 @@ test("entry AI button opens its own history and provider context, while returnin
       ),
     )
     .toBe("已结合当前词条");
-  await page
-    .getByRole("button", { name: "返回词条：安全过滤器", exact: true })
-    .click();
+  await page.getByRole("button", { name: "关闭 AI 侧栏", exact: true }).click();
   await expect(page.locator(".entry-heading .title-input")).toHaveValue(
     "安全过滤器（本机草稿）",
   );
@@ -131,11 +125,11 @@ test("entry AI button opens its own history and provider context, while returnin
   ).toBe("安全过滤器");
   await openEntry(page, "概率模型");
   await page.getByRole("button", { name: "AI 对话", exact: true }).click();
-  await expect(page.locator(".topic-title")).toHaveText("概率讨论");
+  await expect(page.locator(".chat-thread-header h1")).toHaveText("概率讨论");
   await expect(page.locator(".messages")).toContainText("B 专属记录");
   await expect(page.locator(".messages")).not.toContainText("A 专属记录");
   await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
-  await expect(page.locator(".topic-title")).toHaveText("全局讨论");
+  await expect(page.locator(".chat-thread-header h1")).toHaveText("全局讨论");
   await expect(page.locator(".messages")).toContainText("全局记录");
   expect(
     await repository(

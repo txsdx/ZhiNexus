@@ -103,6 +103,7 @@ async function type(selector, text, normalizedValues = []) {
 }
 /** Start a Tauri process and wait for the SQLite-backed workspace. */
 async function start() {
+  const startupBegan = Date.now();
   await waitFor(async () => {
     const r = await fetch(base + "/status");
     return (await r.json()).value.ready;
@@ -140,6 +141,22 @@ async function start() {
   session = data.sessionId;
   await waitFor(() => script('return !!document.querySelector(".app-shell")'));
   assert.equal(await script("return !!window.__TAURI_INTERNALS__"), true);
+  const timings = await waitFor(() =>
+    script(
+      'const marks=performance.getEntriesByType("mark").filter(m=>m.name.startsWith("zhinexus:"));return marks.some(m=>m.name==="zhinexus:first-frame")?Object.fromEntries(marks.map(m=>[m.name,Math.round(m.startTime)])):false;',
+    ),
+  );
+  const result = {
+    mode: fs.existsSync(marker) ? "portable" : "system",
+    driverAndStartupMs: Date.now() - startupBegan,
+    frontendMarksMs: timings,
+  };
+  fs.mkdirSync("native-test-results", { recursive: true });
+  fs.appendFileSync(
+    "native-test-results/startup-timings.jsonl",
+    JSON.stringify(result) + "\n",
+  );
+  console.log("Native startup phases:", JSON.stringify(result));
   await waitFor(() => script('return document.fonts.status === "loaded"'));
   // Native window fitting and offline font loading must settle before coordinate-based clicks.
   await new Promise((resolve) => setTimeout(resolve, 500));
@@ -402,7 +419,7 @@ try {
     fs.writeFileSync(file, damaged);
   }
   await start();
-  await click(".sidebar nav button:nth-child(2)");
+  await click(".sidebar nav button[data-nav=library]");
   await type(".search-box input", freshTitle);
   await waitFor(() =>
     script(

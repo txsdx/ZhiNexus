@@ -1,12 +1,15 @@
 /** Editable knowledge graph using React Flow; relationships and node positions are replicated documents. */
 import dagre from "@dagrejs/dagre";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { copyText } from "../services/clipboard";
+import { openContextMenu } from "../services/context-menu";
+import { entryColors } from "../core/entry-colors";
 import { useConfirmation } from "../hooks/useConfirmation";
 import {
   ReactFlow,
   Background,
-  Controls,
   MiniMap,
+  type ReactFlowInstance,
   useNodesState,
   useEdgesState,
   type Node,
@@ -17,10 +20,18 @@ import "@xyflow/react/dist/style.css";
 import { useKnowledge, useT } from "../components/common";
 import { store, json } from "../core/store";
 /** Build stable graph projections; connect handles to create links and delete selected links to remove them. */
-export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
+export function Graph({
+  onOpen,
+  onCreate,
+}: {
+  onOpen: (id: string) => void;
+  onCreate?: () => void;
+}) {
   const s = useKnowledge(),
     t = useT();
   const [error, setError] = useState("");
+  const [minimap, setMinimap] = useState(false),
+    flow = useRef<ReactFlowInstance | null>(null);
   const confirmation = useConfirmation(setError);
   const positions =
     s.docs.find((d) => d.collection === "setting" && d.id === "graph")
@@ -39,7 +50,10 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
           borderRadius: 14,
           padding: 15,
           border: "1px solid #bcb5ed",
-          background: "var(--surface)",
+          background:
+            e.color && e.color !== "none"
+              ? `var(--entry-${e.color})`
+              : "var(--surface)",
           color: "var(--text)",
         },
       })),
@@ -74,47 +88,189 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
         label: "related",
       });
   };
+  const arrange = async () => {
+    const graph = new dagre.graphlib.Graph()
+      .setGraph({ rankdir: "LR", nodesep: 70, ranksep: 110 })
+      .setDefaultEdgeLabel(() => ({}));
+    for (const n of nodes) graph.setNode(n.id, { width: 190, height: 65 });
+    for (const e of edges) graph.setEdge(e.source, e.target);
+    dagre.layout(graph);
+    await store.patch(
+      "setting",
+      "graph",
+      Object.fromEntries(
+        nodes.map((n) => {
+          const p = graph.node(n.id);
+          return [n.id, json({ x: p.x - 95, y: p.y - 32.5 })];
+        }),
+      ),
+      "graph-auto-layout",
+    );
+    await flow.current?.fitView({ duration: 0, padding: 0.15 });
+  };
   return (
     <div className="page graph-page">
-      <div className="page-heading">
-        <div>
-          <h1>{t("知识星图", "Knowledge graph")}</h1>
-          <p>
-            {t(
-              "拖动节点整理布局，连接圆点建立关系。双击打开词条，选中连线后按 Delete 删除。",
-              "Drag to arrange. Connect handles to create links. Double-click to open; select an edge and Delete to remove.",
-            )}
-          </p>
-        </div>
-      </div>
-      <button
-        className="primary"
-        onClick={() => {
-          const graph = new dagre.graphlib.Graph()
-            .setGraph({ rankdir: "LR", nodesep: 70, ranksep: 110 })
-            .setDefaultEdgeLabel(() => ({}));
-          for (const n of nodes)
-            graph.setNode(n.id, { width: 190, height: 65 });
-          for (const e of edges) graph.setEdge(e.source, e.target);
-          dagre.layout(graph);
-          void store.patch(
-            "setting",
-            "graph",
-            Object.fromEntries(
-              nodes.map((n) => {
-                const p = graph.node(n.id);
-                return [n.id, json({ x: p.x - 95, y: p.y - 32.5 })];
-              }),
-            ),
-            "graph-auto-layout",
-          );
-        }}
-      >
-        {t("自动整理布局", "Arrange automatically")}
-      </button>
       {error && <p role="alert">{error}</p>}
       <div className="graph-canvas">
         <ReactFlow
+          onInit={(instance) => {
+            flow.current = instance;
+          }}
+          onPaneContextMenu={(event) =>
+            openContextMenu(
+              "nativeEvent" in event ? event.nativeEvent : event,
+              [
+                {
+                  label: t("自动整理布局", "Arrange automatically"),
+                  run: arrange,
+                },
+                {
+                  label: t("适应窗口", "Fit view"),
+                  run: async () => {
+                    await flow.current?.fitView({ duration: 0, padding: 0.15 });
+                  },
+                },
+                {
+                  label: t("放大", "Zoom in"),
+                  run: async () => {
+                    await flow.current?.zoomIn({ duration: 0 });
+                  },
+                },
+                {
+                  label: t("缩小", "Zoom out"),
+                  run: async () => {
+                    await flow.current?.zoomOut({ duration: 0 });
+                  },
+                },
+                {
+                  label: t("全选节点", "Select all nodes"),
+                  run: () =>
+                    setNodes((nodes) =>
+                      nodes.map((n) => ({ ...n, selected: true })),
+                    ),
+                },
+                {
+                  label: t("取消选择", "Clear selection"),
+                  run: () => {
+                    setNodes((nodes) =>
+                      nodes.map((n) => ({ ...n, selected: false })),
+                    );
+                    setEdges((edges) =>
+                      edges.map((e) => ({ ...e, selected: false })),
+                    );
+                  },
+                },
+                {
+                  label: t(
+                    minimap ? "隐藏缩略图" : "显示缩略图",
+                    minimap ? "Hide minimap" : "Show minimap",
+                  ),
+                  run: () => setMinimap((value) => !value),
+                },
+                {
+                  label: t("新建词条", "New entry"),
+                  disabled: !onCreate,
+                  run: onCreate,
+                },
+              ],
+            )
+          }
+          onNodeContextMenu={(event, node) => {
+            const entry = s.entries.find((e) => e.id === node.id);
+            if (!entry) return;
+            openContextMenu(
+              "nativeEvent" in event ? event.nativeEvent : event,
+              [
+                {
+                  label: t("打开词条", "Open entry"),
+                  run: () => onOpen(node.id),
+                },
+                {
+                  label: t("复制标题", "Copy title"),
+                  run: () => copyText(entry.title),
+                },
+                {
+                  label: t("复制 Markdown", "Copy Markdown"),
+                  run: () => copyText(entry.content),
+                },
+                {
+                  label: t("聚焦此节点", "Center node"),
+                  run: async () => {
+                    await flow.current?.fitView({
+                      nodes: [node],
+                      duration: 0,
+                      padding: 0.5,
+                    });
+                  },
+                },
+                {
+                  label: t("背景颜色", "Background color"),
+                  children: entryColors.map((color, index) => ({
+                    label: t(
+                      ["默认", "浅红", "浅绿", "浅蓝", "浅黄", "浅紫"][index],
+                      [
+                        "Default",
+                        "Soft red",
+                        "Soft green",
+                        "Soft blue",
+                        "Soft yellow",
+                        "Soft purple",
+                      ][index],
+                    ),
+                    color,
+                    run: () =>
+                      store.patch("entry", entry.id, {
+                        color,
+                        updatedAt: new Date().toISOString(),
+                      }),
+                  })),
+                },
+                {
+                  label: t("删除词条", "Delete entry"),
+                  danger: true,
+                  run: () =>
+                    confirmation.request(
+                      t(
+                        `删除词条「${entry.title}」？`,
+                        `Delete “${entry.title}”?`,
+                      ),
+                      () => store.patch("entry", entry.id, { deleted: true }),
+                    ),
+                },
+              ],
+            );
+          }}
+          onEdgeContextMenu={(event, edge) =>
+            openContextMenu(
+              "nativeEvent" in event ? event.nativeEvent : event,
+              [
+                {
+                  label: t("复制关系", "Copy relationship"),
+                  run: () =>
+                    copyText(
+                      `${s.entries.find((e) => e.id === edge.source)?.title} → ${s.entries.find((e) => e.id === edge.target)?.title}`,
+                    ),
+                },
+                {
+                  label: t("打开起点词条", "Open source entry"),
+                  run: () => onOpen(edge.source),
+                },
+                {
+                  label: t("打开终点词条", "Open target entry"),
+                  run: () => onOpen(edge.target),
+                },
+                {
+                  label: t("删除关系", "Delete relationship"),
+                  danger: true,
+                  run: () =>
+                    confirmation.request(
+                      t("删除此知识关系？", "Delete this relationship?"),
+                      () => store.patch("edge", edge.id, { deleted: true }),
+                    ),
+                },
+              ],
+            )
+          }
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
@@ -147,8 +303,7 @@ export function Graph({ onOpen }: { onOpen: (id: string) => void }) {
           fitView
         >
           <Background gap={24} color="#c7c9d9" />
-          <Controls />
-          <MiniMap />
+          {minimap && <MiniMap />}
         </ReactFlow>
       </div>
       {confirmation.dialog}

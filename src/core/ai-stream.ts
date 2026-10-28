@@ -53,7 +53,7 @@ export async function readAIStream(
   response: Response,
   signal: AbortSignal | undefined,
   onProgress: (snapshot: AIStreamSnapshot) => void,
-  onEvents: (events: unknown[]) => void,
+  onOutput: (snapshot: AIStreamSnapshot) => void,
 ): Promise<AIStreamSnapshot> {
   if (!response.body)
     throw Error("AI 流式响应没有数据体 / Missing response stream");
@@ -64,10 +64,7 @@ export async function readAIStream(
     done = false,
     finished = false,
     bytes = 0,
-    error: unknown,
-    events: unknown[] = [],
-    eventBytes = 0,
-    lastLog = 0;
+    error: unknown;
   const calls = new Map<number, ToolCall>();
   const snapshot = () => ({
     content,
@@ -85,13 +82,6 @@ export async function readAIStream(
       }
       try {
         const data = JSON.parse(event.data);
-        if (eventBytes < 96000) {
-          events.push(data);
-          eventBytes += event.data.length;
-        } else if (
-          !events.some((e) => (e as { truncated?: boolean })?.truncated)
-        )
-          events.push({ truncated: true });
         if (data.error)
           throw Error(
             typeof data.error.message === "string"
@@ -162,17 +152,7 @@ export async function readAIStream(
           finished = true;
         }
         onProgress(snapshot());
-        if (Date.now() - lastLog > 300) {
-          onEvents(events);
-          lastLog = Date.now();
-        }
       } catch (e) {
-        if (eventBytes < 96000) {
-          events.push({
-            invalid_data: event.data.slice(0, 96000 - eventBytes),
-          });
-          eventBytes += event.data.length;
-        }
         error = e;
       }
     },
@@ -214,7 +194,7 @@ export async function readAIStream(
     return result;
   } finally {
     signal?.removeEventListener("abort", abort);
-    onEvents(events);
+    onOutput(snapshot());
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }

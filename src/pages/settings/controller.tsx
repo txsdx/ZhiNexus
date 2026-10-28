@@ -1,6 +1,7 @@
 /** Typed settings state, draft edits and action feedback shared by independent configuration panels. */
 import {
   Bell,
+  Brain,
   Database,
   FolderTree,
   Globe,
@@ -96,6 +97,7 @@ export function useSettingsState(
       icon: Database,
     },
     { id: "network", label: t("网络与代理", "Network & proxy"), icon: Globe },
+    { id: "memory", label: t("复习与记忆", "Review & memory"), icon: Brain },
     { id: "notifications", label: t("通知设置", "Notifications"), icon: Bell },
     {
       id: "desktop",
@@ -108,6 +110,9 @@ export function useSettingsState(
   return {
     s,
     t,
+    reviewPolicy: saved.value.review,
+    setReviewPolicy: (review: { retention: number }) =>
+      editor.update((previous) => ({ ...previous, review })),
     tab,
     setTab,
     ai,

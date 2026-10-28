@@ -208,9 +208,9 @@ it("keeps malformed non-null tool calls invalid and retains provider error data 
     status: 200,
     task: "agent",
   });
-  expect(diagnostics.getSnapshot()[0].response).toContain(
-    '"tool_calls": "broken"',
-  );
+  expect(diagnostics.getSnapshot()[0].response).toBe("text");
+  expect(diagnostics.getSnapshot()[0].error).toContain("tool_calls");
+  expect(diagnostics.getSnapshot()[0].response).not.toContain("choices");
   expect(diagnostics.getSnapshot()[0].request).not.toContain("fixture-key");
   fetcher.mockImplementationOnce(
     async () =>
@@ -220,8 +220,11 @@ it("keeps malformed non-null tool calls invalid and retains provider error data 
   expect(diagnostics.getSnapshot()[0]).toMatchObject({
     level: "error",
     status: 502,
-    response: "upstream gateway is unavailable",
   });
+  expect(diagnostics.getSnapshot()[0].error).toContain(
+    "upstream gateway is unavailable",
+  );
+  expect(diagnostics.getSnapshot()[0].response).toBeUndefined();
 });
 
 it("accepts an image response whose optional URL is null", async () => {
@@ -245,8 +248,10 @@ it("redacts the request's original credential even if it rotates before the resp
   });
   await expect(complete("agent", [])).rejects.toThrow("HTTP 401");
   const { diagnostics } = await import("./diagnostics");
-  expect(diagnostics.getSnapshot()[0].response).not.toContain("fixture-key");
-  expect(diagnostics.getSnapshot()[0].response).toContain("[redacted]");
+  expect(JSON.stringify(diagnostics.getSnapshot()[0])).not.toContain(
+    "fixture-key",
+  );
+  expect(diagnostics.getSnapshot()[0].error).toContain("[redacted]");
 });
 
 it("does not send a cancelled review request", async () => {

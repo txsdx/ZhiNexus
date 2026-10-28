@@ -1,5 +1,5 @@
 /** Global task streams, durable proposal reviews and reviewable external-tool approvals. */
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpRight, Check, RefreshCw, Square, X } from "lucide-react";
 import { aiJobs } from "../services/ai-jobs";
 import { aiJobIsStale, applyAIJob } from "../services/ai-apply";
@@ -10,10 +10,8 @@ import { CategoryTree } from "../pages/settings/shared";
 import { useConfirmation } from "../hooks/useConfirmation";
 import type { Json } from "../core/types";
 import { entryWorkspace } from "../core/workspace";
-/** Subscribe everywhere without binding request ownership to a page's lifetime. */
-export function useAIJobs() {
-  return useSyncExternalStore(aiJobs.subscribe, aiJobs.getSnapshot);
-}
+import { useAIJobs } from "../hooks/useAIJobs";
+export { useAIJobs } from "../hooks/useAIJobs";
 /** Human states are separate from raw model IDs and provider protocol details. */
 function useStateLabel() {
   const t = useT();
@@ -274,6 +272,11 @@ export function AIJobReview({
           : job.title
       }
       onClose={close}
+      onConfirm={
+        job.state === "approval" && !state.readOnly && !busy
+          ? () => void run(() => aiJobs.decide(id, true))
+          : undefined
+      }
     >
       <div className="ai-review-status">
         <span className="pill">{labels[job.state]}</span>
@@ -312,6 +315,8 @@ export function AIJobReview({
             </button>
             <button
               className="primary"
+              autoFocus
+              data-confirm
               disabled={state.readOnly || busy}
               onClick={() => void run(() => aiJobs.decide(id, true))}
             >

@@ -1,3 +1,4 @@
+import { entryColors } from "./entry-colors";
 /** Validate replicated domain shapes and causal closure before projecting untrusted remote operations. */
 import { z } from "zod";
 import type { Doc, Envelope } from "./types";
@@ -17,6 +18,7 @@ const card = z.object({
 });
 const message = z.object({
   responseId: z.string().optional(),
+  toolReceiptVersion: z.literal(2).optional(),
   jobId: z.string().optional(),
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: text,
@@ -36,6 +38,8 @@ const schemas = {
     title: text.min(1),
     content: text,
     summary: text.max(600).optional(),
+    color: z.enum(entryColors).optional(),
+    reviewCount: z.number().int().nonnegative().optional(),
     editorDocument: z
       .object({ schema: z.literal(1), markdown: text, json: z.json() })
       .optional(),
@@ -73,6 +77,9 @@ const schemas = {
     question: questionSchema,
     answer: text,
     grade: gradeSchema.nullable(),
+    rating: z
+      .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+      .optional(),
     startedAt: z.iso.datetime(),
     deleted: z.boolean().optional(),
   }),

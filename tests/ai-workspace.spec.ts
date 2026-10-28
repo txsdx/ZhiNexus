@@ -80,10 +80,9 @@ test("entry outline is left, metadata is above, highlighting persists and the si
     page.getByRole("heading", { name: "知识连接", exact: true }),
   ).toHaveCount(0);
   const outline = await page.locator(".entry-outline").boundingBox(),
-    paper = await page.locator(".paper").boundingBox(),
-    meta = await page.locator(".entry-meta").boundingBox();
+    paper = await page.locator(".paper").boundingBox();
   expect(outline!.x).toBeLessThan(paper!.x);
-  expect(meta!.y + meta!.height).toBeLessThanOrEqual(paper!.y);
+  await expect(page.locator(".entry-meta")).toHaveCount(0);
   await page.locator(".block-document").evaluate((element) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let node: Node | null;
@@ -362,7 +361,9 @@ test("the autosaved concurrency limit controls actual requests, and a queued can
   page,
 }) => {
   const responses: ServerResponse[] = [];
-  const server = await streamingServer((_body, res) => {
+  const requested: string[] = [];
+  const server = await streamingServer((body, res) => {
+    requested.push(JSON.stringify(body.messages));
     responses.push(res);
     delta(res, "部分内容");
   });
@@ -374,6 +375,7 @@ test("the autosaved concurrency limit controls actual requests, and a queued can
       "const {submitAIJob}=await import('/src/services/ai-jobs.ts');const ids=[];for(let i=0;i<3;i++){const id=await store.createEntry('并发任务 '+i,'original');ids.push(await submitAIJob('explain',{page:'entry',entryId:id},{},false));}return ids;",
     );
     await expect.poll(() => responses.length).toBe(1);
+    expect(requested[0]).toContain("并发任务 0");
     await page
       .getByRole("button", { name: "打开 AI 任务队列", exact: true })
       .click();

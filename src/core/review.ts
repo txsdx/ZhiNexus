@@ -31,16 +31,30 @@ export function reviveCard(raw: Card): Card {
 export function newCard(): Card {
   return createEmptyCard(new Date());
 }
+/** Treat captured knowledge as already learned, scheduling its first real review in the future. */
+export function rememberedCard(now = new Date(), retention = 0.9): Card {
+  return fsrs({ request_retention: retention, enable_short_term: false }).next(
+    createEmptyCard(now),
+    now,
+    Rating.Good,
+  ).card;
+}
 /** Convert assessed understanding into an FSRS grade, then compute the next due date. */
-export function schedule(raw: Card, score: number, now = new Date()): Card {
-  const rating =
-    score < 60
-      ? Rating.Again
-      : score < 75
-        ? Rating.Hard
-        : score < 90
-          ? Rating.Good
-          : Rating.Easy;
-  return fsrs({ request_retention: 0.9 }).next(reviveCard(raw), now, rating)
-    .card;
+export function suggestedRating(score: number): 1 | 2 | 3 | 4 {
+  return score < 60 ? 1 : score < 75 ? 2 : score < 90 ? 3 : 4;
+}
+/** Record the learner's actual recall rating; AI scores supply only a default suggestion. */
+export function schedule(
+  raw: Card,
+  score: number,
+  now = new Date(),
+  retention = 0.9,
+  selectedRating?: 1 | 2 | 3 | 4,
+): Card {
+  const rating = selectedRating ?? suggestedRating(score);
+  return fsrs({ request_retention: retention }).next(
+    reviveCard(raw),
+    now,
+    rating,
+  ).card;
 }

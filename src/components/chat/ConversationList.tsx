@@ -75,7 +75,10 @@ function ConversationRow({
     }
   };
   return (
-    <div className={"topic " + (active ? "active" : "")}>
+    <div
+      data-topic-id={topic.id}
+      className={"topic " + (active ? "active" : "")}
+    >
       {editing ? (
         <div className="topic-editor">
           <input
@@ -154,6 +157,7 @@ export function ConversationList({
   onSelect,
   onRename,
   onDelete,
+  onClose,
 }: {
   topics: Topic[];
   selected?: string;
@@ -162,14 +166,26 @@ export function ConversationList({
   onSelect: (id: string) => void;
   onRename: (id: string, title: string, expected: string) => Promise<void>;
   onDelete: (topic: Topic) => void;
+  onClose?: () => void;
 }) {
   const t = useT();
   return (
     <aside className="topic-list" aria-label={t("会话列表", "Conversations")}>
-      <button disabled={busy} className="full" onClick={onNew}>
-        <Plus size={16} />
-        {t("新话题", "New conversation")}
-      </button>
+      <div className="topic-list-actions">
+        <button disabled={busy} className="full" onClick={onNew}>
+          <Plus size={16} />
+          {t("新话题", "New conversation")}
+        </button>
+        {onClose && (
+          <button
+            className="icon"
+            aria-label={t("收起会话列表", "Hide conversations")}
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
       <div className="topic-items">
         {topics.map((topic) => (
           <ConversationRow

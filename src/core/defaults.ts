@@ -52,6 +52,7 @@ export function defaultAI(): AIConfig {
   };
 }
 export const defaultDevice: DeviceConfig = {
+  autoUpdate: true,
   apiKey: "",
   davUrl: "",
   davUser: "",

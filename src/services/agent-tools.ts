@@ -1,149 +1,449 @@
-/** Auditable, idempotent local agent tools with atomic action receipts and stale-edit protection. */
+import { reviewTarget, needsReview, nextReviewAt } from "../core/review-policy";
+/** Structured knowledge-control tools with atomic receipts, explicit write previews and stale-state rejection. */
 import Fuse from "fuse.js";
 import { z } from "zod";
-import { store, json } from "../core/store";
-import { newCard } from "../core/review";
+import { store, json, type StorePatch } from "../core/store";
+import { entryWorkspace } from "../core/workspace";
+import { canonical } from "../core/crypto";
+import { rememberedCard } from "../core/review";
 import { entryTemplate } from "../core/defaults";
+import { entryColors } from "../core/entry-colors";
+import { categoryRemovalPlan, validateCategoryMove } from "./categories";
+import type { Json } from "../core/types";
 import type { ToolSpec } from "./ai";
-const parameters = {
-  type: "object",
-  properties: {
-    query: { type: "string" },
-    id: { type: "string" },
-    title: { type: "string" },
-    content: { type: "string" },
+const id = z.string().min(1).max(200),
+  title = z.string().trim().min(1).max(200),
+  content = z.string().max(8 * 1024 * 1024),
+  parent = z.string().max(200),
+  color = z.enum(entryColors);
+const definitions = {
+  search_knowledge: {
+    description: "模糊搜索知识词条",
+    schema: z.object({ query: z.string() }).strict(),
   },
-  additionalProperties: false,
-};
-/** Public tool schemas use stable function names; capability-aware providers receive only these declarations. */
-export const knowledgeTools: ToolSpec[] = [
-  { name: "search_knowledge", description: "模糊查找词条；参数 query" },
-  { name: "get_entry", description: "读取完整词条；参数 id" },
-  { name: "list_categories", description: "列出分类树" },
-  { name: "review_queue", description: "读取到期复习队列" },
-  {
-    name: "create_entry",
-    description: "创建或复用同名词条；参数 title, content；需确认",
+  list_entries: {
+    description: "分页列出词条，可按分类筛选；category 为空表示未分类",
+    schema: z
+      .object({
+        category: parent.optional(),
+        offset: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+      })
+      .strict(),
   },
-  { name: "update_entry", description: "更新词条；参数 id, content；需确认" },
-].map((t) => ({ type: "function", function: { ...t, parameters } }));
-/** Repeated deliveries return their recorded result; user-visible writes and the receipt share one SQLite commit. */
+  get_entry: {
+    description: "读取完整词条和复习状态",
+    schema: z.object({ id }).strict(),
+  },
+  list_categories: {
+    description: "列出完整分类层级与ID",
+    schema: z.object({}).strict(),
+  },
+  get_category: {
+    description: "读取分类、直接子分类及直属条目",
+    schema: z.object({ id }).strict(),
+  },
+  review_queue: {
+    description: "读取到期复习队列",
+    schema: z.object({}).strict(),
+  },
+  get_app_state: {
+    description: "读取软件知识/分类/对话/复习数量及同步状态；不返回凭证",
+    schema: z.object({}).strict(),
+  },
+  create_entry: {
+    description:
+      "创建词条或复用同名词条，可指定正文、分类、标签、背景色；需确认",
+    schema: z
+      .object({
+        title,
+        content: content.optional(),
+        category: parent.optional(),
+        tags: z.array(z.string()).max(100).optional(),
+        color: color.optional(),
+      })
+      .strict(),
+  },
+  edit_explanation: {
+    description:
+      "审阅后编辑词条解释的本机草稿，保留用户已有修改，用户保存后再写入知识；content替换全文，或selected+replacement精确替换唯一片段",
+    schema: z
+      .object({
+        id,
+        content: content.optional(),
+        selected: z.string().min(1).optional(),
+        replacement: content.optional(),
+      })
+      .strict(),
+  },
+  update_entry: {
+    description:
+      "修改词条的标题、正文、摘要、分类、标签或背景色；未传字段保留；需确认",
+    schema: z
+      .object({
+        id,
+        title: title.optional(),
+        content: content.optional(),
+        summary: z.string().max(600).optional(),
+        category: parent.optional(),
+        tags: z.array(z.string()).max(100).optional(),
+        color: color.optional(),
+      })
+      .strict(),
+  },
+  move_entry: {
+    description: "移动词条到指定分类，category 空字符串为未分类；需确认",
+    schema: z.object({ id, category: parent }).strict(),
+  },
+  delete_entry: {
+    description: "删除一个词条，保留回收站和历史；需确认",
+    schema: z.object({ id }).strict(),
+  },
+  restore_entry: {
+    description: "从回收站恢复词条；需确认",
+    schema: z.object({ id }).strict(),
+  },
+  create_category: {
+    description: "添加分类层级；parent 为空为顶层；需确认",
+    schema: z.object({ name: title, parent: parent.optional() }).strict(),
+  },
+  update_category: {
+    description: "重命名分类并可移动层级；需确认，禁止循环",
+    schema: z
+      .object({ id, name: title.optional(), parent: parent.optional() })
+      .strict(),
+  },
+  move_category: {
+    description: "移动分类及其整个子树；parent 为空移至顶层；需确认，禁止循环",
+    schema: z.object({ id, parent }).strict(),
+  },
+  delete_category: {
+    description:
+      "删除分类；mode=keep 默认保留子类和词条并迁移到上一级；mode=all 删除子树及全部条目；需确认",
+    schema: z.object({ id, mode: z.enum(["keep", "all"]).optional() }).strict(),
+  },
+} as const;
+/** Every tool advertises its own required arguments instead of one permissive shared schema. */
+export const knowledgeTools: ToolSpec[] = Object.entries(definitions).map(
+  ([name, def]) => ({
+    type: "function",
+    function: {
+      name,
+      description: def.description,
+      parameters: z.toJSONSchema(def.schema),
+    },
+  }),
+);
+interface Arguments {
+  selected?: string;
+  replacement?: string;
+  query?: string;
+  id?: string;
+  title?: string;
+  content?: string;
+  summary?: string;
+  category?: string;
+  tags?: string[];
+  color?: string;
+  parent?: string;
+  name?: string;
+  mode?: "keep" | "all";
+  offset?: number;
+  limit?: number;
+}
+const catalogSignature = () =>
+  canonical(
+    store
+      .getSnapshot()
+      .docs.filter(
+        (d) => d.collection === "entry" || d.collection === "category",
+      )
+      .map((d) => [d.collection, d.id, d.fields]),
+  );
+/** Read-only queries run immediately; reviewed mutations and idempotency receipts share one guarded transaction. */
 export async function executeKnowledgeTool(
   name: string,
   args: unknown,
   receipt: string,
   confirm: (description: string) => Promise<boolean>,
+  active: () => boolean = () => true,
 ): Promise<unknown> {
-  const s = store.getSnapshot(),
-    record = s.docs.find((d) => d.collection === "setting" && d.id === receipt);
-  if (record?.fields.status === "done") return record.fields.result;
-  const a = z
-    .object({
-      query: z.string().optional(),
-      id: z.string().optional(),
-      title: z.string().optional(),
-      content: z.string().optional(),
-    })
-    .parse(args);
+  const prior = () =>
+    store
+      .getSnapshot()
+      .docs.find((d) => d.collection === "setting" && d.id === receipt);
+  if (prior()?.fields.status === "done") return prior()!.fields.result;
+  const def = definitions[name as keyof typeof definitions];
+  if (!def) throw Error("未知工具 / Unknown tool");
+  const a = def.schema.parse(args) as Arguments,
+    s = store.getSnapshot();
   switch (name) {
     case "search_knowledge":
       return new Fuse(s.entries, {
         keys: ["title", "content", "tags"],
         threshold: 0.4,
       })
-        .search(a.query ?? "")
+        .search(a.query!)
         .slice(0, 12)
         .map((r) => ({
           id: r.item.id,
           title: r.item.title,
+          category: r.item.category,
           excerpt: r.item.content.slice(0, 400),
         }));
+    case "list_entries": {
+      const entries = s.entries.filter(
+        (e) => a.category === undefined || e.category === a.category,
+      );
+      return {
+        total: entries.length,
+        entries: entries
+          .slice(a.offset ?? 0, (a.offset ?? 0) + (a.limit ?? 50))
+          .map((e) => ({
+            id: e.id,
+            title: e.title,
+            category: e.category,
+            tags: e.tags,
+            color: e.color ?? "none",
+          })),
+      };
+    }
     case "get_entry":
-      return s.entries.find((e) => e.id === a.id) ?? { error: "not found" };
+      return {
+        entry: s.entries.find((e) => e.id === a.id) ?? null,
+        draft: entryWorkspace.getSnapshot().drafts[a.id!] ?? null,
+      };
     case "list_categories":
       return s.categories;
+    case "get_category":
+      return {
+        category: s.categories.find((c) => c.id === a.id) ?? null,
+        children: s.categories.filter((c) => c.parent === a.id),
+        entries: s.entries
+          .filter((e) => e.category === a.id)
+          .map((e) => ({ id: e.id, title: e.title })),
+      };
     case "review_queue":
       return s.entries
-        .filter((e) => e.card.due <= new Date())
-        .map((e) => ({ id: e.id, title: e.title, due: e.card.due }));
-    case "create_entry": {
-      if (!a.title?.trim()) throw Error("缺少 title");
-      if (!(await confirm("Agent 创建词条：" + a.title)))
-        return { cancelled: true };
-      const existing = store
-        .getSnapshot()
-        .entries.find(
-          (e) =>
-            e.title.toLocaleLowerCase() === a.title!.trim().toLocaleLowerCase(),
-        );
-      const id = existing?.id ?? receipt.replace("tool-", ""),
-        result = { id, reused: Boolean(existing) },
-        now = new Date().toISOString();
-      await store.batch(
-        [
-          ...(existing
-            ? []
-            : [
-                {
-                  collection: "entry" as const,
-                  id,
-                  patch: json({
-                    title: a.title.trim(),
-                    content: a.content ?? entryTemplate,
-                    category: "",
-                    tags: [],
-                    prerequisites: [],
-                    createdAt: now,
-                    updatedAt: now,
-                    card: newCard(),
-                  }) as Record<string, import("../core/types").Json>,
-                },
-              ]),
-          {
-            collection: "setting",
-            id: receipt,
-            patch: { status: "done", result: json(result) },
-          },
-        ],
-        "agent-tool",
-      );
-      return result;
-    }
-    case "update_entry": {
-      const entry = s.entries.find((e) => e.id === a.id);
-      if (!entry || a.content === undefined) throw Error("无效词条");
-      if (
-        !(await confirm(
-          "Agent 替换词条内容：" + entry.title + "\n\n" + a.content,
-        ))
-      )
-        return { cancelled: true };
-      const current = store
-        .getSnapshot()
-        .entries.find((e) => e.id === entry.id);
-      if (!current || current.content !== entry.content)
-        throw Error(
-          "确认期间词条已被修改，请重新生成建议 / Entry changed while confirming",
-        );
-      const result = { ok: true };
-      await store.batch(
-        [
-          {
-            collection: "entry",
-            id: entry.id,
-            patch: { content: a.content, updatedAt: new Date().toISOString() },
-          },
-          {
-            collection: "setting",
-            id: receipt,
-            patch: { status: "done", result: json(result) },
-          },
-        ],
-        "agent-tool",
-      );
-      return result;
-    }
-    default:
-      throw Error("未知工具 / Unknown tool");
+        .filter((e) => needsReview(e, reviewTarget(s.docs)))
+        .map((e) => ({
+          id: e.id,
+          title: e.title,
+          due: nextReviewAt(e, reviewTarget(s.docs)),
+        }));
+    case "get_app_state":
+      return {
+        entries: s.entries.length,
+        categories: s.categories.length,
+        topics: s.topics.length,
+        reviews: s.reviews.length,
+        lastSync: s.device.lastSync,
+      };
   }
+  if (name === "edit_explanation") {
+    const entry = s.entries.find((e) => e.id === a.id);
+    if (!entry) throw Error("词条不存在 / Entry missing");
+    await entryWorkspace.init();
+    if (entryWorkspace.getSnapshot().aiApplied.includes(receipt)) {
+      await entryWorkspace.flush();
+      window.dispatchEvent(
+        new CustomEvent("zhinexus:ai-draft", { detail: { id: entry.id } }),
+      );
+      return { id: entry.id, draft: true, requiresSave: true };
+    }
+    const draft = entryWorkspace.getSnapshot().drafts[entry.id],
+      original = draft?.editing ? draft.content : entry.content;
+    if (a.content !== undefined && a.selected !== undefined)
+      throw Error(
+        "请选择全文替换或片段替换 / Choose full or selection replacement",
+      );
+    let next = a.content;
+    if (a.selected !== undefined && a.replacement !== undefined) {
+      if (original.split(a.selected).length !== 2)
+        throw Error("选中片段不存在或不唯一 / Selection missing or ambiguous");
+      next = original.replace(a.selected, a.replacement);
+    }
+    if (next === undefined) throw Error("缺少修改内容 / Missing replacement");
+    const expected = canonical(draft ?? null),
+      before = catalogSignature();
+    if (
+      !(await confirm(
+        `编辑解释草稿：${entry.title}\n\n原内容：\n${original}\n\n新内容：\n${next}`,
+      ))
+    )
+      return { cancelled: true };
+    await entryWorkspace.applyAIResult(entry.id, receipt, () => {
+      if (
+        !active() ||
+        before !== catalogSignature() ||
+        expected !==
+          canonical(entryWorkspace.getSnapshot().drafts[entry.id] ?? null)
+      )
+        throw Error(
+          "审阅期间正文或草稿已改变，请重新生成 / Draft changed while confirming",
+        );
+      return {
+        title: draft?.title ?? entry.title,
+        summary: draft?.summary ?? entry.summary ?? "",
+        content: next!,
+        editing: true,
+        sourceMode: draft?.sourceMode ?? false,
+        focus: null,
+        base: draft?.editing
+          ? draft.base
+          : {
+              title: entry.title,
+              content: entry.content,
+              summary: entry.summary ?? "",
+            },
+      };
+    });
+    window.dispatchEvent(
+      new CustomEvent("zhinexus:ai-draft", { detail: { id: entry.id } }),
+    );
+    return { id: entry.id, draft: true, requiresSave: true };
+  }
+  const before = catalogSignature(),
+    patches: StorePatch[] = [],
+    now = new Date().toISOString();
+  let result: unknown = { ok: true };
+  let description: string = def.description;
+  const categoryName = (id: string) =>
+    s.categories.find((c) => c.id === id)?.name ?? (id ? id : "未分类/顶层");
+  const assertCategory = (id: string) => {
+    if (id && !s.categories.some((c) => c.id === id))
+      throw Error("分类不存在 / Category missing");
+  };
+  if (name === "create_entry") {
+    assertCategory(a.category ?? "");
+    const existing = s.entries.find(
+        (e) => e.title.toLocaleLowerCase() === a.title!.toLocaleLowerCase(),
+      ),
+      entryId = existing?.id ?? receipt.replace("tool-", "");
+    result = { id: entryId, reused: !!existing };
+    if (!existing)
+      patches.push({
+        collection: "entry",
+        id: entryId,
+        patch: json({
+          title: a.title,
+          content: a.content ?? entryTemplate,
+          category: a.category ?? "",
+          tags: a.tags ?? [],
+          color: a.color ?? "none",
+          prerequisites: [],
+          createdAt: now,
+          updatedAt: now,
+          card: rememberedCard(
+            new Date(),
+            reviewTarget(store.getSnapshot().docs),
+          ),
+          reviewCount: 0,
+        }) as Record<string, Json>,
+      });
+    description = `创建词条：${a.title}\n分类：${categoryName(a.category ?? "")}\n${a.content ?? entryTemplate}`;
+  } else if (
+    ["update_entry", "move_entry", "delete_entry", "restore_entry"].includes(
+      name,
+    )
+  ) {
+    const entry = s.entries.find((e) => e.id === a.id),
+      deleted = s.docs.find(
+        (d) =>
+          d.collection === "entry" &&
+          d.id === a.id &&
+          d.fields.deleted === true,
+      );
+    if (name === "restore_entry") {
+      if (!deleted) throw Error("回收站词条不存在 / Deleted entry missing");
+      const restoredCategory = String(deleted.fields.category ?? "");
+      patches.push({
+        collection: "entry",
+        id: a.id!,
+        patch: {
+          deleted: false,
+          category: s.categories.some((c) => c.id === restoredCategory)
+            ? restoredCategory
+            : "",
+          updatedAt: now,
+        },
+      });
+      description = `恢复词条：${deleted.fields.title}`;
+    } else {
+      if (!entry) throw Error("词条不存在 / Entry missing");
+      const patch: Record<string, Json> = { updatedAt: now };
+      if (name === "delete_entry") patch.deleted = true;
+      else {
+        for (const key of [
+          "title",
+          "content",
+          "summary",
+          "category",
+          "tags",
+          "color",
+        ] as const)
+          if (a[key] !== undefined) patch[key] = a[key]!;
+        if (a.category !== undefined) assertCategory(a.category);
+        if (Object.keys(patch).length === 1)
+          throw Error("未提供修改字段 / No changes supplied");
+      }
+      patches.push({ collection: "entry", id: entry.id, patch });
+      description = `${name === "delete_entry" ? "删除词条" : "修改词条"}：${entry.title}\n${JSON.stringify(patch, null, 2)}`;
+    }
+  } else if (name === "create_category") {
+    assertCategory(a.parent ?? "");
+    const existing = s.categories.find(
+        (c) => c.name === a.name && c.parent === (a.parent ?? ""),
+      ),
+      categoryId = existing?.id ?? "category-" + receipt.replace("tool-", "");
+    if (!existing)
+      patches.push({
+        collection: "category",
+        id: categoryId,
+        patch: { name: a.name!, parent: a.parent ?? "" },
+      });
+    result = { id: categoryId, reused: !!existing };
+    description = `添加分类：${a.name}\n父分类：${categoryName(a.parent ?? "")}`;
+  } else {
+    const category = s.categories.find((c) => c.id === a.id);
+    if (!category) throw Error("分类不存在 / Category missing");
+    if (name === "delete_category") {
+      patches.push(...categoryRemovalPlan(category.id, a.mode ?? "keep"));
+      description = `删除分类：${category.name}\n${a.mode === "all" ? "删除全部子分类和条目" : "保留子分类和条目，移至上一级"}\n${patches.map((p) => `${p.collection === "entry" ? "词条" : "分类"}：${s.entries.find((e) => e.id === p.id)?.title ?? s.categories.find((c) => c.id === p.id)?.name ?? p.id}`).join("\n")}`;
+    } else {
+      const nextParent = a.parent ?? category.parent;
+      validateCategoryMove(s.categories, category.id, nextParent);
+      if (a.name === undefined && a.parent === undefined)
+        throw Error("未提供修改字段 / No changes supplied");
+      patches.push({
+        collection: "category",
+        id: category.id,
+        patch: { name: a.name ?? category.name, parent: nextParent },
+      });
+      description = `修改分类：${category.name} → ${a.name ?? category.name}\n父分类：${categoryName(category.parent)} → ${categoryName(nextParent)}`;
+    }
+  }
+  if (!(await confirm(description))) return { cancelled: true };
+  const committed = await store.batchWhen(
+    [
+      ...patches,
+      {
+        collection: "setting",
+        id: receipt,
+        patch: { status: "done", result: json(result) },
+      },
+    ],
+    "agent-tool",
+    () =>
+      active() &&
+      prior()?.fields.status !== "done" &&
+      before === catalogSignature(),
+  );
+  if (!committed) {
+    if (prior()?.fields.status === "done") return prior()!.fields.result;
+    throw Error(
+      "确认期间数据已改变，请重新生成操作 / Data changed while confirming",
+    );
+  }
+  return result;
 }

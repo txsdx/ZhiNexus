@@ -150,3 +150,12 @@ describe("review scheduling", () => {
     ).toThrow();
   });
 });
+
+it("newly captured knowledge is already learned, with a future FSRS review and no completed review session", async () => {
+  const { rememberedCard } = await import("./review");
+  const now = new Date("2026-10-28T00:00:00Z"),
+    card = rememberedCard(now);
+  expect(card.due.getTime()).toBeGreaterThanOrEqual(now.getTime() + 86400000);
+  expect(card.stability).toBeGreaterThan(0);
+  expect(card.last_review).toEqual(now);
+});

@@ -26,7 +26,7 @@ async function setup(page: Page, phase = "answer") {
   await page.goto("/");
   await repository(
     page,
-    `const ai=structuredClone(store.getSnapshot().ai);ai.baseUrl='https://ai.example/v1';ai.defaultModel='fixture';await store.saveAI(ai);await store.updateDevice({apiKey:'fixture-key',syncMinutes:0});const id=await store.createEntry('提取练习','原始词条内容');await store.patch('review','session',{entryId:id,phase:'${phase}',question:${JSON.stringify(question())},answer:'已保存的回答',grade:${phase === "graded" ? JSON.stringify(grade) : "null"},startedAt:new Date().toISOString()});`,
+    `const ai=structuredClone(store.getSnapshot().ai);ai.baseUrl='https://ai.example/v1';ai.defaultModel='fixture';await store.saveAI(ai);await store.updateDevice({apiKey:'fixture-key',syncMinutes:0});const id=await store.createEntry('提取练习','原始词条内容');const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify({...e.card,due:new Date(Date.now()-60000)}))});await store.patch('review','session',{entryId:id,phase:'${phase}',question:${JSON.stringify(question())},answer:'已保存的回答',grade:${phase === "graded" ? JSON.stringify(grade) : "null"},startedAt:new Date().toISOString()});`,
   );
   await page.getByRole("button", { name: /^复习队列/ }).click();
   await expect(page.locator(".review-workspace h2")).toHaveText(
@@ -173,7 +173,7 @@ test("stopping question generation drops its late response and allows another at
     ),
   ).toBe(1);
   expect(
-    await repository(page, "return store.getSnapshot().entries[0].card.reps"),
+    await repository(page, "return store.getSnapshot().entries[0].reviewCount"),
   ).toBe(0);
 });
 
@@ -217,7 +217,7 @@ test("high scores can be retried, while a saved result increments FSRS only once
   await page.getByRole("button", { name: "重新作答", exact: true }).click();
   await expect(page.locator(".review-workspace textarea")).toHaveValue("");
   expect(
-    await repository(page, "return store.getSnapshot().entries[0].card.reps"),
+    await repository(page, "return store.getSnapshot().entries[0].reviewCount"),
   ).toBe(0);
   await page.locator(".review-workspace textarea").fill("新的回答");
   await page.getByRole("button", { name: "检查我的理解" }).click();
@@ -225,7 +225,7 @@ test("high scores can be retried, while a saved result increments FSRS only once
   await page.getByRole("button", { name: "记录结果并继续" }).dblclick();
   await expect(page.locator(".review-workspace")).toHaveCount(0);
   expect(
-    await repository(page, "return store.getSnapshot().entries[0].card.reps"),
+    await repository(page, "return store.getSnapshot().entries[0].reviewCount"),
   ).toBe(1);
   expect(
     await repository(
@@ -281,7 +281,7 @@ test("a remote cancellation cannot be overwritten by an older assessment respons
   );
   expect(await saved(page)).toEqual(before);
   expect(
-    await repository(page, "return store.getSnapshot().entries[0].card.reps"),
+    await repository(page, "return store.getSnapshot().entries[0].reviewCount"),
   ).toBe(0);
 });
 
@@ -320,6 +320,6 @@ test("a pending confirmed replacement question can still be cancelled", async ({
     question: { question: question().question },
   });
   expect(
-    await repository(page, "return store.getSnapshot().entries[0].card.reps"),
+    await repository(page, "return store.getSnapshot().entries[0].reviewCount"),
   ).toBe(0);
 });

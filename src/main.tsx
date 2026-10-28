@@ -2,6 +2,7 @@
 import { Component, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { startAutomaticUpdates } from "./services/auto-updates";
 import { OcrOverlay } from "./components/OcrOverlay";
 import { startKeySync } from "./services/key-sync";
 import { store } from "./core/store";
@@ -51,15 +52,7 @@ if (new URLSearchParams(location.search).has("ocr-overlay")) {
   store
     .init()
     .then(async () => {
-      await initDiagnostics().catch((error) => {
-        diagnostics.storageError = String(error);
-        diagnostics.error(
-          "app",
-          "日志加载失败 / Log initialization failed",
-          error,
-        );
-      });
-      await initAIJobs();
+      performance.mark("zhinexus:storage-ready");
       window.addEventListener("error", (event) =>
         diagnostics.error(
           "app",
@@ -81,11 +74,56 @@ if (new URLSearchParams(location.search).has("ocr-overlay")) {
       };
       window.addEventListener("blur", flush);
       window.addEventListener("pagehide", flush);
-      startKeySync();
+
       root.render(
         <ErrorBoundary>
           <App />
         </ErrorBoundary>,
+      );
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          performance.mark("zhinexus:first-frame");
+          void (async () => {
+            await initDiagnostics().catch((error) => {
+              diagnostics.storageError = String(error);
+              diagnostics.error(
+                "app",
+                "日志加载失败 / Log initialization failed",
+                error,
+              );
+            });
+
+            await initAIJobs();
+            performance.mark("zhinexus:ai-ready");
+            startKeySync();
+            startAutomaticUpdates();
+            await store.db.checkpoint();
+            const id = diagnostics.start({
+              kind: "app",
+              message: "启动阶段耗时 / Startup timings",
+            });
+            diagnostics.update(id, {
+              level: "info",
+              durationMs: performance.getEntriesByName(
+                "zhinexus:first-frame",
+              )[0]?.startTime,
+              response: JSON.stringify(
+                Object.fromEntries(
+                  performance
+                    .getEntriesByType("mark")
+                    .filter((m) => m.name.startsWith("zhinexus:"))
+                    .map((m) => [m.name, Math.round(m.startTime)]),
+                ),
+              ),
+            });
+          })().catch((error) =>
+            diagnostics.error(
+              "app",
+              "后台启动任务失败 / Background startup failed",
+              error,
+            ),
+          );
+        }),
       );
     })
     .catch((e) =>

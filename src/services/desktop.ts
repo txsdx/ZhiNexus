@@ -2,6 +2,8 @@
 import { flushSettings } from "./settings";
 import { diagnostics } from "./diagnostics";
 import { invoke } from "@tauri-apps/api/core";
+import { autoUpdates } from "./auto-updates";
+import { applyUpdate, type UpdateInfo } from "./updates";
 import { native } from "../core/database";
 import { store } from "../core/store";
 import { entryWorkspace } from "../core/workspace";
@@ -64,11 +66,14 @@ export async function listenDesktop(open: (action: DesktopAction) => void) {
   };
 }
 /** User-requested quit respects unsaved entry changes, then releases SQLite before terminating the app. */
-export async function quitDesktop() {
+let quitting = false;
+export async function quitDesktop(update?: UpdateInfo) {
+  if (quitting) return;
   if (
     !window.dispatchEvent(new Event("zhinexus:navigate", { cancelable: true }))
   )
     return;
+  quitting = true;
   try {
     await flushSettings();
     await (await import("./ai-jobs")).stopAIJobsForShutdown();
@@ -76,10 +81,28 @@ export async function quitDesktop() {
     await entryWorkspace.init();
     await entryWorkspace.flush();
     await store.suspend();
+    const automatic = store.getSnapshot().device.autoUpdate !== false;
+    const ready = autoUpdates.getSnapshot();
+    if (
+      ready.phase === "ready" &&
+      ready.update &&
+      (update || automatic) &&
+      ["setup", "portable"].includes(ready.update.kind)
+    ) {
+      try {
+        await autoUpdates.install((info) =>
+          applyUpdate(info, { silent: true, restart: !!update }),
+        );
+      } catch (error) {
+        if (update) throw error;
+      }
+    }
     await invoke("quit_desktop");
   } catch (error) {
     await store.resume();
     throw error;
+  } finally {
+    quitting = false;
   }
 }
 /** A constrained native preview describes source/target paths and any retained previous target. */

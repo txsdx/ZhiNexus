@@ -8,10 +8,10 @@ import { encryptSecret, decryptSecret } from "../core/secrets";
 import { resolveModel } from "../core/ai-config";
 import { diagnosticText } from "../core/diagnostics";
 import { diagnostics } from "./diagnostics";
-import { executeAIJob } from "./ai-workflows";
 import { notifyCompletion } from "./notifications";
 import { topicTitleSeed } from "./topic-titles";
 let queueChannel: BroadcastChannel | undefined;
+let workflows: Promise<typeof import("./ai-workflows")> | undefined;
 /** Validate the local queue boundary before interpreting saved work or offering retry. */
 const records = z
   .array(
@@ -131,6 +131,7 @@ export const aiJobs = new AIQueue(
       ...d.mcp.flatMap((m) => [m.token, ...Object.values(m.env ?? {})]),
     ];
     try {
+      const { executeAIJob } = await (workflows ??= import("./ai-workflows"));
       const result = await executeAIJob(job, context);
       if (job.kind === "chat")
         void scheduleTitle(job).catch((error) =>
@@ -223,7 +224,12 @@ function retireReviewed() {
   }
 }
 /** Load pending results and bind concurrency changes after the database opens. */
-export async function initAIJobs() {
+let queueInitialization: Promise<void> | undefined;
+/** Share one initialization with early submissions and shutdown; never overwrite an unrestored queue. */
+export function initAIJobs() {
+  return (queueInitialization ??= initializeAIJobs());
+}
+async function initializeAIJobs() {
   let ownsQueue = true;
   if (navigator.locks)
     ownsQueue = await new Promise<boolean>((resolve, reject) => {
@@ -278,6 +284,7 @@ export async function submitAIJob(
   input: Record<string, Json> = {},
   open = true,
 ) {
+  await initAIJobs();
   const s = store.getSnapshot(),
     entry = target.entryId
       ? s.entries.find((e) => e.id === target.entryId)
@@ -349,10 +356,12 @@ export async function submitAIJob(
 }
 /** Drain queue writes before a native exit, migration or page background event. */
 export async function flushAIJobs() {
+  await initAIJobs();
   await aiJobs.flush();
 }
 /** Stop active requests and persist partial output before native storage is closed or relocated. */
 export async function stopAIJobsForShutdown() {
+  await initAIJobs();
   if (aiJobs.getSnapshot().readOnly) return;
   for (const job of aiJobs
     .getSnapshot()

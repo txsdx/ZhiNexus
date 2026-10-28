@@ -1,3 +1,4 @@
+import { needsReview, reviewTarget } from "../core/review-policy";
 /** Per-device notification authorization and reminders for the running application. */
 import { native } from "../core/database";
 import { store } from "../core/store";
@@ -19,7 +20,9 @@ export async function enableNotifications(): Promise<boolean> {
 export async function remind() {
   const s = store.getSnapshot();
   if (!s.device.notifications) return;
-  const count = s.entries.filter((e) => e.card.due <= new Date()).length;
+  const count = s.entries.filter((e) =>
+    needsReview(e, reviewTarget(s.docs)),
+  ).length;
   if (!count) return;
   const day = new Date().toLocaleDateString();
   if ((await store.db.local("notifiedDay", "")) === day) return;

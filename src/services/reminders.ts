@@ -1,3 +1,4 @@
+import { nextReviewAt, reviewTarget } from "../core/review-policy";
 /** Native Android notification schedules are handed to the operating system instead of relying on JS timers. */
 import { native } from "../core/database";
 import { store } from "../core/store";
@@ -27,7 +28,12 @@ export function reconcileReminders(): Promise<void> {
       await store.db.setLocal("review-alarm-signature", "");
       return;
     }
-    const plan = reminderPlan(s.entries),
+    const plan = reminderPlan(
+        s.entries.map((e) => ({
+          ...e,
+          card: { ...e.card, due: nextReviewAt(e, reviewTarget(s.docs)) },
+        })),
+      ),
       signature = await sha256(
         plan.map((p) => ({
           id: p.id,

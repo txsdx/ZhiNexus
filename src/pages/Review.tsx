@@ -15,7 +15,9 @@ import { aiJobs, submitAIJob } from "../services/ai-jobs";
 import { diagnostics } from "../services/diagnostics";
 import { store, json } from "../core/store";
 import type { Collection, Json } from "../core/types";
-import { schedule } from "../core/review";
+import { reviewTarget, needsReview, nextReviewAt } from "../core/review-policy";
+import { useReviewClock } from "../hooks/useReviewClock";
+import { schedule, suggestedRating } from "../core/review";
 import { useConfirmation } from "../hooks/useConfirmation";
 /** Continue review state across navigation; queue requests stay alive until explicitly stopped. */
 export function Review({
@@ -28,6 +30,11 @@ export function Review({
   const s = useKnowledge(),
     t = useT(),
     jobs = useAIJobs();
+  const now = useReviewClock(),
+    targetRetention = reviewTarget(s.docs);
+  const [ratingOverride, setRatingOverride] = useState<
+    1 | 2 | 3 | 4 | undefined
+  >();
   const [selected, setSelected] = useState(initialSession),
     [busy, setBusy] = useState("");
   const working = useRef(false);
@@ -42,6 +49,10 @@ export function Review({
     (r) => !["done", "cancelled"].includes(r.phase),
   );
   const session = unfinished.find((r) => r.id === selected) ?? unfinished[0];
+  useEffect(
+    () => setRatingOverride(undefined),
+    [session?.id, JSON.stringify(session?.grade)],
+  );
   const entry = s.entries.find((e) => e.id === session?.entryId);
   const activeJobs = jobs.jobs.filter(
     (j) =>
@@ -52,8 +63,12 @@ export function Review({
     activeJobs.find((j) => j.target.sessionId === (session?.id ?? selected)) ??
     (!session ? activeJobs[0] : undefined);
   const due = s.entries
-    .filter((e) => e.card.due <= new Date())
-    .sort((a, b) => a.card.due.getTime() - b.card.due.getTime());
+    .filter((e) => needsReview(e, targetRetention, now))
+    .sort(
+      (a, b) =>
+        nextReviewAt(a, targetRetention).getTime() -
+        nextReviewAt(b, targetRetention).getTime(),
+    );
   const act = async (label: string, work: () => Promise<void>) => {
     if (working.current) return;
     working.current = true;
@@ -166,7 +181,16 @@ export function Review({
   const finish = async () => {
     if (!session?.grade || !entry) return;
     const patch: Record<string, Json> = {
-      card: json(schedule(entry.card, session.grade.score)),
+      card: json(
+        schedule(
+          entry.card,
+          session.grade.score,
+          new Date(),
+          targetRetention,
+          ratingOverride,
+        ),
+      ),
+      reviewCount: (entry.reviewCount ?? entry.card.reps) + 1,
       updatedAt: new Date().toISOString(),
     };
     if (session.grade.missing.trim())
@@ -184,13 +208,21 @@ export function Review({
       patch: Record<string, Json>;
     }[] = [
       { collection: "entry", id: entry.id, patch },
-      { collection: "review", id: session.id, patch: { phase: "done" } },
+      {
+        collection: "review",
+        id: session.id,
+        patch: {
+          phase: "done",
+          rating: ratingOverride ?? suggestedRating(session.grade.score),
+        },
+      },
     ];
     const saved = await store.batchWhen(patches, "review-assessment", () => {
       const current = store.getSnapshot(),
         r = current.reviews.find((r) => r.id === session.id),
         e = current.entries.find((e) => e.id === entry.id);
       return (
+        reviewTarget(current.docs) === targetRetention &&
         r?.phase === "graded" &&
         JSON.stringify(r.grade) === JSON.stringify(session.grade) &&
         JSON.stringify(r.question) === JSON.stringify(session.question) &&
@@ -348,6 +380,48 @@ export function Review({
                     {session.grade.missing}
                   </div>
                 )}
+                <fieldset className="recall-rating">
+                  <legend>
+                    {t(
+                      "刚才实际回忆得怎么样？",
+                      "How did recall actually feel?",
+                    )}
+                  </legend>
+                  {([1, 2, 3, 4] as const).map((rating, index) => (
+                    <button
+                      key={rating}
+                      type="button"
+                      aria-pressed={
+                        (ratingOverride ??
+                          suggestedRating(session.grade!.score)) === rating
+                      }
+                      disabled={!!busy || !!active}
+                      title={t(
+                        [
+                          "没想起来，或答错了",
+                          "想起来了，但很费力",
+                          "正常想起来了",
+                          "几乎不用思考就想起来了",
+                        ][index],
+                        [
+                          "Forgot or incorrect",
+                          "Recalled with great effort",
+                          "Recalled normally",
+                          "Recalled easily",
+                        ][index],
+                      )}
+                      onClick={() => setRatingOverride(rating)}
+                    >
+                      {t(
+                        ["忘记", "困难", "记得", "轻松"][index],
+                        ["Again", "Hard", "Good", "Easy"][index],
+                      )}
+                      {rating === suggestedRating(session.grade!.score) && (
+                        <small>{t("AI建议", "AI suggestion")}</small>
+                      )}
+                    </button>
+                  ))}
+                </fieldset>
                 <div className="actions">
                   <button
                     disabled={!!busy || !!active}
@@ -381,8 +455,8 @@ export function Review({
                 </div>
                 <p>
                   {t(
-                    "评分低于60会进入短期重学；你也可以先重新作答。AI 评分仅供学习参考。",
-                    "Scores below 60 trigger short-term relearning. You may retry first. AI assessment is guidance.",
+                    "以你的实际回忆为准：没想起来选“忘记”，不是“困难”。AI 评分仅供参考。",
+                    "Use your actual recall: choose Again when you forgot, rather than Hard. AI scores are guidance.",
                   )}
                 </p>
               </div>

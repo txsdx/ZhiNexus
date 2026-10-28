@@ -21,6 +21,7 @@ export class Database {
   private engine?: Awaited<ReturnType<typeof initSqlJs>>;
   private tail: Promise<unknown> = Promise.resolve();
   private closing = false;
+  private replaying = false;
   recoveryNotice = "";
   backupWarning = "";
   storageLocation: {
@@ -123,47 +124,85 @@ export class Database {
   /** Replay the durable native mirror after SQLite recovery, validating all records before importing. */
   async replayJournal() {
     if (!native) return;
-    const { invoke } = await import("@tauri-apps/api/core");
-    type Row = { id: string; data: string };
-    const records = await invoke<Row[]>("read_storage_journal", {
-        kind: "events",
-      }),
-      events: Envelope[] = [];
-    for (const r of records) {
-      const e = await validateEnvelope(JSON.parse(r.data));
-      if (e.hash !== r.id) throw Error("Recovery journal address mismatch");
-      events.push(e);
+    this.replaying = true;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      type Row = { id: string; data: string };
+      const records = await invoke<Row[]>("read_storage_journal", {
+          kind: "events",
+        }),
+        events: Envelope[] = [];
+      for (const r of records) {
+        const e = await validateEnvelope(JSON.parse(r.data));
+        if (e.hash !== r.id) throw Error("Recovery journal address mismatch");
+        events.push(e);
+      }
+      const current = await this.events();
+      const known = new Set(current.map((e) => e.hash));
+      const all = [...current, ...events];
+      assertCausalClosure(all);
+      validateDocuments(materialize(all));
+      // Checkpoint-covered SQL rows need no new mirror; only replay records missing from the primary.
+      await this.append(events.filter((e) => !known.has(e.hash)));
+      const verified = new Set<string>();
+      for (const r of await invoke<Row[]>("read_storage_journal", {
+        kind: "blobs",
+      })) {
+        const b = JSON.parse(r.data),
+          bytes = unbase64(b.data);
+        if (bytes.length > 20 * 1024 * 1024 || (await sha256(bytes)) !== r.id)
+          throw Error("Recovery asset address mismatch");
+        let existing;
+        try {
+          existing = await this.blob(r.id);
+        } catch {
+          /* The verified journal repairs a damaged SQL row. */
+        }
+        if (!existing || existing.mime !== b.mime)
+          await this.write(() =>
+            this.exec(
+              "INSERT OR REPLACE INTO blobs(hash,mime,data) VALUES (?,?,?)",
+              [r.id, b.mime, b.data],
+            ),
+          );
+        verified.add(r.id);
+      }
+      const metadata = new Map(
+        (
+          await this.query<{ key: string; value: string }>(
+            "SELECT key,value FROM meta",
+          )
+        ).map((row) => [row.key, row.value]),
+      );
+      const changed: { key: string; value: string }[] = [];
+      for (const r of await invoke<Row[]>("read_storage_journal", {
+        kind: "meta",
+      })) {
+        const m = JSON.parse(r.data);
+        if ((await sha256(m.key)) !== r.id)
+          throw Error("Recovery metadata address mismatch");
+        const encoded = JSON.stringify(m.value);
+        if (metadata.get(m.key) !== encoded) {
+          changed.push({ key: m.key, value: encoded });
+          metadata.set(m.key, encoded);
+        }
+      }
+      for (const value of metadata.values()) JSON.parse(value);
+      if (changed.length)
+        await this.write(() =>
+          this.exec(
+            "INSERT OR REPLACE INTO meta(key,value) SELECT json_extract(value,'$.key'),json_extract(value,'$.value') FROM json_each(?)",
+            [JSON.stringify(changed)],
+          ),
+        );
+      for (const hash of await this.blobHashes())
+        if (!verified.has(hash) && !(await this.blob(hash)))
+          throw Error("Missing local asset");
+    } finally {
+      this.replaying = false;
     }
-    const current = await this.events();
-    const known = new Set(current.map((e) => e.hash));
-    const all = [...current, ...events];
-    assertCausalClosure(all);
-    validateDocuments(materialize(all));
-    // Checkpoint-covered SQL rows need no new mirror; only replay records missing from the primary.
-    await this.append(events.filter((e) => !known.has(e.hash)));
-    for (const r of await invoke<Row[]>("read_storage_journal", {
-      kind: "blobs",
-    })) {
-      const b = JSON.parse(r.data);
-      await this.putBlob(unbase64(b.data), b.mime, r.id);
-    }
-    for (const r of await invoke<Row[]>("read_storage_journal", {
-      kind: "meta",
-    })) {
-      const m = JSON.parse(r.data);
-      if ((await sha256(m.key)) !== r.id)
-        throw Error("Recovery metadata address mismatch");
-      await this.setLocal(m.key, m.value);
-    }
-    for (const hash of await this.blobHashes()) {
-      const b = await this.blob(hash);
-      if (!b) throw Error("Missing local asset");
-    }
-    for (const row of await this.query<{ key: string; value: string }>(
-      "SELECT key,value FROM meta",
-    ))
-      await this.setLocal(row.key, JSON.parse(row.value));
   }
+
   /** Write local mirror records using only app-owned paths and immutable content identifiers. */
   private async journal(kind: string, records: { id: string; data: string }[]) {
     if (!native || !records.length) return;
@@ -203,7 +242,10 @@ export class Database {
         ["zhinexus.recovery.previous", previous ?? latest],
         ["zhinexus.recovery.latest", latest],
       ]);
-    } else if (Date.now() - this.lastNativeCheckpoint > 60000) {
+    } else if (
+      !this.replaying &&
+      Date.now() - this.lastNativeCheckpoint > 60000
+    ) {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("checkpoint_storage")
         .then(() => {

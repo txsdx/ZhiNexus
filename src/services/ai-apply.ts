@@ -1,10 +1,11 @@
+import { reviewTarget } from "../core/review-policy";
 /** Explicit, idempotent application of reviewed AI results; failures retain the pending task. */
 import { z } from "zod";
 import type { AIJob, AITarget } from "../core/ai-jobs";
 import type { Json, Entry, Collection } from "../core/types";
 import { store, json } from "../core/store";
 import { sha256 } from "../core/crypto";
-import { newCard } from "../core/review";
+import { rememberedCard } from "../core/review";
 import { entryWorkspace } from "../core/workspace";
 import { entryDocument } from "../components/editor/document";
 import { aiJobs } from "./ai-jobs";
@@ -200,7 +201,11 @@ export async function applyAIJob(id: string, force = false): Promise<AITarget> {
           prerequisites: [],
           createdAt: now,
           updatedAt: now,
-          card: newCard(),
+          card: rememberedCard(
+            new Date(),
+            reviewTarget(store.getSnapshot().docs),
+          ),
+          reviewCount: 0,
         }) as Record<string, Json>,
       });
       target = { page: "entry", entryId };

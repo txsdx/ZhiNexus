@@ -13,6 +13,8 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { Copy, Highlighter, MessageSquare, Eraser, Bold } from "lucide-react";
 import CodeBlock from "@tiptap/extension-code-block";
 import Image from "@tiptap/extension-image";
+import { openContextMenu, type MenuItem } from "../../services/context-menu";
+import { copyText, pasteText } from "../../services/clipboard";
 import { Modal, useT } from "../common";
 import { Diagram, AssetImage } from "../Markdown";
 import { documentExtensions } from "./extensions";
@@ -406,7 +408,114 @@ export function BlockEditor({
           </button>
         </div>
       )}
-      <EditorContent editor={editor} className="rich-editor markdown" />
+      <EditorContent
+        editor={editor}
+        className="rich-editor markdown"
+        onContextMenu={(event) => {
+          const { from, to } = editor.state.selection,
+            original = editor.state.doc,
+            text = original.textBetween(from, to, "\n");
+          const restore = () => {
+            if (editor.isDestroyed || !editor.state.doc.eq(original))
+              throw Error(
+                t("正文已改变，请重新选择", "Document changed; select again"),
+              );
+            return editor.chain().focus().setTextSelection({ from, to });
+          };
+          const items: MenuItem[] = [
+            {
+              label: t("复制选区", "Copy selection"),
+              disabled: !text,
+              run: () => copyText(text),
+            },
+            {
+              label: t("复制全文 Markdown", "Copy full Markdown"),
+              run: () => copyText(documentMarkdown(full.current)),
+            },
+            {
+              label: t("全选", "Select all"),
+              run: () => {
+                editor.chain().focus().selectAll().run();
+              },
+            },
+            {
+              label: t("AI 对话", "Ask AI"),
+              disabled: !text || !onChat,
+              run: () => onChat?.(text),
+            },
+            {
+              label: t("黄色高亮", "Yellow highlight"),
+              disabled: !text,
+              run: () => {
+                restore().run();
+                annotate("highlight");
+              },
+            },
+            {
+              label: t("取消高亮", "Remove highlight"),
+              disabled: !text,
+              run: () => {
+                restore().run();
+                annotate("clear");
+              },
+            },
+          ];
+          if (editor.isEditable)
+            items.push(
+              {
+                label: t("剪切", "Cut"),
+                disabled: !text,
+                run: async () => {
+                  await copyText(text);
+                  restore().deleteSelection().run();
+                },
+              },
+              {
+                label: t("粘贴", "Paste"),
+                run: async () => {
+                  const value = await pasteText();
+                  if (value)
+                    restore()
+                      .insertContent(
+                        value.split(/\r?\n/).map((line) => ({
+                          type: "paragraph",
+                          content: line ? [{ type: "text", text: line }] : [],
+                        })),
+                      )
+                      .run();
+                },
+              },
+              {
+                label: t("加粗", "Bold"),
+                run: () => {
+                  restore().toggleBold().run();
+                },
+              },
+              {
+                label: t("撤销", "Undo"),
+                disabled: !editor.can().undo(),
+                run: () => {
+                  editor.chain().focus().undo().run();
+                },
+              },
+              {
+                label: t("重做", "Redo"),
+                disabled: !editor.can().redo(),
+                run: () => {
+                  editor.chain().focus().redo().run();
+                },
+              },
+              {
+                label: t("删除所选内容", "Delete selection"),
+                disabled: !text,
+                run: () => {
+                  restore().deleteSelection().run();
+                },
+              },
+            );
+          openContextMenu(event.nativeEvent, items);
+        }}
+      />
       {formula !== null && (
         <Modal
           title={t("编辑 LaTeX 公式", "Edit LaTeX formula")}

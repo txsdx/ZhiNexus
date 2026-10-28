@@ -1,13 +1,25 @@
 /** Application shell, responsive navigation, capture flow and per-device background services. */
+import { needsReview, reviewTarget, nextReviewAt } from "./core/review-policy";
+import { useReviewClock } from "./hooks/useReviewClock";
 import { diagnostics } from "./services/diagnostics";
+import {
+  navigationHistory,
+  startNavigationHistory,
+} from "./services/navigation";
+import { NavigationButtons } from "./components/NavigationButtons";
+import { ContextMenu } from "./components/ContextMenu";
+import { CategoryPicker } from "./components/CategoryPicker";
+import { CategoryDeletionHost } from "./components/CategoryDeletion";
+import { UpdateStatus } from "./components/UpdateStatus";
 import { SyncStatus } from "./components/SyncStatus";
 import { aiJobs } from "./services/ai-jobs";
-import { AIJobReview, AITaskCenter, useAIJobs } from "./components/AIJobView";
+import { useAIJobs } from "./hooks/useAIJobs";
 import type { AITarget, AIJob } from "./core/ai-jobs";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
   Brain,
+  ChartSpline,
   ChevronRight,
   Command,
   GitBranch,
@@ -38,6 +50,12 @@ import { OcrResult } from "./components/OcrResult";
 import { unbase64 } from "./core/crypto";
 import { Locale, useKnowledge, useT, Modal } from "./components/common";
 import { Library } from "./pages/Library";
+const AIJobReview = lazy(() =>
+  import("./components/AIJobView").then((m) => ({ default: m.AIJobReview })),
+);
+const AITaskCenter = lazy(() =>
+  import("./components/AIJobView").then((m) => ({ default: m.AITaskCenter })),
+);
 const EntryPage = lazy(() =>
   import("./pages/Entry").then((m) => ({ default: m.EntryPage })),
 );
@@ -47,6 +65,11 @@ const Review = lazy(() =>
 const Agent = lazy(() =>
   import("./pages/Agent").then((m) => ({ default: m.Agent })),
 );
+const ForgettingCurves = lazy(() =>
+  import("./pages/ForgettingCurves").then((m) => ({
+    default: m.ForgettingCurves,
+  })),
+);
 const Graph = lazy(() =>
   import("./pages/Graph").then((m) => ({ default: m.Graph })),
 );
@@ -54,8 +77,7 @@ const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings })),
 );
 import { store } from "./core/store";
-import { syncActivity, synchronize } from "./services/sync";
-import { notifyCompletion } from "./services/notifications";
+import { startAutomaticSync } from "./services/auto-sync";
 import { remind } from "./services/device";
 /** Collect new concepts while treating fuzzy duplicates as a request to revisit existing knowledge. */
 function Capture({
@@ -77,8 +99,10 @@ function Capture({
     t = useT(),
     [title, setTitle] = useState(initial.split(/\r?\n/)[0].slice(0, 120)),
     [content, setContent] = useState(initial),
+    [category, setCategory] = useState(""),
     [saving, setSaving] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    submitting = useRef(false);
   const matches = title.trim()
     ? new Fuse(s.entries, { keys: ["title"], threshold: 0.35 })
         .search(title)
@@ -87,18 +111,26 @@ function Capture({
   return (
     <Modal
       title={t("捕捉一个新的概念", "Capture a new concept")}
+      className="capture-modal"
       onClose={onClose}
     >
-      <p className="muted">
-        {t(
-          "先记下来，理解可以慢慢生长。相似词条会自动出现在下方。",
-          "Capture it now. Understanding can grow later. Similar entries appear below.",
-        )}
-      </p>
       {initial && <p className="muted">{t("来源：", "Source: ") + source}</p>}
       <form
+        onKeyDown={(event) => {
+          if (
+            event.key === "Enter" &&
+            (event.nativeEvent.isComposing ||
+              event.nativeEvent.keyCode === 229 ||
+              event.repeat)
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
         onSubmit={(e) => {
           e.preventDefault();
+          if (submitting.current) return;
+          submitting.current = true;
           setSaving(true);
           const exact = s.entries.find(
             (e) =>
@@ -117,7 +149,12 @@ function Capture({
 
 ![截图 / Screenshot](asset:${hash})`;
                 }
-                return store.createEntry(title, material || undefined, source);
+                return store.createEntry(
+                  title,
+                  material || undefined,
+                  source,
+                  category,
+                );
               })();
           void action
             .then((id) => {
@@ -151,7 +188,10 @@ function Capture({
               );
               setError(String(e));
             })
-            .finally(() => setSaving(false));
+            .finally(() => {
+              submitting.current = false;
+              setSaving(false);
+            });
         }}
       >
         <label>
@@ -191,12 +231,16 @@ function Capture({
           </div>
         )}
         <label>
+          {t("所属分类", "Category")}
+          <CategoryPicker value={category} onChange={setCategory} />
+        </label>
+        <label>
           {t(
             "随手记下的理解或原始材料（可选）",
             "Your understanding or source material (optional)",
           )}
           <textarea
-            rows={5}
+            rows={10}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={t(
@@ -262,6 +306,10 @@ function Shell() {
     t = useT(),
     [page, setPage] = useState("home"),
     [chatEntry, setChatEntry] = useState(""),
+    [entryChatRequest, setEntryChatRequest] = useState<
+      | { entryId: string; topicId?: string; nonce: number; open?: boolean }
+      | undefined
+    >(),
     [chatTopic, setChatTopic] = useState(""),
     [chatQuote, setChatQuote] = useState(""),
     [reviewSession, setReviewSession] = useState(""),
@@ -289,8 +337,10 @@ function Shell() {
     restored.current = true;
     if (!interacted.current && workspace.active) setPage("entry");
   }, [workspace.ready, workspace.active]);
+  const reviewNow = useReviewClock(),
+    targetRetention = reviewTarget(s.docs);
   const reminderSignature = s.entries
-    .map((e) => e.id + ":" + e.card.due.toISOString())
+    .map((e) => e.id + ":" + nextReviewAt(e, targetRetention).toISOString())
     .sort()
     .join("|");
   useEffect(() => {
@@ -299,6 +349,7 @@ function Shell() {
   }, [s.ready, s.device.notifications, reminderSignature]);
   const search = useRef<HTMLInputElement>(null);
   const navigate = (next: string) => {
+    navigationHistory.captureCurrent();
     interacted.current = true;
     if (
       window.dispatchEvent(new Event("zhinexus:navigate", { cancelable: true }))
@@ -419,27 +470,75 @@ function Shell() {
     void remind().catch(() => {});
     return () => clearInterval(timer);
   }, [s.ready, s.device.notifications]);
-  useEffect(() => {
-    if (!s.ready || !s.device.davUrl || s.device.syncMinutes <= 0) return;
-    const timer = setInterval(
-      () => {
-        if (syncActivity.getSnapshot()) return;
-        void synchronize().catch((e) => {
-          diagnostics.error("app", "自动同步失败 / Automatic sync failed", e);
-          notify(String(e.message));
-          void notifyCompletion("sync", String(e.message)).catch(() => {});
-        });
-      },
-      Math.max(1, s.device.syncMinutes) * 60000,
-    );
-    return () => clearInterval(timer);
-  }, [s.ready, s.device.davUrl, s.device.syncMinutes]);
+  useEffect(() => startAutomaticSync((message) => setToast(message)), []);
   const open = (id: string) => {
+    navigationHistory.captureCurrent();
     if (navigate("entry")) workspace.controller.open(id);
   };
+  useEffect(() => {
+    const receive = (event: Event) =>
+      open((event as CustomEvent<string>).detail);
+    window.addEventListener("zhinexus:open-entry", receive);
+    return () => window.removeEventListener("zhinexus:open-entry", receive);
+  });
+  const routeRef = useRef({
+    page,
+    entryId: entry,
+    chatEntry,
+    chatTopic,
+    settingsTab,
+    reviewSession,
+  });
+  routeRef.current = {
+    page,
+    entryId: entry,
+    chatEntry,
+    chatTopic,
+    settingsTab,
+    reviewSession,
+  };
+  useEffect(
+    () =>
+      startNavigationHistory(
+        () => routeRef.current,
+        (route, sidebar) => {
+          if (
+            !window.dispatchEvent(
+              new Event("zhinexus:navigate", { cancelable: true }),
+            )
+          )
+            return false;
+          setPage(route.page);
+          setChatEntry(route.chatEntry);
+          setChatTopic(route.chatTopic);
+          setSettingsTab(route.settingsTab);
+          setReviewSession(route.reviewSession);
+          if (route.entryId) workspace.controller.open(route.entryId);
+          if (route.page === "entry" && route.entryId)
+            setEntryChatRequest({
+              entryId: route.entryId,
+              nonce: Date.now(),
+              open: sidebar,
+            });
+          return true;
+        },
+      ),
+    [],
+  );
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => navigationHistory.record());
+    return () => cancelAnimationFrame(frame);
+  }, [page, entry, chatEntry, chatTopic, settingsTab, reviewSession]);
   const destination = (target: AITarget) => {
     if (target.page === "entry" && target.entryId) open(target.entryId);
-    else if (target.page === "agent") {
+    else if (target.page === "agent" && target.entryId) {
+      open(target.entryId);
+      setEntryChatRequest({
+        entryId: target.entryId,
+        topicId: target.topicId,
+        nonce: Date.now(),
+      });
+    } else if (target.page === "agent") {
       setChatEntry(target.entryId ?? "");
       setChatTopic(target.topicId ?? "");
       setChatQuote("");
@@ -482,7 +581,13 @@ function Shell() {
       id: "review",
       name: t("复习队列", "Review queue"),
       icon: Brain,
-      badge: s.entries.filter((e) => e.card.due <= new Date()).length,
+      badge: s.entries.filter((e) => needsReview(e, targetRetention, reviewNow))
+        .length,
+    },
+    {
+      id: "curves",
+      name: t("遗忘曲线", "Forgetting curves"),
+      icon: ChartSpline,
     },
     { id: "graph", name: t("知识星图", "Knowledge graph"), icon: GitBranch },
     { id: "agent", name: t("学习伙伴", "AI companion"), icon: MessageSquare },
@@ -498,9 +603,15 @@ function Shell() {
       className={
         "app-shell" +
         (sidebarCollapsed ? " sidebar-collapsed" : " sidebar-expanded") +
-        (page === "agent" ? " chat-workspace" : "")
+        (page === "agent"
+          ? " chat-workspace"
+          : page === "graph"
+            ? " graph-workspace"
+            : "")
       }
     >
+      <CategoryDeletionHost />
+      <ContextMenu notify={notify} />
       <aside className="sidebar">
         <button
           className="sidebar-toggle icon"
@@ -543,6 +654,8 @@ function Shell() {
         </a>
         <button
           className="capture-button"
+          aria-label={t("记录新知识", "Capture knowledge")}
+          title={t("记录新知识", "Capture knowledge")}
           onClick={() => {
             setCaptureSource("manual-capture");
             setCaptureImage("");
@@ -559,6 +672,7 @@ function Shell() {
           {nav.map((n) => (
             <button
               key={n.id}
+              data-nav={n.id}
               title={n.name}
               className={
                 page === n.id || (page === "entry" && n.id === "library")
@@ -595,6 +709,7 @@ function Shell() {
           fallback={<div className="boot-error">ZhiNexus · Loading…</div>}
         >
           <header className="topbar">
+            <NavigationButtons />
             <div className="breadcrumb">
               ZhiNexus <ChevronRight size={13} />
               <span>
@@ -648,6 +763,12 @@ function Shell() {
                 {t("AI 任务", "AI tasks")} {jobs.jobs.length || ""}
               </span>
             </button>
+            <UpdateStatus
+              onOpen={() => {
+                setSettingsTab("about");
+                navigate("settings");
+              }}
+            />
             <SyncStatus notify={notify} />
           </header>
           {page !== "agent" && (
@@ -692,22 +813,32 @@ function Shell() {
             <EntryPage
               key={id}
               id={id}
+              chatRequest={
+                entryChatRequest?.entryId === id ? entryChatRequest : undefined
+              }
               active={page === "entry" && entry === id}
               onBack={() => navigate("library")}
-              onChat={(id, quote) => {
-                if (navigate("agent")) {
-                  setChatEntry(id);
-                  setChatTopic("");
-                  setChatQuote(quote ?? "");
-                }
-              }}
+
               notify={notify}
             />
           ))}
           {page === "review" && (
             <Review notify={notify} initialSession={reviewSession} />
           )}{" "}
-          {page === "graph" && <Graph onOpen={open} />}{" "}
+          {page === "curves" && (
+            <ForgettingCurves onOpen={open} notify={notify} />
+          )}
+          {page === "graph" && (
+            <Graph
+              onOpen={open}
+              onCreate={() => {
+                setCaptureText("");
+                setCaptureImage("");
+                setCaptureSource("manual-capture");
+                setCapture(true);
+              }}
+            />
+          )}{" "}
           {page === "agent" && (
             <Agent
               key={chatEntry}
@@ -731,12 +862,14 @@ function Shell() {
         </Suspense>
       </main>
       {selectedJob && (
-        <AIJobReview
-          id={selectedJob}
-          onClose={() => setSelectedJob("")}
-          onNavigate={destination}
-          notify={notify}
-        />
+        <Suspense fallback={null}>
+          <AIJobReview
+            id={selectedJob}
+            onClose={() => setSelectedJob("")}
+            onNavigate={destination}
+            notify={notify}
+          />
+        </Suspense>
       )}
       {ocr?.image && (
         <OcrResult

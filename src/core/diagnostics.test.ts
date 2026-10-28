@@ -79,9 +79,12 @@ it("caps records and large fields with explicit truncation, and exposes persiste
   await expect(journal.flush()).rejects.toThrow("disk full");
   expect(journal.getSnapshot().length).toBeLessThanOrEqual(100);
   expect(JSON.stringify(journal.getSnapshot()).length).toBeLessThan(
-    4 * 1024 * 1024,
+    32 * 1024 * 1024,
   );
-  expect(journal.getSnapshot()[0].request).toContain("truncated");
+  expect(journal.getSnapshot()[0].request).toHaveLength(100000);
+  expect(diagnosticText("x".repeat(4 * 1024 * 1024 + 1))).toContain(
+    "truncated",
+  );
 });
 
 it("handles cyclic errors and escaped credentials without breaking the caller", async () => {

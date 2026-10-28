@@ -129,20 +129,38 @@ export async function checkUpdates(): Promise<UpdateInfo | null> {
   const payload = JSON.parse(await boundedText(res, 2 * 1024 * 1024));
   return selectUpdate(payload, identity);
 }
-/** Ask the native boundary to download, verify and launch the platform-appropriate installer. */
-export async function applyUpdate(info: UpdateInfo) {
+/** Stage a bounded, verified artifact in the native cache without opening any installer. */
+export async function prepareUpdate(info: UpdateInfo) {
+  if (!native || !info.available)
+    throw Error("Native app and newer update required");
+  validateReleaseAsset(info.url);
+  await ensureNativeProxy();
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("prepare_platform_update", { update: updateRequest(info) });
+}
+/** Keep authentication and filesystem paths out of webview update metadata. */
+function updateRequest(info: UpdateInfo) {
+  return {
+    kind: info.kind,
+    url: info.url,
+    sha256: info.sha256,
+    signature: info.signature ?? null,
+    version: info.version,
+  };
+}
+/** Reverify staged bytes and launch the installer; downloads are reused rather than repeated. */
+export async function applyUpdate(
+  info: UpdateInfo,
+  options: { silent?: boolean; restart?: boolean } = {},
+) {
   if (!native) throw Error("请在原生应用中更新 / Native app required");
   if (!info.available) throw Error("没有更新 / Already current");
   validateReleaseAsset(info.url);
   await ensureNativeProxy();
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke("install_platform_update", {
-    update: {
-      kind: info.kind,
-      url: info.url,
-      sha256: info.sha256,
-      signature: info.signature ?? null,
-      version: info.version,
-    },
+  await invoke("install_platform_update", {
+    update: updateRequest(info),
+    silent: options.silent ?? false,
+    restart: options.restart ?? true,
   });
 }

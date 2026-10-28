@@ -37,6 +37,7 @@ export function EntryTabs({
           return (
             <div
               key={id}
+              data-entry-id={id}
               className={
                 "entry-tab " +
                 (workspace.active === id && active ? "active" : "")

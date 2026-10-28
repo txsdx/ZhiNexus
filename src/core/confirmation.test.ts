@@ -9,7 +9,7 @@ afterEach(() => vi.restoreAllMocks());
 it.each(["category", "entry", "topic", "edge"] as const)(
   "awaits explicit consent before any %s mutation",
   async (collection) => {
-    const batch = vi.spyOn(store, "batch").mockResolvedValue(undefined);
+    const batch = vi.spyOn(store, "batchWhen").mockResolvedValue(true);
     const snapshot = store.getSnapshot();
     vi.spyOn(store, "getSnapshot").mockReturnValue({
       ...snapshot,

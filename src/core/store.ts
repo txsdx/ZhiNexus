@@ -4,7 +4,8 @@ import { Database } from "./database";
 import { joinVectors, materialize, validateEnvelope } from "./crdt";
 import { sha256 } from "./crypto";
 import { defaultAI, defaultDevice, entryTemplate } from "./defaults";
-import { newCard, reviveCard } from "./review";
+import { reviewTarget } from "./review-policy";
+import { newCard, rememberedCard, reviveCard } from "./review";
 import type {
   AIConfig,
   Category,
@@ -19,7 +20,7 @@ import type {
   ReviewSession,
 } from "./types";
 /** One validated document mutation within an atomic operation batch. */
-type StorePatch = {
+export type StorePatch = {
   collection: Collection;
   id: string;
   patch: Record<string, Json>;
@@ -45,8 +46,8 @@ function projection(
   events: Envelope[],
   device: DeviceConfig,
   revision: number,
+  docs = materialize(events),
 ): Snapshot {
-  const docs = materialize(events);
   const rows = <T>(collection: Collection) =>
     docs
       .filter((d) => d.collection === collection && !d.fields.deleted)
@@ -109,22 +110,35 @@ export class KnowledgeStore {
       if ((await this.db.integrity()) !== "ok")
         throw Error("SQLite integrity_check failed");
       const persisted = await this.db.events();
-      for (const event of persisted) await validateEnvelope(event);
+      for (let from = 0; from < persisted.length; from += 32)
+        await Promise.all(
+          persisted
+            .slice(from, from + 32)
+            .map((event) => validateEnvelope(event)),
+        );
       assertCausalClosure(persisted);
-      validateDocuments(materialize(persisted));
+      const docs = materialize(persisted);
+      validateDocuments(docs);
+      return { events: persisted, docs };
     };
+    let validated;
     try {
       await this.db.replayJournal();
-      await validate();
+      validated = await validate();
     } catch {
       await this.db.recover();
       await this.db.replayJournal();
-      await validate();
+      validated = await validate();
     }
-    await this.db.checkpoint();
     this.deviceId = crypto.randomUUID();
     const device = await this.db.local("device", defaultDevice);
-    await this.reload(device);
+    this.state = projection(
+      validated.events,
+      device,
+      this.state.revision + 1,
+      validated.docs,
+    );
+    this.listeners.forEach((fn) => fn());
     this.channel = new BroadcastChannel("zhinexus");
     this.channel.onmessage = () => {
       void this.reload().catch(console.error);
@@ -225,7 +239,7 @@ export class KnowledgeStore {
       this.channel?.postMessage("commit");
     });
   }
-  /** Create a knowledge entry with a due card and explicit capture provenance. */
+  /** Create remembered knowledge with a future review and a category checked inside the commit queue. */
   async createEntry(
     title: string,
     content = entryTemplate,
@@ -235,21 +249,32 @@ export class KnowledgeStore {
     if (!title.trim()) throw Error("请输入词条名称");
     const id = crypto.randomUUID(),
       now = new Date().toISOString();
-    await this.patch(
-      "entry",
-      id,
-      json({
-        title: title.trim(),
-        content,
-        category,
-        tags: [],
-        prerequisites: [],
-        createdAt: now,
-        updatedAt: now,
-        card: newCard(),
-      }) as Record<string, Json>,
-      source,
-    );
+    if (
+      !(await this.batchWhen(
+        [
+          {
+            collection: "entry",
+            id,
+            patch: json({
+              title: title.trim(),
+              content,
+              category,
+              tags: [],
+              prerequisites: [],
+              createdAt: now,
+              updatedAt: now,
+              card: rememberedCard(new Date(), reviewTarget(this.state.docs)),
+              reviewCount: 0,
+            }) as Record<string, Json>,
+          },
+        ],
+        source,
+        () => !category || this.state.categories.some((c) => c.id === category),
+      ))
+    )
+      throw Error(
+        "所选分类已不存在，请重新选择 / Selected category no longer exists",
+      );
     return id;
   }
   /** Persist provider settings without replicating authentication secrets. */

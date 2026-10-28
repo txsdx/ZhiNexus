@@ -20,7 +20,9 @@ export function Agent({
   initialTopic = "",
   quote = "",
   onOpenEntry,
+  embedded = false,
 }: {
+  embedded?: boolean;
   entryId?: string;
   initialTopic?: string;
   quote?: string;
@@ -44,7 +46,7 @@ export function Agent({
   const [model, setModel] = useState(s.ai.tasks.agent.model),
     [effort, setEffort] = useState(s.ai.tasks.agent.effort);
   const [showTopics, setShowTopics] = useState(
-    () => window.matchMedia("(min-width: 900px)").matches,
+    () => !embedded && window.matchMedia("(min-width: 900px)").matches,
   );
   const topic = topics.find((x) => x.id === selected) ?? topics[0],
     entry = s.entries.find((e) => e.id === entryId);
@@ -211,7 +213,7 @@ export function Agent({
     if (awaitingApproval) openAIJob(awaitingApproval.id);
   }, [awaitingApproval?.id, awaitingApproval?.state]);
   return (
-    <div className="page chat-page">
+    <div className={"page chat-page" + (embedded ? " embedded-chat" : "")}>
       <div className={"chat-shell" + (showTopics ? " topics-visible" : "")}>
         {showTopics && (
           <>
@@ -225,6 +227,7 @@ export function Agent({
               selected={topic?.id}
               busy={busy || jobs.readOnly}
               onNew={() => void create()}
+              onClose={() => setShowTopics(false)}
               onSelect={choose}
               onRename={renameTopic}
               onDelete={(value) =>
@@ -262,7 +265,7 @@ export function Agent({
               className="icon"
               aria-label={
                 showTopics
-                  ? t("收起会话列表", "Hide conversations")
+                  ? t("切换会话列表", "Toggle conversations")
                   : t("展开会话列表", "Show conversations")
               }
               onClick={() => setShowTopics((value) => !value)}

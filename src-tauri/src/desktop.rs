@@ -378,12 +378,22 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = handle.state::<DesktopState>();
-                if !state.exiting.load(Ordering::SeqCst)
-                    && state.settings.lock().is_ok_and(|s| s.background)
-                {
+                if !state.exiting.load(Ordering::SeqCst) {
                     api.prevent_close();
-                    if let Some(window) = handle.get_webview_window("main") {
-                        let _ = window.hide();
+                    if state.settings.lock().is_ok_and(|s| s.background) {
+                        if let Some(window) = handle.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    } else {
+                        push(
+                            &handle,
+                            Action {
+                                kind: "quit".into(),
+                                text: String::new(),
+                                source: String::new(),
+                                image: None,
+                            },
+                        );
                     }
                 }
             }

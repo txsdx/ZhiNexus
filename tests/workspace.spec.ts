@@ -36,6 +36,7 @@ async function entryAssistant(page: Page) {
     .getByRole("toolbar", { name: "划词工具", exact: true })
     .getByRole("button", { name: "AI 对话", exact: true })
     .click();
+  await page.getByRole("button", { name: "展开会话列表", exact: true }).click();
 }
 /** Adopt captured enrichment only after viewing its durable queue proposal. */
 async function applyEnrichment(page: Page) {
@@ -498,6 +499,7 @@ for (const target of ["大类", "子类", "词条"] as const) {
         .filter({ hasText: "子级知识" })
         .getByRole("button", { name: "子级知识", exact: true })
         .click();
+      await page.getByRole("button", { name: "编辑", exact: true }).click();
     } else {
       await page.getByRole("button", { name: "设置与偏好" }).click();
       await page.getByRole("button", { name: "知识分类", exact: true }).click();
@@ -545,7 +547,12 @@ for (const target of ["大类", "子类", "词条"] as const) {
       "store.db.originalAppend=store.db.append;store.db.append=async()=>{throw Error('fixture storage failure')}",
     );
     await trigger.click();
-    await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    await dialog
+      .getByRole("button", {
+        name: target === "词条" ? "确认删除" : "保留（移至上一级）",
+        exact: true,
+      })
+      .click();
     await expect(
       target === "词条" ? page.locator(".toast") : page.getByRole("alert"),
     ).toContainText("fixture storage failure");
@@ -560,7 +567,12 @@ for (const target of ["大类", "子类", "词条"] as const) {
       "store.db.append=store.db.originalAppend;delete store.db.originalAppend",
     );
     await trigger.click();
-    await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    await dialog
+      .getByRole("button", {
+        name: target === "词条" ? "确认删除" : "保留（移至上一级）",
+        exact: true,
+      })
+      .click();
     const category = target === "大类" ? "parent" : "child";
     await expect
       .poll(() =>
@@ -705,7 +717,7 @@ test("AI review persists answer and grade then schedules and enriches the entry"
   await page.goto("/");
   await repository(
     page,
-    `const ai=store.getSnapshot().ai;ai.baseUrl='https://ai.example/v1';ai.models=[{id:'test',name:'Test',efforts:['medium','high'],thinking:true,tools:true,vision:false,image:false}];for(const k of Object.keys(ai.tasks))ai.tasks[k].model='test';await store.saveAI(ai);await store.saveDevice({...store.getSnapshot().device,apiKey:'test-only'});await store.createEntry('主动回忆','主动从记忆提取知识');`,
+    `const ai=store.getSnapshot().ai;ai.baseUrl='https://ai.example/v1';ai.models=[{id:'test',name:'Test',efforts:['medium','high'],thinking:true,tools:true,vision:false,image:false}];for(const k of Object.keys(ai.tasks))ai.tasks[k].model='test';await store.saveAI(ai);await store.saveDevice({...store.getSnapshot().device,apiKey:'test-only'});const id=await store.createEntry('主动回忆','主动从记忆提取知识');const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify({...e.card,due:new Date(Date.now()-60000)}))});`,
   );
   await page.getByRole("button", { name: /^复习队列/ }).click();
   await page.locator(".queue>button").click();
@@ -726,7 +738,10 @@ test("AI review persists answer and grade then schedules and enriches the entry"
     await repository(page, `return store.getSnapshot().reviews[0].phase;`),
   ).toBe("done");
   expect(
-    await repository(page, `return store.getSnapshot().entries[0].card.reps;`),
+    await repository(
+      page,
+      `return store.getSnapshot().entries[0].reviewCount;`,
+    ),
   ).toBe(1);
   expect(
     await repository(page, `return store.getSnapshot().entries[0].content;`),
@@ -798,7 +813,7 @@ test("two offline replicas converge; repeated sync sends no known logs; corrupti
   await expect(pc.locator("h1")).toBeVisible();
   await repository(
     pc,
-    `await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',davUser:'test',davPassword:'test'});`,
+    `await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',davUser:'test',davPassword:'test',syncMinutes:0});`,
   );
   expect(
     await sync(pc).then(
@@ -1002,7 +1017,7 @@ test("assistant tool writes require confirmation and topic context survives relo
   await page.getByRole("button", { name: "学习伙伴", exact: true }).click();
   await page.locator(".chat-input textarea").fill("为测试概念补充内容");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("Agent 替换词条内容");
+  await expect(page.getByRole("dialog")).toContainText("修改词条：测试概念");
   expect(
     await repository(page, `return store.getSnapshot().entries[0].content;`),
   ).toBe("original");
@@ -1265,6 +1280,26 @@ test("verified local checkpoint recovers a damaged SQLite image without clearing
     page,
     `await store.createEntry('恢复测试','不能丢失的笔记');`,
   );
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const { diagnostics } = await import(
+          "/src/services/diagnostics.ts" as string
+        );
+        return diagnostics
+          .getSnapshot()
+          .some((r) => r.message.includes("Startup timings"));
+      }),
+    )
+    .toBe(true);
+  await page.evaluate(async () => {
+    const { diagnostics } = await import(
+      "/src/services/diagnostics.ts" as string
+    );
+    await diagnostics.flush();
+    const { store } = await import("/src/core/store.ts" as string);
+    await store.db.checkpoint();
+  });
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
@@ -1312,7 +1347,7 @@ test("category rename, move and removal preserve entries and reject cycles", asy
   await page.getByRole("button", { name: "删除分类 新子类" }).click();
   await page
     .getByRole("dialog", { name: "确认删除" })
-    .getByRole("button", { name: "确认删除", exact: true })
+    .getByRole("button", { name: "保留（移至上一级）", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "编辑分类 新子类" }),
@@ -1713,8 +1748,8 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
     `await store.patch('category','parent',{name:'父分类',parent:''});await store.patch('category','child',{name:'子分类',parent:'parent'});
  const first=await store.createEntry('熟悉概念','# 熟悉概念\\n\\n## 一句话解释\\n可显示的一句话。','test','parent');
  const old=await store.createEntry('易忘概念','older material','test','child');
- const {schedule}=await import('/src/core/review.ts');
- for(const[id,time]of [[first,new Date()],[old,new Date('2020-01-01T12:00:00Z')]]){const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify({...schedule(e.card,95,time),...(id===old?{stability:0.000001}:{})}))});}
+ const {schedule,newCard}=await import('/src/core/review.ts');
+ for(const[id,time]of [[first,new Date()],[old,new Date('2020-01-01T12:00:00Z')]]){const e=store.getSnapshot().entries.find(e=>e.id===id);await store.patch('entry',id,{card:JSON.parse(JSON.stringify({...schedule(newCard(),95,time),...(id===old?{stability:0.000001}:{})}))});}
  await store.createEntry('首次复习的概念','new material');`,
   );
   await page.getByRole("button", { name: "我的知识库", exact: true }).click();
@@ -1723,7 +1758,7 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
     page.getByRole("columnheader", { name: "一句话解释", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("columnheader", { name: /上次复习/ }),
+    page.getByRole("columnheader", { name: /下次复习/ }),
   ).toBeVisible();
   await expect(
     page.locator(".entry-row").filter({ hasText: "熟悉概念" }),
@@ -1731,13 +1766,15 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
   const color = await page.locator(".entry-row").evaluateAll((rows) =>
     rows.map((row) => ({
       title: row.querySelector(".entry-title-cell")?.textContent,
-      r: row.querySelector(".memory-cell")?.getAttribute("data-retention"),
+      r: row.querySelector(".next-review-cell")?.getAttribute("data-retention"),
     })),
   );
   expect(Number(color.find((x) => x.title === "熟悉概念")!.r)).toBeGreaterThan(
     Number(color.find((x) => x.title === "易忘概念")!.r),
   );
-  expect(color.find((x) => x.title === "首次复习的概念")!.r).toBe("unknown");
+  expect(
+    Number(color.find((x) => x.title === "首次复习的概念")!.r),
+  ).toBeGreaterThan(0.99);
   await expect(page.locator(".memory-legend")).toHaveText(
     "遗忘程度：黑 → 黄 → 红",
   );
@@ -1752,7 +1789,8 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
     const context = canvas.getContext("2d")!;
     return rows.map((row) => {
       const title = row.querySelector(".entry-title-cell button")!;
-      context.fillStyle = getComputedStyle(title).color;
+      const due = row.querySelector(".next-review-cell")!;
+      context.fillStyle = getComputedStyle(due).color;
       context.fillRect(0, 0, 1, 1);
       return {
         title: title.textContent,

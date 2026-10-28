@@ -56,13 +56,17 @@ export function useConfirmation(
       <Modal
         title={options.title ?? t("确认删除", "Confirm deletion")}
         onClose={() => settle(false)}
+        onConfirm={() => settle(true)}
       >
         <p>{description}</p>
         <div className="actions">
-          <button autoFocus onClick={() => settle(false)}>
-            {t("取消", "Cancel")}
-          </button>
-          <button className="danger" onClick={() => settle(true)}>
+          <button onClick={() => settle(false)}>{t("取消", "Cancel")}</button>
+          <button
+            autoFocus
+            data-confirm
+            className="danger"
+            onClick={() => settle(true)}
+          >
             {options.confirmLabel ?? t("确认删除", "Confirm deletion")}
           </button>
         </div>

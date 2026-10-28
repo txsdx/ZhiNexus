@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use tauri::Manager;
 #[cfg(not(target_os = "android"))]
@@ -129,15 +129,35 @@ fn verify_publisher(
     }
     Ok(())
 }
-/// Stream a bounded artifact into the selected data root; installers are never launched until verification passes.
-#[tauri::command]
-pub async fn install_platform_update(
-    app: tauri::AppHandle,
-    update: PlatformUpdate,
-) -> Result<(), String> {
-    let extension = validate(&update)?;
-    let current = &app.package_info().version;
-    if semver::Version::parse(&update.version).map_err(|e| e.to_string())? <= *current {
+/// Serialize cache downloads and installer launches to prevent concurrent use of the same partial file.
+#[derive(Default)]
+pub struct UpdateState(tokio::sync::Mutex<()>);
+/// Verify cached files again after restarts and immediately before any installer can launch.
+fn verify_digest(path: &Path, expected: &str) -> Result<(), String> {
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > 512 * 1024 * 1024 {
+        return Err("Update exceeds size limit".into());
+    }
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        digest.update(&buffer[..n]);
+    }
+    if format!("{:x}", digest.finalize()) != expected {
+        return Err("Update SHA-256 mismatch".into());
+    }
+    Ok(())
+}
+/// Stage bytes without UI or process termination; verified caches work offline and avoid duplicate downloads.
+async fn prepare_file(app: &tauri::AppHandle, update: &PlatformUpdate) -> Result<PathBuf, String> {
+    let extension = validate(update)?;
+    if semver::Version::parse(&update.version).map_err(|e| e.to_string())?
+        <= app.package_info().version
+    {
         return Err("Update is not newer than this platform version".into());
     }
     let root = app
@@ -146,35 +166,74 @@ pub async fn install_platform_update(
         .join("updates");
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let file = root.join(format!("{}.{extension}", update.sha256));
-    let pending = file.with_extension("partial");
-    let response =
-        crate::github_release::ReleaseClient::new(&app, std::time::Duration::from_secs(900))?
-            .download(&update.url)
-            .await?;
-    if response.content_length().unwrap_or(0) > 512 * 1024 * 1024 {
-        return Err("Update exceeds size limit".into());
+    if file.exists()
+        && verify_digest(&file, &update.sha256).is_ok()
+        && verify_publisher(app, &file, update).is_ok()
+    {
+        return Ok(file);
     }
-    let mut output = fs::File::create(&pending).map_err(|e| e.to_string())?;
-    let mut digest = Sha256::new();
-    let mut size = 0usize;
-    let mut stream = response.bytes_stream();
-    while let Some(bytes) = stream.next().await {
-        let bytes = bytes.map_err(|e| e.without_url().to_string())?;
-        size += bytes.len();
-        if size > 512 * 1024 * 1024 {
+    let pending = file.with_extension("partial");
+    let transfer: Result<(), String> = async {
+        let response =
+            crate::github_release::ReleaseClient::new(app, std::time::Duration::from_secs(900))?
+                .download(&update.url)
+                .await?;
+        if response.content_length().unwrap_or(0) > 512 * 1024 * 1024 {
             return Err("Update exceeds size limit".into());
         }
-        digest.update(&bytes);
-        output.write_all(&bytes).map_err(|e| e.to_string())?;
+        let mut output = fs::File::create(&pending).map_err(|e| e.to_string())?;
+        let mut size = 0usize;
+        let mut stream = response.bytes_stream();
+        while let Some(bytes) = stream.next().await {
+            let bytes = bytes.map_err(|e| e.without_url().to_string())?;
+            size += bytes.len();
+            if size > 512 * 1024 * 1024 {
+                return Err("Update exceeds size limit".into());
+            }
+            output.write_all(&bytes).map_err(|e| e.to_string())?;
+        }
+        output.sync_all().map_err(|e| e.to_string())?;
+        drop(output);
+        verify_digest(&pending, &update.sha256)?;
+        verify_publisher(app, &pending, update)?;
+        if file.exists() {
+            fs::remove_file(&file).map_err(|e| e.to_string())?;
+        }
+        fs::rename(&pending, &file).map_err(|e| e.to_string())?;
+        Ok(())
     }
-    output.sync_all().map_err(|e| e.to_string())?;
-    drop(output);
-    if format!("{:x}", digest.finalize()) != update.sha256 {
+    .await;
+    if transfer.is_err() {
         let _ = fs::remove_file(&pending);
-        return Err("Update SHA-256 mismatch".into());
     }
-    verify_publisher(&app, &pending, &update)?;
-    fs::rename(&pending, &file).map_err(|e| e.to_string())?;
+    transfer?;
+    Ok(file)
+}
+/// Background staging never opens an installer; the webview receives no executable path or credential.
+#[tauri::command]
+pub async fn prepare_platform_update(
+    app: tauri::AppHandle,
+    update: PlatformUpdate,
+) -> Result<(), String> {
+    let state = app.state::<UpdateState>();
+    let _guard = state.0.lock().await;
+    prepare_file(&app, &update).await.map(|_| ())
+}
+/// Launch only verified bytes; automatic Windows exits can install silently without restarting the app.
+#[tauri::command]
+pub async fn install_platform_update(
+    app: tauri::AppHandle,
+    update: PlatformUpdate,
+    silent: Option<bool>,
+    restart: Option<bool>,
+) -> Result<(), String> {
+    let state = app.state::<UpdateState>();
+    let _guard = state.0.lock().await;
+    let file = prepare_file(&app, &update).await?;
+    #[cfg(target_os = "windows")]
+    let root = file.parent().ok_or("Missing update directory")?;
+    #[cfg(not(target_os = "windows"))]
+    let _ = (silent, restart);
     #[cfg(target_os = "windows")]
     if matches!(update.kind, Kind::Portable) {
         let target = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -184,12 +243,27 @@ pub async fn install_platform_update(
                 .map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        std::process::Command::new(&file)
-            .arg("--finish-portable-update")
-            .arg(&target)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut helper = std::process::Command::new(&file);
+        helper.arg("--finish-portable-update").arg(&target);
+        if !restart.unwrap_or(true) {
+            helper.arg("--no-restart");
+        }
+        helper.spawn().map_err(|e| e.to_string())?;
+        crate::desktop::mark_exiting(&app);
         app.exit(0);
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    if matches!(update.kind, Kind::Setup) {
+        let mut installer = std::process::Command::new(&file);
+        installer.arg("/UPDATE");
+        if silent.unwrap_or(false) {
+            installer.arg("/S");
+        }
+        if restart.unwrap_or(true) {
+            installer.arg("/R");
+        }
+        installer.spawn().map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(target_os = "android")]
@@ -233,13 +307,35 @@ pub fn finish_portable_update() -> Result<bool, String> {
         if fs::copy(&target, target.with_extension("previous.exe")).is_ok()
             && fs::rename(&staged, &target).is_ok()
         {
-            std::process::Command::new(&target)
-                .spawn()
-                .map_err(|e| e.to_string())?;
+            if !args.iter().any(|arg| arg == "--no-restart") {
+                std::process::Command::new(&target)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
             let _ = fs::remove_file(root.join("pending.json"));
             return Ok(true);
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     Err("Portable executable remained locked; previous executable was retained".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cached_artifacts_require_matching_bytes_not_just_a_filename() {
+        let directory =
+            std::env::temp_dir().join(format!("zhinexus-update-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let file = directory.join("artifact.exe");
+        fs::write(&file, b"verified bytes").unwrap();
+        let expected = format!("{:x}", Sha256::digest(b"verified bytes"));
+        assert!(verify_digest(&file, &expected).is_ok());
+        fs::write(&file, b"modified bytes").unwrap();
+        assert!(verify_digest(&file, &expected).is_err());
+        fs::remove_file(&file).unwrap();
+        assert!(verify_digest(&file, &expected).is_err());
+        fs::remove_dir(&directory).unwrap();
+    }
 }

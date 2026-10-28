@@ -55,7 +55,7 @@
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
-  min-width: 1100px;
+  min-width: 640px;
   font-size: 0.89rem;
 }
 .knowledge-table th {
@@ -74,17 +74,23 @@
   justify-content: start;
 }
 .knowledge-table th:nth-child(1) {
-  width: 25%;
+  width: 36%;
 }
 .knowledge-table th:nth-child(2) {
-  width: 28%;
+  width: auto;
 }
-.knowledge-table th:nth-child(3),
+.knowledge-table th:nth-child(3) {
+  width: 105px;
+}
 .knowledge-table th:nth-child(4) {
-  width: 15%;
+  width: 100px;
 }
-.knowledge-table th:nth-child(5) {
-  width: 17%;
+.entry-created-cell {
+  font-size: 0.78rem;
+}
+.next-review-cell {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .knowledge-table td {
   padding: 10px 13px;
@@ -131,25 +137,13 @@
   padding-block: 9px;
   font-size: 0.9rem;
 }
-.memory-cell {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.memory-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-right: 6px;
-}
 .knowledge-table time {
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 700px) {
   .knowledge-table {
-    min-width: 1000px;
+    min-width: 640px;
   }
   .memory-legend {
     margin-left: 0;

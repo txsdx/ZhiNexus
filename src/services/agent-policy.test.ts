@@ -138,3 +138,42 @@ it("requires confirmation to repeat an earlier uncertain operation even if it no
   expect(confirm).toHaveBeenCalledOnce();
   expect(mock.call).not.toHaveBeenCalled();
 });
+
+it("provider-reused tool-call IDs are distinct actions in separate assistant responses", async () => {
+  mock.list.mockResolvedValue({
+    tools: [{ name: "write_note", inputSchema: { type: "object" } }],
+  });
+  mock.complete.mockReset();
+  const action = {
+    content: "",
+    calls: [
+      {
+        id: "reused-call",
+        type: "function",
+        function: { name: "mcp_0_0", arguments: "{}" },
+      },
+    ],
+  };
+  mock.complete
+    .mockResolvedValueOnce(action)
+    .mockResolvedValueOnce({ content: "first", calls: [] })
+    .mockResolvedValueOnce(action)
+    .mockResolvedValueOnce({ content: "second", calls: [] });
+  const confirm = vi.fn(async () => true);
+  await chat(mock.state.topics[0], "first", confirm, {
+    model: "test",
+    effort: "low",
+  });
+  await chat(mock.state.topics[0], "second", confirm, {
+    model: "test",
+    effort: "low",
+  });
+  expect(mock.call).toHaveBeenCalledTimes(2);
+  expect(
+    new Set(
+      mock.state.docs
+        .filter((d: any) => d.fields.status === "done")
+        .map((d: any) => d.id),
+    ).size,
+  ).toBe(2);
+});

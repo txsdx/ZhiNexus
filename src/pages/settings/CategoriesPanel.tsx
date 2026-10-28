@@ -49,7 +49,11 @@ export function CategoriesPanel() {
       >
         {t("添加分类", "Add category")}
       </button>
-      <CategoryTree categories={s.categories} assignments={s.entries} />
+      <CategoryTree
+        categories={s.categories}
+        assignments={s.entries}
+        editable
+      />
       <CategoryEditor />
       <button
         className="primary"

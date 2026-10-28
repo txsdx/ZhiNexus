@@ -8,6 +8,7 @@ import { apiBaseUrl, normalizeApiKey, secureUrl, serviceUrl } from "./network";
 import { normalizeProxy, ensureNativeProxy } from "./proxy";
 import { flushKeySync, saveAIAndKey } from "./key-sync";
 import { enableNotifications } from "./device";
+import { reviewTarget } from "../core/review-policy";
 import { diagnostics } from "./diagnostics";
 import { defaultNotifications } from "./notifications";
 
@@ -16,12 +17,14 @@ export interface SettingsDraft {
   ai: AIConfig;
   device: DeviceConfig;
   appearance: Record<string, Json>;
+  review: { retention: number };
 }
 const source = (): SettingsDraft => {
   const s = store.getSnapshot();
   return {
     ai: s.ai,
     device: s.device,
+    review: { retention: reviewTarget(s.docs) },
     appearance:
       s.docs.find((d) => d.collection === "setting" && d.id === "appearance")
         ?.fields ?? {},
@@ -48,6 +51,16 @@ async function save(next: SettingsDraft, base: SettingsDraft) {
     await attempt("Appearance", () =>
       store.patch("setting", "appearance", value.appearance),
     );
+  if (changed(value.review, current.review))
+    await attempt("Review policy", async () => {
+      if (
+        !Number.isFinite(value.review.retention) ||
+        value.review.retention < 0.5 ||
+        value.review.retention > 0.99
+      )
+        throw Error("期望保留率须为 50–99% / Desired retention must be 50–99%");
+      await store.patch("setting", "review-policy", value.review);
+    });
   const aiChanged = changed(value.ai, current.ai);
   const keyChanged =
     changed(value.device.apiKey, current.device.apiKey) ||
@@ -75,6 +88,12 @@ async function save(next: SettingsDraft, base: SettingsDraft) {
     Object.fromEntries(
       keys.filter((key) => key in patch).map((key) => [key, patch[key]]),
     ) as Partial<DeviceConfig>;
+  if ("autoUpdate" in patch)
+    await attempt("Automatic updates", async () => {
+      if (typeof patch.autoUpdate !== "boolean")
+        throw Error("Invalid automatic update preference");
+      await store.updateDevice({ autoUpdate: patch.autoUpdate });
+    });
   const dav = group(["davUrl", "davUser", "davPassword", "syncMinutes"]);
   if ("aiConcurrency" in patch)
     await attempt("AI concurrency", async () => {
@@ -86,7 +105,12 @@ async function save(next: SettingsDraft, base: SettingsDraft) {
   if (Object.keys(dav).length)
     await attempt("WebDAV", async () => {
       if (value.device.davUrl) secureUrl(value.device.davUrl);
-      await store.updateDevice(dav);
+      await store.updateDevice({
+        ...dav,
+        ...(current.device.davUrl !== value.device.davUrl
+          ? { lastSync: "" }
+          : {}),
+      });
     });
   if (patch.proxy)
     await attempt("Proxy", async () => {

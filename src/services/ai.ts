@@ -69,7 +69,14 @@ export async function complete(
       const model = ai.models.find((m) => m.id === config.model);
       const body: Record<string, unknown> = {
         model: config.model,
-        messages: messages.map(({ jobId: _jobId, ...message }) => message),
+        messages: messages.map(
+          ({
+            jobId: _jobId,
+            responseId: _responseId,
+            toolReceiptVersion: _toolReceiptVersion,
+            ...message
+          }) => message,
+        ),
         stream,
       };
       progress?.({
@@ -151,11 +158,12 @@ export async function complete(
           res,
           signal,
           (snapshot) => progress?.({ ...snapshot, streaming: true }),
-          (events) => diagnosticStream(logId, res.status, events),
+          (output) => diagnosticStream(logId, res.status, output),
         );
         return { content: streamed.content, calls: streamed.calls };
       }
       const value = normalizeAIResponse(await diagnosticJson(res, logId));
+      diagnosticStream(logId, res.status, value);
       signal?.throwIfAborted();
       progress?.({ ...value, streaming: false });
       return { content: value.content, calls: value.calls };
@@ -282,6 +290,9 @@ export async function generateImage(
     } else throw Error("图片响应为空");
     signal?.throwIfAborted();
     const hash = await store.db.putBlob(bytes, "image/png");
+    diagnostics.update(logId, {
+      response: `图片生成完成 / Image generated: asset:${hash} (${bytes.length} bytes)`,
+    });
     return hash;
   });
 }

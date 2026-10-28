@@ -6,10 +6,11 @@ const scheduler = fsrs({ request_retention: 0.9 });
 /** An unreviewed concept has no measured recall probability, rather than a fabricated forgetting score. */
 export function memoryEstimate(entry: Entry, now = new Date()): number | null {
   if (!entry.card.last_review || entry.card.reps === 0) return null;
-  const retention = scheduler.get_retrievability(
-    reviveCard(entry.card),
-    now,
-    false,
+  const card = reviveCard(entry.card);
+  if (card.stability <= 0) return null;
+  const retention = scheduler.forgetting_curve(
+    Math.max(0, (now.getTime() - card.last_review!.getTime()) / 86400000),
+    card.stability,
   );
   return Number.isFinite(retention)
     ? Math.min(1, Math.max(0, retention))

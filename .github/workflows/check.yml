@@ -47,3 +47,4 @@ jobs:
           shared-key: native-check-linux
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib github_release::tests
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib updates::tests

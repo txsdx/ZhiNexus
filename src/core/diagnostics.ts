@@ -80,8 +80,8 @@ export function diagnosticText(value: unknown, secrets: string[] = []): string {
         return "[URL]";
       }
     });
-  return text.length > 96000
-    ? text.slice(0, 96000) + "\n[truncated after 96000 characters]"
+  return text.length > 4 * 1024 * 1024
+    ? text.slice(0, 4 * 1024 * 1024) + "\n[truncated after 4 Mi characters]"
     : text;
 }
 
@@ -185,7 +185,7 @@ export class DiagnosticJournal {
     let size = 0;
     this.rows = this.rows.filter((row, i) => {
       size += new TextEncoder().encode(JSON.stringify(row)).byteLength;
-      return i < 100 && size <= 4 * 1024 * 1024;
+      return i < 100 && size <= 32 * 1024 * 1024;
     });
     this.emit();
     if (!this.write) return;

@@ -1,3 +1,4 @@
+import { mockWebDAV } from "./helpers/webdav";
 import { isTitleRequest } from "./helpers/ai-stream";
 /** End-to-end contracts: persistence, rendering, AI review, incremental replication and backup recovery. */
 import {
@@ -303,7 +304,7 @@ test("MCP removal cannot change draft or saved configuration before confirmation
     .toBe(0);
 });
 
-test("cloud snapshot recovery makes no requests until explicitly confirmed", async ({
+test("cloud compaction starts only from its explicit action and preserves knowledge without cloud rollback controls", async ({
   page,
   context,
 }) => {
@@ -313,7 +314,6 @@ test("cloud snapshot recovery makes no requests until explicitly confirmed", asy
   page.on("request", (request) => {
     if (request.url().startsWith("https://dav.example/")) requests++;
   });
-  await asyncNativeConfirmation(page);
   await page.goto("/");
   await repository(
     page,
@@ -323,26 +323,22 @@ test("cloud snapshot recovery makes no requests until explicitly confirmed", asy
   await page
     .getByRole("button", { name: "数据库与云同步", exact: true })
     .click();
-  const trigger = page.getByRole("button", {
-    name: "从云端快照恢复",
-    exact: true,
-  });
-  await assertDismissals(
-    page,
-    () => trigger.click(),
-    async () => ({
-      requests,
-      events: await repository(page, "return store.getSnapshot().events"),
-    }),
-    "确认恢复云端快照",
-  );
+  await expect(
+    page.getByRole("button", { name: "从云端快照恢复", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "上传完整快照", exact: true }),
+  ).toHaveCount(0);
   expect(requests).toBe(0);
-  await trigger.click();
-  await page
-    .getByRole("dialog", { name: "确认恢复云端快照" })
-    .getByRole("button", { name: "确认恢复", exact: true })
-    .click();
-  await expect.poll(() => requests).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "整理云端日志", exact: true }).click();
+  await expect(page.locator(".report")).toContainText('"cloudRoot"');
+  expect(requests).toBeGreaterThan(0);
+  expect(
+    await repository(
+      page,
+      "return store.getSnapshot().entries.map(e=>e.title)",
+    ),
+  ).toEqual(["保留知识"]);
 });
 
 test("raw model IDs and live global defaults persist without overwriting task or chat overrides", async ({
@@ -634,49 +630,9 @@ test("ordinary UI text, secondary labels and placeholders are black in day and w
     ).toBe(color);
   }
 });
-/** Provide a shared HTTPS WebDAV endpoint while preserving real client serialization and hash verification. */
+/** Keep existing shared-replica tests on the same protocol-accurate WebDAV fixture. */
 async function mockDav(context: BrowserContext, files: Map<string, string>) {
-  await context.route("https://dav.example/**", async (route) => {
-    const req = route.request(),
-      path = new URL(req.url()).pathname.slice("/knowledge/".length);
-    const method = req.method();
-    if (method === "MKCOL") {
-      await route.fulfill({ status: 201 });
-      return;
-    }
-    if (method === "PROPFIND") {
-      const folder = path.replace(/\/$/, "") + "/";
-      const names = [...files.keys()].filter(
-        (k) => k.startsWith(folder) && !k.slice(folder.length).includes("/"),
-      );
-      await route.fulfill({
-        status: 207,
-        contentType: "application/xml",
-        body:
-          '<d:multistatus xmlns:d="DAV:">' +
-          names
-            .map(
-              (n) =>
-                "<d:response><d:href>/knowledge/" +
-                n +
-                "</d:href></d:response>",
-            )
-            .join("") +
-          "</d:multistatus>",
-      });
-      return;
-    }
-    if (method === "PUT") {
-      files.set(path, req.postData()!);
-      await route.fulfill({ status: 201 });
-      return;
-    }
-    await route.fulfill({
-      status: files.has(path) ? 200 : 404,
-      contentType: "application/json",
-      body: files.get(path) || "{}",
-    });
-  });
+  return mockWebDAV(context, files);
 }
 test("capture, edit, fuzzy search, formula/diagram render, reload and mobile settings", async ({
   page,
@@ -830,10 +786,10 @@ test("two offline replicas converge; repeated sync sends no known logs; corrupti
   ).toBe(2);
   expect((await sync(pa)).sent).toBe(0);
   const [path, payload] = [...files.entries()].find(([k]) =>
-    k.startsWith("events/"),
+    k.startsWith("packs/"),
   )!;
   const old = JSON.parse(payload);
-  old.op.patch.content = "TAMPERED";
+  old.events[0].op.patch.content = "TAMPERED";
   files.set(path, JSON.stringify(old));
   const c = await browser.newContext();
   await mockDav(c, files);
@@ -849,7 +805,7 @@ test("two offline replicas converge; repeated sync sends no known logs; corrupti
       () => "",
       (e) => e.message,
     ),
-  ).toContain("日志完整性校验失败");
+  ).toContain("日志批次摘要不匹配");
   expect(
     await repository(pc, "return store.getSnapshot().entries.length;"),
   ).toBe(0);
@@ -1366,7 +1322,7 @@ test("category rename, move and removal preserve entries and reject cycles", asy
   ).toBe("a");
 });
 
-test("cloud audit repairs corrupt bytes with quarantine and restores snapshots by union", async ({
+test("cloud audit repairs corrupt packs with quarantine and bootstraps a new replica by union", async ({
   page,
   context,
   browser,
@@ -1381,13 +1337,12 @@ test("cloud audit repairs corrupt bytes with quarantine and restores snapshots b
   await page.evaluate(async () => {
     const s = await import("/src/services/sync.ts" as string);
     await s.synchronize();
-    await s.uploadSnapshot();
   });
   const [path, body] = [...files.entries()].find(([key]) =>
-    key.startsWith("events/"),
+    key.startsWith("packs/"),
   )!;
   const corrupt = JSON.parse(body);
-  corrupt.op.patch.content = "BROKEN";
+  corrupt.events[0].op.patch.content = "BROKEN";
   files.set(path, JSON.stringify(corrupt));
   const result = await page.evaluate(async () => {
     const { auditAndRepair } = await import(
@@ -1407,10 +1362,8 @@ test("cloud audit repairs corrupt bytes with quarantine and restores snapshots b
     `await store.createEntry('本地保留','local');await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',davUser:'test',davPassword:'test',syncMinutes:0});`,
   );
   await other.evaluate(async () => {
-    const { recoverCloudSnapshots } = await import(
-      "/src/services/integrity.ts" as string
-    );
-    await recoverCloudSnapshots();
+    const { synchronize } = await import("/src/services/sync.ts" as string);
+    await synchronize();
   });
   expect(
     await repository(
@@ -1588,7 +1541,7 @@ test("desktop navigation remains reachable in a short high-DPI workspace", async
   ).toBeVisible();
 });
 
-test("merged database page repairs local corruption from cloud and snapshot union without losing offline edits", async ({
+test("merged database page repairs distributed local and packed cloud corruption without losing offline edits", async ({
   page,
   context,
 }) => {
@@ -1599,20 +1552,29 @@ test("merged database page repairs local corruption from cloud and snapshot unio
     page,
     `await store.saveDevice({...store.getSnapshot().device,davUrl:'https://dav.example/knowledge/',syncMinutes:0});
     const bytes=new Uint8Array([1,2,3,4]);const hash=await store.db.putBlob(bytes,'image/png');
-    await store.createEntry('云端完整副本','asset:'+hash);`,
+    const id=await store.createEntry('云端完整副本','asset:'+hash);
+    await store.batch(Array.from({length:260},(_,i)=>({collection:'entry',id,patch:{summary:'版本 '+i}})),'test');`,
   );
   await page.evaluate(async () => {
     const s = await import("/src/services/sync.ts" as string);
     await s.synchronize();
-    await s.uploadSnapshot();
   });
-  // Remove an operation from the live cloud folder; its independently verified full snapshot still retains it.
-  const eventPath = [...files.keys()].find((p) => p.startsWith("events/"))!;
+  // Different verified sources repair each other: cloud retains the damaged first local row,
+  // while the local replica retains the missing final cloud pack.
+  const eventPath = [...files.entries()]
+    .filter(([path]) => path.startsWith("packs/"))
+    .sort(
+      (a, b) =>
+        JSON.parse(a[1]).events.at(-1).op.seq -
+        JSON.parse(b[1]).events.at(-1).op.seq,
+    )
+    .at(-1)![0];
   files.delete(eventPath);
   await repository(
     page,
     `await store.createEntry('尚未同步的新知','must survive');
-    const rows=await store.db.rawEvents();await store.db.write(()=>store.db.exec('UPDATE events SET json=? WHERE hash=?',['{broken',rows[0].hash]));
+    await (await import('/src/services/key-sync.ts')).flushKeySync();
+    const rows=await store.db.rawEvents(),row=rows.find(r=>JSON.parse(r.json).op.seq===1);await store.db.write(()=>store.db.exec('UPDATE events SET json=? WHERE hash=?',['{broken',row.hash]));
     const [hash]=await store.db.blobHashes();await store.db.write(()=>store.db.exec('UPDATE blobs SET data=? WHERE hash=?',['AAAA',hash]));`,
   );
   await page.getByRole("button", { name: "设置与偏好" }).click();
@@ -1683,55 +1645,63 @@ test("deep verification refuses unrepairable cloud corruption and skips cleanup"
   ).toBe(2);
 });
 
-test("deep verification retries concurrent cloud additions before certifying equal digests", async ({
+test("deep verification retries a competing checkpoint publication and preserves both replicas", async ({
   page,
+  context,
+  browser,
 }) => {
-  await page.goto("/");
-  await repository(page, `await store.createEntry('离线内容','local');`);
-  const result = await page.evaluate(async () => {
-    const { auditAndRepair } = await import(
-      "/src/services/integrity.ts" as string
+  const files = new Map<string, string>(),
+    otherContext = await browser.newContext({ locale: "zh-CN" });
+  try {
+    await mockDav(otherContext, files);
+    const other = await otherContext.newPage();
+    await other.goto("/");
+    await repository(
+      other,
+      "await store.updateDevice({davUrl:'https://dav.example/knowledge/',davUser:'fixture',davPassword:'fixture',syncMinutes:0});",
     );
-    const { sha256, canonical } = await import("/src/core/crypto.ts" as string);
-    const files = new Map<string, string>();
-    let eventLists = 0;
-    const transport = {
-      init: async () => {},
-      read: async (p: string) => {
-        if (!files.has(p)) throw Error("missing");
-        return files.get(p)!;
-      },
-      write: async (p: string, b: string) => {
-        files.set(p, b);
-      },
-      list: async (folder: string) => {
-        if (folder === "events" && ++eventLists === 2) {
-          const op = {
-            schema: 1,
-            device: "11111111-1111-4111-8111-111111111111",
-            seq: 1,
-            vector: { "11111111-1111-4111-8111-111111111111": 1 },
-            collection: "category",
-            entity: "new-cloud-category",
-            patch: { name: "并发云端分类", parent: "" },
-            at: new Date().toISOString(),
-            source: "test",
-          };
-          const hash = await sha256(op);
-          files.set("events/" + hash + ".json", canonical({ hash, op }));
+    await other.evaluate(async () =>
+      (await import("/src/services/sync.ts" as string)).synchronize(),
+    );
+    await repository(
+      other,
+      "await store.patch('category','new-cloud-category',{name:'并发云端分类',parent:''});",
+    );
+    let headWrites = 0,
+      injected = false;
+    await mockWebDAV(context, files, {
+      beforeWrite: async (path) => {
+        if (!path.endsWith("HEAD.json")) return;
+        headWrites++;
+        if (!injected) {
+          injected = true;
+          await other.evaluate(async () =>
+            (await import("/src/services/sync.ts" as string)).synchronize(),
+          );
         }
-        return [...files.keys()]
-          .filter((p) => p.startsWith(folder + "/"))
-          .map((p) => p.slice(folder.length + 1));
       },
-    };
-    return { report: await auditAndRepair(transport), eventLists };
-  });
-  expect(result.eventLists).toBeGreaterThanOrEqual(4);
-  expect(result.report.root).toBe(result.report.cloudRoot);
-  expect(
-    await repository(page, "return store.getSnapshot().categories[0].name"),
-  ).toBe("并发云端分类");
+    });
+    await page.goto("/");
+    await repository(
+      page,
+      "await store.updateDevice({davUrl:'https://dav.example/knowledge/',davUser:'fixture',davPassword:'fixture',syncMinutes:0});await store.createEntry('离线内容','local');",
+    );
+    const report = await page.evaluate(async () =>
+      (await import("/src/services/integrity.ts" as string)).auditAndRepair(),
+    );
+    expect(injected).toBe(true);
+    expect(headWrites).toBeGreaterThanOrEqual(2);
+    expect(report.root).toBe(report.cloudRoot);
+    expect(report.state).toBe(report.cloudState);
+    expect(
+      await repository(page, "return store.getSnapshot().categories[0].name"),
+    ).toBe("并发云端分类");
+    expect(
+      await repository(page, "return store.getSnapshot().entries[0].title"),
+    ).toBe("离线内容");
+  } finally {
+    await otherContext.close();
+  }
 });
 
 test("knowledge uses a dense category tree with summaries, review dates and FSRS memory coloring", async ({

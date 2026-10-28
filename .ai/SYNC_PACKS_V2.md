@@ -1,4 +1,4 @@
-# Packed WebDAV protocol — implementation design (0.17, in progress)
+# Packed WebDAV protocol — protocol and verification (0.17)
 
 ## Goal and scope
 
@@ -6,7 +6,7 @@ Replace one remote JSON file per operation with compressed batches and a verifia
 
 ## Atomic publication
 
-Use a small `HEAD.json` updated with strong ETag `If-Match` / initial `If-None-Match: *`. Refuse destructive cleanup if conditional writes are not supported. Probe preconditions against a disposable app-owned path before touching the head. No TLS/checksum bypass.
+Use a small `state/HEAD.json` with a verified atomic compare-and-swap primitive. Prefer strong ETag `If-Match` / initial `If-None-Match: *` where the server enforces them; otherwise use a fenced WebDAV exclusive ancestor lock on `state/`, compare the exact head bytes under lock, and PUT with its token in the `If` header. Probe mutual exclusion, guarded writes and rejection of stale tokens against disposable private objects. SFTPGo 2.7.6 ignores conditional PUT headers, so its verified lock primitive is required. Refuse publication/cleanup when neither primitive passes. No TLS/checksum bypass.
 
 The head has a monotonic epoch and points to an immutable, SHA-addressed checkpoint manifest. The manifest lists compressed operation packs, their plain-content hashes, writer/sequence ranges, counts, complete causal vector, event/blob Merkle root, logical state hash and attachment inventory. Each pack is canonical JSON compressed with gzip in transport, with bounded compressed/decompressed reads. Build bounded packs by byte size and operation count, sorted by writer and sequence. Ranges allow reconstructing a pack from already-known local operations and verifying its digest without downloading it again. All envelopes, writer counters, causal dependencies, domain documents and blob references are verified before local projection/publication.
 
@@ -31,6 +31,12 @@ Initial conversion of an existing loose-event root must verify/merge its complet
 - Repeated unchanged sync skips known pack bodies; explicit audit re-reads bytes and repairs only from matching verified local/cloud sources.
 - Unsupported/misbehaving WebDAV conditionals fail safely without modifying authoritative data.
 
-## Work remaining
+## Implementation and verification
 
-Protocol source and regression implementation have not started yet. Existing UI/date/Android workflow changes are implemented and tested separately. See STATUS for the unreleased 0.16 build and 0.17 changes. Do not publish a release claiming the packed protocol until all checks and platform builds pass.
+`core/sync-packs` owns proof contracts and grouping; `core/compression` owns bounded gzip. `services/sync-transport` owns publication primitives and raw-byte quarantine. `services/packed-replica` owns merge/publication/epoch GC; `sync-replica` adapts SQL and native recovery. `legacy-cloud` verifies and retires existing loose roots once; `archive` owns file backup payloads. The old per-event audit engine and cloud rollback UI are removed.
+
+Pack/checkpoint paths include epoch, random nonce and content hash. `basePacks` triggers compaction after 8 delta packs; unchanged live packs are reused. `looseEvents` is a boolean instead of one metadata path per old event; `retire` contains only old snapshot/device paths. Ordinary cleanup has a 256-delete budget; explicit audit/compact has no budget. Successful deletion progress is acknowledged in a new checkpoint. Garbage network operations and legacy event reads use at most four parallel requests. Cleanup errors are logged separately from intentionally queued work.
+
+Unit and browser tests cover proofs, real gzip/bounds, conditional and fenced-lock primitives, expired tokens, interrupted publication/readback, lost acknowledgment, compaction races/read-404 retry, offline/new-device bootstrap, damaged/missing data, deleted HEAD recovery and partial legacy cleanup. A damaged address without a trusted copy is rejected before any local repair transaction can remove its original row.
+
+Opt-in real-provider test: `scripts/sftpgo-smoke.mjs`; see SFTPGO_COMPATIBILITY for service/version and actual results. Final full-suite and release evidence is recorded in STATUS.

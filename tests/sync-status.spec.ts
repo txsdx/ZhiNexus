@@ -1,5 +1,6 @@
+import { mockWebDAV } from "./helpers/webdav";
 /** Last-success elapsed time, immediate exchange, failure preservation and silent automatic completion. */
-import { test, expect, type Page, type Route } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /** Configure the real repository without adding production test hooks. */
 async function configure(page: Page, syncMinutes = 0) {
@@ -16,46 +17,9 @@ async function configure(page: Page, syncMinutes = 0) {
   }, syncMinutes);
 }
 
-/** Preserve real envelope/hash processing behind an in-memory WebDAV protocol fixture. */
+/** Use the same real gzip and conditional-write fixture as multi-device integration tests. */
 async function dav(page: Page, beforeWrite?: (path: string) => Promise<void>) {
-  const files = new Map<string, string>();
-  await page.route("https://dav.example/**", async (route: Route) => {
-    const request = route.request(),
-      path = new URL(request.url()).pathname.slice("/knowledge/".length);
-    if (request.method() === "MKCOL") return route.fulfill({ status: 201 });
-    if (request.method() === "PROPFIND") {
-      const folder = path.replace(/\/$/, "") + "/";
-      const names = [...files.keys()].filter(
-        (name) =>
-          name.startsWith(folder) && !name.slice(folder.length).includes("/"),
-      );
-      return route.fulfill({
-        status: 207,
-        contentType: "application/xml",
-        body:
-          '<d:multistatus xmlns:d="DAV:">' +
-          names
-            .map(
-              (name) =>
-                "<d:response><d:href>/knowledge/" +
-                name +
-                "</d:href></d:response>",
-            )
-            .join("") +
-          "</d:multistatus>",
-      });
-    }
-    if (request.method() === "PUT") {
-      await beforeWrite?.(path);
-      files.set(path, request.postData()!);
-      return route.fulfill({ status: 201 });
-    }
-    return route.fulfill({
-      status: files.has(path) ? 200 : 404,
-      contentType: "application/json",
-      body: files.get(path) ?? "",
-    });
-  });
+  return mockWebDAV(page, new Map(), { beforeWrite });
 }
 
 test("the status shows minutes and seconds, synchronizes on click, prevents duplicates and survives reload", async ({
@@ -65,7 +29,7 @@ test("the status shows minutes and seconds, synchronizes on click, prevents dupl
   let finish = () => {},
     writes = 0;
   await dav(page, async (path) => {
-    if (path.startsWith("devices/")) {
+    if (path.endsWith("HEAD.json")) {
       writes++;
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -137,7 +101,7 @@ test("automatic synchronization updates the timer without a completion toast", a
   await page.clock.pauseAt(new Date("2026-10-28T06:00:00.000Z"));
   let writes = 0;
   await dav(page, async (path) => {
-    if (path.startsWith("devices/")) writes++;
+    if (path.endsWith("HEAD.json")) writes++;
   });
   await page.goto("/");
   await configure(page, 1);

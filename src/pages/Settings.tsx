@@ -3,7 +3,7 @@ import { Busy, Modal } from "../components/common";
 import { decryptBackup, encryptBackup } from "../core/crypto";
 import { json, store } from "../core/store";
 import type { DeviceConfig } from "../core/types";
-import { restoreSnapshot, snapshot } from "../services/sync";
+import { restoreSnapshot, snapshot } from "../services/archive";
 import { DesktopPanel } from "./settings/DesktopPanel";
 import { NetworkPanel } from "./settings/NetworkPanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";

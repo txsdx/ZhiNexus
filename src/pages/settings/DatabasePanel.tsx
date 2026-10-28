@@ -1,16 +1,11 @@
 /** Database configuration panel with explicit persistence and verification. */
-import {
-  auditAndRepair,
-  recoverCloudSnapshots,
-} from "../../services/integrity";
+import { auditAndRepair } from "../../services/integrity";
 import { SynchronizationPanel } from "./SynchronizationPanel";
 import { StorageLocationPanel } from "./StorageLocationPanel";
 import { ConflictManager } from "../../components/ConflictManager";
 import { Database, Download, ShieldCheck, Upload } from "lucide-react";
 import { store } from "../../core/store";
-import { uploadSnapshot } from "../../services/sync";
 import { useSettings } from "./context";
-import { useConfirmation } from "../../hooks/useConfirmation";
 /** DatabasePanel exposes one focused settings workflow. */
 export function DatabasePanel() {
   const {
@@ -26,10 +21,6 @@ export function DatabasePanel() {
     setPassword,
     setArchive,
   } = useSettings();
-  const confirmation = useConfirmation(notify, {
-    title: t("确认恢复云端快照", "Confirm cloud snapshot recovery"),
-    confirmLabel: t("确认恢复", "Recover snapshots"),
-  });
   return (
     <>
       <h2>{t("数据库与云同步", "Database & cloud sync")}</h2>
@@ -79,53 +70,28 @@ export function DatabasePanel() {
         <button
           disabled={!!busy}
           onClick={() =>
-            void act(t("上传完整快照…", "Uploading snapshot…"), async () =>
-              setReport("Snapshot: " + (await uploadSnapshot())),
+            void act(t("整理云端日志…", "Compacting cloud logs…"), async () =>
+              setReport(
+                JSON.stringify(
+                  await auditAndRepair(undefined, setBusy, { compact: true }),
+                  null,
+                  2,
+                ),
+              ),
             )
           }
         >
           <Upload size={16} />
-          {t("上传完整快照", "Upload full snapshot")}
+          {t("整理云端日志", "Compact cloud logs")}
         </button>
       </div>
       <p className="muted">
         {t(
-          "校验将联网读取云端日志、附件与快照，合并本地尚未上传的修改，双向修复后重新读取并比较摘要，再安全清理恢复冗余。无法连接、缺少可信副本或云端持续变更时不清理。请先在下方配置 WebDAV，配置会自动保存。",
-          "Verification reads cloud operations, attachments and snapshots, merges unpublished local edits, repairs both replicas and compares fresh digests before cleaning recovery redundancy. Cleanup is skipped on connection failures, missing repair sources or ongoing cloud changes. Configure WebDAV below; settings save automatically.",
+          "同步使用压缩日志批次和可校验检查点，分批自动清理已被完整覆盖的旧文件。整理云端日志会重新读取校验并合并尚未上传的修改；缺少可信副本时保留原文件并报错。WebDAV 配置自动保存。",
+          "Sync uses compressed batches and verified checkpoints, automatically retiring fully covered old files in batches. Cloud compaction re-reads data and merges unpublished edits. Missing repair sources retain originals and report an error. WebDAV settings save automatically.",
         )}
       </p>
       <SynchronizationPanel />
-      <h3>{t("云端快照恢复", "Cloud snapshot recovery")}</h3>
-      <div className="actions">
-        <button
-          disabled={!!busy}
-          onClick={() => {
-            void confirmation.request(
-              t(
-                "验证并合并云端全部完整快照？本地修改会保留。",
-                "Verify and merge cloud snapshots? Local edits will be retained.",
-              ),
-              async () => {
-                await act(
-                  t("恢复云快照…", "Recovering cloud snapshots…"),
-                  async () =>
-                    setReport(
-                      JSON.stringify(await recoverCloudSnapshots(), null, 2),
-                    ),
-                );
-              },
-            );
-          }}
-        >
-          {t("从云端快照恢复", "Recover cloud snapshots")}
-        </button>
-      </div>
-      <p className="muted">
-        {t(
-          "修复前会保留远端损坏文件；只使用摘要完全匹配的副本，修复后重新读取验证。本机会自动保留已验证恢复点。",
-          "Damaged remote files are quarantined before repair. Only matching verified copies are used, then read back. Verified local recovery points are retained automatically.",
-        )}
-      </p>
       <h3>{t("加密文件备份", "Encrypted file backup")}</h3>
       <p className="muted">
         {t(
@@ -190,7 +156,6 @@ export function DatabasePanel() {
           "Cleanup removes recovery journal copies covered by all three verified checkpoints and pending files older than 24 hours. Sync history, historical assets, trash, conflicts and damaged originals are retained to protect offline devices.",
         )}
       </p>
-      {confirmation.dialog}
     </>
   );
 }

@@ -1,16 +1,15 @@
-/** Deep replica auditing, verified cloud snapshot recovery and repair from provably matching local content. */
-import { reconcileReplicas } from "./replica-audit";
+/** Explicit full replica auditing and verified repair, using the same packed protocol as ordinary synchronization. */
+import { native } from "../core/database";
 import { store } from "../core/store";
 import { validateEnvelope, materialize, stateHash } from "../core/crdt";
 import { assertCausalClosure, validateDocuments } from "../core/validation";
-import { canonical, sha256, merkle } from "../core/crypto";
-import {
-  WebDAV,
-  type SyncTransport,
-  restoreSnapshot,
-  withSyncLock,
-} from "./sync";
-/** Construct a provider only from the saved device connection, keeping credentials out of diagnostics. */
+import { canonical, merkle } from "../core/crypto";
+import { WebDAV, type SyncTransport, withSyncLock } from "./sync";
+import { synchronizePacked } from "./packed-replica";
+import { sqliteReplica } from "./sync-replica";
+import { diagnostics } from "./diagnostics";
+import { flushKeySync } from "./key-sync";
+/** Construct a provider from saved connection fields; credentials never enter diagnostic reports. */
 function configuredTransport() {
   const d = store.getSnapshot().device;
   return new WebDAV(d.davUrl, d.davUser, d.davPassword);
@@ -38,39 +37,46 @@ export async function auditLocal() {
     blobs: hashes.size,
   };
 }
-/** Recover verified snapshot unions; invalid archives are skipped and explicitly reported, never applied. */
-export async function recoverCloudSnapshots(
-  transport: SyncTransport = configuredTransport(),
-) {
-  await transport.init();
-  const names = await transport.list("snapshots");
-  if (!names.length) throw Error("云端没有快照 / No cloud snapshots");
-  let restored = 0;
-  const rejected: string[] = [];
-  for (const name of names) {
-    try {
-      const data = JSON.parse(await transport.read("snapshots/" + name));
-      if ((await sha256(data)) !== name.slice(0, -5))
-        throw Error("Snapshot address mismatch");
-      await restoreSnapshot(data);
-      restored++;
-    } catch {
-      rejected.push(name.slice(0, 12));
-    }
-  }
-  if (!restored)
-    throw Error("未找到可验证快照，原始数据保留 / No verified snapshots");
-  return { restored, rejected, ...(await auditLocal()) };
-}
-/** Verify both replicas, repair only from matching trusted copies and clean proven recovery redundancy. */
+/** Deep verification re-reads wire objects and uses matching trusted copies; no cloud rollback history is required. */
 export async function auditAndRepair(
   transport: SyncTransport = configuredTransport(),
-  progress: (s: string) => void = () => {},
+  progress: (message: string) => void = () => {},
+  options: { compact?: boolean } = {},
 ) {
   return withSyncLock(async () => {
-    const report = await store.maintain(() =>
-      reconcileReplicas(transport, progress),
-    );
+    await flushKeySync();
+    const report = await store.maintain(async () => {
+      const packed = await synchronizePacked(
+        transport,
+        sqliteReplica(transport, true, progress),
+        { audit: true, compact: options.compact, progress },
+      );
+      if (packed.cleanup.errors.length)
+        diagnostics.error(
+          "app",
+          "云端清理待重试 / Cloud cleanup pending",
+          packed.cleanup.errors,
+        );
+      const local = await auditLocal();
+      if (local.root !== packed.root || local.state !== packed.state)
+        throw Error(
+          "本地仍有并发修改，未清理恢复副本，请重试 / Local state changed; recovery cleanup skipped, retry",
+        );
+      await store.db.checkpoint();
+      const localCleanup = native
+        ? await (
+            await import("@tauri-apps/api/core")
+          ).invoke<{ files: number; bytes: number }>("cleanup_storage")
+        : { files: 0, bytes: 0 };
+      const result = {
+        ...packed,
+        cloudRoot: packed.root,
+        cloudState: packed.state,
+        localCleanup,
+      };
+      await store.db.setLocal("last-packed-sync", result);
+      return result;
+    });
     await store.updateDevice({ lastSync: new Date().toISOString() });
     return report;
   });

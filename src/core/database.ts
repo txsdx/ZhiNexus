@@ -356,6 +356,27 @@ export class Database {
     await this.tail;
     return this.query("SELECT hash,json FROM events");
   }
+  /** Read attachment metadata without decoding every image during incremental synchronization. */
+  async blobInventory(): Promise<
+    { hash: string; mime: string; bytes: number }[]
+  > {
+    await this.tail;
+    const rows = await this.query<{
+      hash: string;
+      mime: string;
+      size: number;
+      ending: string;
+    }>(
+      "SELECT hash,mime,length(data) AS size,substr(data,-2) AS ending FROM blobs",
+    );
+    return rows.map((row) => ({
+      hash: row.hash,
+      mime: row.mime,
+      bytes:
+        Math.floor((row.size * 3) / 4) -
+        (row.ending === "==" ? 2 : row.ending.endsWith("=") ? 1 : 0),
+    }));
+  }
   /** Retain old bytes before replacing only records validated by the replica auditor. */
   async repair(
     events: Envelope[],

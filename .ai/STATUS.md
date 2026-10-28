@@ -1,6 +1,6 @@
 # 需求完成情况
 
-当前开发版本：**Windows/Ubuntu/Android 0.18.0**（正式发布验收中，上个正式版v0.17.0）。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
+当前正式版本：**Windows/Ubuntu/Android 0.18.0**。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
 
 | 需求 | 当前实现 |
 |---|---|
@@ -26,11 +26,14 @@
 | 预留 | 对象存储/专属服务端 SyncTransport，按要求尚不完整实现 |
 | 大库 | 有界压缩日志块、已知批次跳过下载；仍有批次/附件全名字发现和全日志投影，增量 Merkle 子树与超大库验证待完成 |
 
-## 0.18 本轮验收（2026-10-29，北京时间；本地门禁通过）
+## 0.18 最终验收（2026-10-29，北京时间）
 
-完整100条复现规格及证据映射见 ACCEPTANCE_018，本轮29项验收见 ITERATION_018。启动新Action前的最终本地检查已通过：191前端单元、31脚本、84浏览器全量、TypeScript/Vite构建、locked Rust check、5项原生认证/缓存回归。Ubuntu24真实原生WebKit完整流程也已通过，包含代理/模型/SSE、MCP/OCR、SQLite、portable隔离、清理/重启/三种损坏恢复及窄表格真实点击。
-
-首轮源码bcbcd2d的Validate 40731122211通过，Build 40731178061的Windows/Android通过；Ubuntu恢复后点击失败已本地复现为覆盖式水平滚动条拦截，按实际溢出预留16px后修复并回归。最终源码4dbce9e已推送，Build 40745624446的frontend通过191单元/31脚本/84浏览器全量及生产构建，三平台编译进行中。完成后先创建草稿Release、运行复用DEB的Ubuntu按需诊断，再校验五资产并正式发布；尚未把这些云端交付步骤标为完成。默认流水线移出Ubuntu图形诊断，保留编译、包/签名/摘要、web和Windows原生验收；Android不运行默认模拟器。
+- **正式 [v0.18.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.18.0) 已发布**，北京时间2026-10-29 03:01，非草稿/非预发布。打包源码 `4dbce9e906888e6f3bdbad17ab8b8f9e60fb3566`；后续主分支补齐发布脚本/诊断路径修复与文档，未替换已验收的安装包。
+- [Build 40745624446](https://github.com/txsdx/ZhiNexus/actions/runs/40745624446) 的前端、Windows、Ubuntu、Android四个构建任务全部成功。191单元、31脚本、84浏览器全量、生产构建、5项原生更新回归及Windows真实实包验收通过；Android arm64 Kotlin/原生编译和签名验证通过，无默认模拟器。
+- [Ubuntu最终DEB按需验收40747896404](https://github.com/txsdx/ZhiNexus/actions/runs/40747896404) 全部通过：代理/模型/真实SSE、MCP stdio、快捷键/OCR、SQLite、portable隔离、清理/重启/三种损坏恢复，以及窄表格三个位置命中和真实点击。首轮GTK覆盖式水平滚动条问题已修复，并未以移出默认测试冒充修复。
+- 原Build的发布Job403失败历史保留；修复“按tag接口404不返回草稿”的识别后，本地最终33脚本全部通过（含新增2项发布恢复回归），真实草稿识别也通过。[仅上传40750299527](https://github.com/txsdx/ZhiNexus/actions/runs/40750299527) 成功复用相同四个已验收产物，逐个复核固定SHA再上传，没有重跑测试/编译。当前云环境直接上传域名认证401，因此经Action上传；正式发布/读回成功，不把旧失败Job称作全绿。
+- Windows protable/setup、Ubuntu DEB、Android APK、latest.json共5资产均实际下载读回。三平台0.18.0、4个最终URL、安装包实际字节/资产/清单SHA-256、清单自身摘要、Release标签源码全部一致。Android Manifest普通/圆形图标引用、adaptive安全区与15张图标像素均核对通过；旧双色圆环确认来自v0.17 APK内Tauri模板。
+- 100条复现规格/证据映射见初始提示词与ACCEPTANCE_018；本轮交互清单见ITERATION_018。README从211行精简为65行。所有文档已更新到最新“仅Build前测试”规则，普通提交不触发测试。真实服务、实体手机手势、开发签名覆盖安装等限制见KNOWN_ISSUES。
 
 ## 0.17 本轮验证（2026-10-28）
 
@@ -161,8 +164,3 @@
 
 install_script/start_skill 已更新并保存为云环境草稿；完整刷新脚本（npm ci、测试、构建、Rust check）成功，截图编译依赖与中/英文 OCR 数据可用。当前机器已验证；草稿保存不等于环境快照已发布，后续任务复用前需用户在环境设置中发布。
 
-- 0.18追加Android整页缩放：取消先前尚未完成的40743826330/40743826012，原生关闭页面zoom并保留触摸分发；31脚本通过，100项清单已同步。Android实体手势不冒充已实测，后续构建和发布证据随后更新。
-
-- 最新工作流覆盖旧约定：不再有提交触发的Validate，完整web测试合并Build前；原生更新回归在Ubuntu打包前。Android软件图标在生成工程后显式覆盖，31脚本通过，最终APK资源仍待核对。
-
-- 实际解包v0.17.0 APK确认双色环来自Tauri模板。补齐Android adaptive前景21dp安全边距避免圆形裁切；40744894869在三平台编译前停止，下一组作为最终构建。

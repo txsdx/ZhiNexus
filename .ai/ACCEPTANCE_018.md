@@ -1,6 +1,6 @@
 # 0.18 完整需求逐项复核
 
-北京时间2026-10-29。编号与初始提示词1–100严格对应；本文件记录实现和验证证据，不作“绝无缺陷”保证。100项实现及本地验证复核已完成，最终构建/Ubuntu按需实包诊断/正式Release尚未收尾，不能标为全部交付。
+北京时间2026-10-29。编号与初始提示词1–100严格对应；本文件记录实现和验证证据，不作“绝无缺陷”保证。100项需求已逐条复核，v0.18.0正式发布；实现、实际验收及未实测范围分别记录，最终证据见STATUS。
 
 |编号|需求摘要|实现位置|验证证据|状态|
 |---|---|---|---|---|
@@ -29,13 +29,13 @@
 |23|划词工具条提供 AI 对话、复制、黄色高亮、取消高亮、加粗等；编辑/阅读批注都要保留选区、撤销和正文完整性|src/pages/Entry.tsx；src/components/editor/BlockEditor.tsx；src/core/entry-colors.ts|entry-header、iteration018、controls018、后台配图并发回归|已实现，已回归|
 |24|词条背景色支持默认、柔和浅红/绿/蓝/黄/紫；对比度足够，夜间有对应色，色值用白名单 token 保存并同步|src/pages/Entry.tsx；src/components/editor/BlockEditor.tsx；src/core/entry-colors.ts|entry-header、iteration018、controls018、后台配图并发回归|已实现，已回归|
 |25|添加、重命名、移动、正文改动、图片增删等可审计；保留创建/更新时间、来源、CRDT 历史、回收站和冲突处理|src/pages/Entry.tsx；src/components/editor/BlockEditor.tsx；src/core/entry-colors.ts|entry-header、iteration018、controls018、后台配图并发回归|已实现，已回归|
-|26|知识库使用紧凑分类树表格，不使用大面积卡片|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
-|27|表格四列：标题、一句话解释、紧凑创建日期、下次复习|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
-|28|设置分类树可以直接拖拽修改父子层级，可移回顶层|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
-|29|树节点直接有删除按钮，也有分类右键操作|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
-|30|删除分类提供三种选择：a. 保留条目和子分类，直属内容移到被删分类的上一级；b. 删除整棵子树及层级内全部条目；c. 取消|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
-|31|所有删除/恢复等确认必须真正等待结果|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
-|32|普通确认框支持 Enter 确定，且遵循显式聚焦的取消/关闭按钮|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；最新全量收尾中|
+|26|知识库使用紧凑分类树表格，不使用大面积卡片|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
+|27|表格四列：标题、一句话解释、紧凑创建日期、下次复习|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
+|28|设置分类树可以直接拖拽修改父子层级，可移回顶层|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
+|29|树节点直接有删除按钮，也有分类右键操作|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
+|30|删除分类提供三种选择：a. 保留条目和子分类，直属内容移到被删分类的上一级；b. 删除整棵子树及层级内全部条目；c. 取消|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
+|31|所有删除/恢复等确认必须真正等待结果|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
+|32|普通确认框支持 Enter 确定，且遵循显式聚焦的取消/关闭按钮|src/components/library/KnowledgeTable.tsx；src/services/categories.ts；CategoryDeletion/CategoryPicker|分类拖拽/并发/默认保留/整树删除、取消/关闭/失败；四列表与回车回归|已实现；完整回归及原生点击验收通过|
 |33|接 OpenAI Chat Completions 兼容服务；CPA /models?client_version=cpa 按实际格式解析并做有…|src/services/ai.ts；src/core/ai-stream.ts；src/core/ai-queue.ts；src/services/ai-jobs.ts|AI空tool_calls、真实分块HTTP、FIFO连续三轮、限流/持久恢复/幂等|已实现，已回归|
 |34|模型列表和所有选择框显示原始 ID，例如 gpt-6.1-sol-fast；Tools:? 是未知，允许尝试，明确 false 才禁用|src/services/ai.ts；src/core/ai-stream.ts；src/core/ai-queue.ts；src/services/ai-jobs.ts|AI空tool_calls、真实分块HTTP、FIFO连续三轮、限流/持久恢复/幂等|已实现，已回归|
 |35|全局默认模型加“默认模型”选项动态继承；每个任务/对话可覆盖，不覆盖既有单项选择|src/services/ai.ts；src/core/ai-stream.ts；src/core/ai-queue.ts；src/services/ai-jobs.ts|AI空tool_calls、真实分块HTTP、FIFO连续三轮、限流/持久恢复/幂等|已实现，已回归|
@@ -72,38 +72,38 @@
 |66|取消“增量同步完成”浮窗|src/core/crdt.ts；src/services/sync-replica.ts；src/services/sync.ts；src/core/auto-sync.ts；src/services/integrity.ts|压缩/CAS/锁/并发/离线/损坏修复/密钥回归；上轮真实SFTPGo2.7.6|已实现；用户实例未连接|
 |67|保留完整加密文件备份/并集合并恢复、数据库空间显示/VACUUM、冲突解决、回收站|src/core/crdt.ts；src/services/sync-replica.ts；src/services/sync.ts；src/core/auto-sync.ts；src/services/integrity.ts|压缩/CAS/锁/并发/离线/损坏修复/密钥回归；上轮真实SFTPGo2.7.6|已实现；用户实例未连接|
 |68|API/WebDAV/MCP 凭证统一“自定义同步密钥（可选）”；留空采用内置默认密钥 AES-GCM 自动本地加密并同步，无跨设备凭证保险箱/…|src/core/crdt.ts；src/services/sync-replica.ts；src/services/sync.ts；src/core/auto-sync.ts；src/services/integrity.ts|压缩/CAS/锁/并发/离线/损坏修复/密钥回归；上轮真实SFTPGo2.7.6|已实现；用户实例未连接|
-|69|全局代理支持系统/HTTP/SOCKS5，应用于 AI、MCP HTTP、WebDAV、附件、更新等；stdio 子程序网络按其本身环境|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|70|桌面托盘常驻、关闭到托盘、真正退出排空写入；Windows Startup 快捷方式/Ubuntu XDG 自启；全局快速 OCR、捕获、显示窗…|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|71|跟随 OS DPI，避免 WebView DPI 重复缩放|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|72|portable 普通标记文件在可执行目录时，全部配置、SQL、日志等放同目录 _data，否则系统用户应用数据目录|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|73|鼠标侧键与 Alt+左右键用软件自己的有界导航历史，支持页面、词条、编辑/选中位置、滚动位置返回/前进，保留草稿；不触发浏览器文档后退、刷新或丢…|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|74|全局屏蔽浏览器默认右键菜单|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|75|左侧栏有明显收缩/展开快捷按钮，状态本机保存|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
-|76|知识星图铺满剩余窗口，不出现外层上下滚动条；移除图上标题、说明、自动整理按钮及默认多余浮层|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；本地Ubuntu完整验收通过，最终DEB待诊断|
+|69|全局代理支持系统/HTTP/SOCKS5，应用于 AI、MCP HTTP、WebDAV、附件、更新等；stdio 子程序网络按其本身环境|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|70|桌面托盘常驻、关闭到托盘、真正退出排空写入；Windows Startup 快捷方式/Ubuntu XDG 自启；全局快速 OCR、捕获、显示窗…|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|71|跟随 OS DPI，避免 WebView DPI 重复缩放|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|72|portable 普通标记文件在可执行目录时，全部配置、SQL、日志等放同目录 _data，否则系统用户应用数据目录|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|73|鼠标侧键与 Alt+左右键用软件自己的有界导航历史，支持页面、词条、编辑/选中位置、滚动位置返回/前进，保留草稿；不触发浏览器文档后退、刷新或丢…|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|74|全局屏蔽浏览器默认右键菜单|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|75|左侧栏有明显收缩/展开快捷按钮，状态本机保存|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
+|76|知识星图铺满剩余窗口，不出现外层上下滚动条；移除图上标题、说明、自动整理按钮及默认多余浮层|src/services/network.ts；desktop/navigation/context-menu；src-tauri/src；src/pages/Graph.tsx|Windows原生代理/OCR/存储、导航/选区、SVG右键、全窗口/图删除与移动布局|已实现；Windows/最终Ubuntu原生与交互回归通过|
 |77|全部配置自动保存，无“应用设置”按钮|src/services/settings.ts；src/core/diagnostics.ts；src/core/database.ts；src/main.tsx|设置失败/并发独立保存、完整拼接输出去敏、启动重放零重复写入、原生阶段计时|已实现，已回归|
 |78|独立日志页记录 AI 请求提示词/模型/工具定义、拼接后的完整正文、思考和工具调用、耗时、状态与错误；不保存原始响应JSON/SSE帧|src/services/settings.ts；src/core/diagnostics.ts；src/core/database.ts；src/main.tsx|设置失败/并发独立保存、完整拼接输出去敏、启动重放零重复写入、原生阶段计时|已实现，已回归|
 |79|日志本机保存、明确清空、可筛选/查询/导出；容量有界，超长内容明确标记，不因日志失败损失成功任务|src/services/settings.ts；src/core/diagnostics.ts；src/core/database.ts；src/main.tsx|设置失败/并发独立保存、完整拼接输出去敏、启动重放零重复写入、原生阶段计时|已实现，已回归|
 |80|检查启动速度并记录阶段耗时|src/services/settings.ts；src/core/diagnostics.ts；src/core/database.ts；src/main.tsx|设置失败/并发独立保存、完整拼接输出去敏、启动重放零重复写入、原生阶段计时|已实现，已回归|
-|81|versions.json 权威：三平台 major.minor 一致，patch 可不同|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|82|一个 Build and release 手动/API入口，只有是否发布/是否草稿选项；一次共享前端构建及摘要封存，Windows/Ubuntu…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|83|默认 Android Action 只编译 arm64 发布 APK 并验证包和签名；不运行安卓模拟器、不构建 x86_64 测试 APK、不缓…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|84|发布 .apk、.deb、Windows *_protable.exe 与 *_setup.exe（必须保留 protable 拼写），不带测试…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|85|latest.json schema2 含平台独立版本、下载地址、说明、SHA-256/可选签名；客户端比较自己平台版本|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|86|启动默认自动检查、后台下载校验，联网恢复重试；手动/自动共用任务，缓存重启后重验，不重复下载|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|87|每轮执行 npm test、npm run test:release、npm run build、npx playwright test；原生改…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|88|SFTPGo/AI/MCP/代理兼容不能只凭mock宣称，相关真实服务或实包测试要记录版本和范围|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
-|89|最后推送代码、等待 Validate 和三平台所有构建/上传/缓存收尾及正式发布成功|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|实现已接入；最终构建/按需诊断/Release待收尾|
+|81|versions.json 权威：三平台 major.minor 一致，patch 可不同|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|82|一个 Build and release 手动/API入口，只有是否发布/是否草稿选项；一次共享前端构建及摘要封存，Windows/Ubuntu…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|83|默认 Android Action 只编译 arm64 发布 APK 并验证包和签名；不运行安卓模拟器、不构建 x86_64 测试 APK、不缓…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|84|发布 .apk、.deb、Windows *_protable.exe 与 *_setup.exe（必须保留 protable 拼写），不带测试…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|85|latest.json schema2 含平台独立版本、下载地址、说明、SHA-256/可选签名；客户端比较自己平台版本|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|86|启动默认自动检查、后台下载校验，联网恢复重试；手动/自动共用任务，缓存重启后重验，不重复下载|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|87|每轮执行 npm test、npm run test:release、npm run build、npx playwright test；原生改…|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|88|SFTPGo/AI/MCP/代理兼容不能只凭mock宣称，相关真实服务或实包测试要记录版本和范围|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
+|89|最后推送代码、等待 Validate 和三平台所有构建/上传/缓存收尾及正式发布成功|versions.json；.github/workflows；scripts；src/services/auto-updates.ts；src-tauri/src/updates.rs|平台版本/构建/包/签名/摘要、5原生认证缓存回归、自动更新生命周期|已实现并发布；安装升级边界见下文|
 |90|先建立 SQLite/日志/CRDT/校验/恢复与最小可运行跨平台壳，再做捕获/编辑/分类/备份，再接 AI/队列/Agent/MCP，再做FS…|初始提示词；AGENTS.md；.ai/ARCHITECTURE.md|重建顺序、依赖、逐项状态和源码结构核对|已落实|
 |91|安装 Node24、Rust稳定工具链、Tauri所需Linux/Windows依赖，Android JDK17/SDK35/NDK27.2及a…|初始提示词；AGENTS.md；.ai/ARCHITECTURE.md|重建顺序、依赖、逐项状态和源码结构核对|已落实|
 |92|开始工作先读本文件及 AGENTS.md，再维护逐条清单|初始提示词；AGENTS.md；.ai/ARCHITECTURE.md|重建顺序、依赖、逐项状态和源码结构核对|已落实|
 |93|新建词条窗口应更大（桌面约900px宽，正文约10行，手机限制视口范围），提供按钮打开小分类树选择所属分类|src/App.tsx；src/components/CategoryPicker.tsx；src/pages/Entry.tsx|900px/10行、共享搜索/方向键/折叠、嵌套取消、保存失败保留|已实现，已回归|
-|94|用户再次要求确认所有需求均已实现、细节完善|.ai/ACCEPTANCE_018.md；.ai/ITERATION_018.md|全100项复核；本轮补齐拖拽变更/只读树/SVG和分类创建细节|完整清单/191单元/31脚本/84浏览器/本地原生已通过，交付待收尾|
-|95|用户质疑默认Action中Ubuntu图形界面/portable损坏恢复验收的耗时及点击报错|.github/workflows/build.yml；native-ui.yml；scripts/workflow.test.mjs|默认移出Ubuntu图形自动化；按需复用Build DEB/对应源码、不编译不发布|已实现；本轮按需实包诊断仍需运行|
-|96|用户要求在启动Action前再次确认全部需求和细节：先完成完整清单复核、本地检查及已知缺陷修复，再推送（含自动Validate）或手动触发新Ac…|本地全部检查及完整需求清单|在任何新Action/推送前复核、修复已知失败；本地Ubuntu隔离容器验收|本地门禁已通过；推送前记录，随后启动云端交付|
-|97|Android手机端禁止浏览器整页双指缩放，保留滚动、选区和星图自身缩放|src-tauri/mobile/android/PageGestures.kt；scripts/configure-android.mjs|创建回调安装/幂等/已有安全区升级回归，31脚本通过；Android包编译及设备范围另记|已实现；实体机手势未实测|
-|98|普通提交不触发test，整套检查合并到Build前置阶段|.github/workflows/build.yml；scripts/workflow.test.mjs；AGENTS.md|无push/PR触发；共享前端测试仅一次，失败阻止打包；原生更新回归先于打包|已实现；本次Build验证|
-|99|Android启动器统一软件图标，覆盖模板圆圈|scripts/configure-android.mjs；src-tauri/icons/android|生成工程旧普通/圆形图标覆盖、全部密度字节一致、Manifest绑定和幂等回归|已实现；最终APK资源待核对|
-|100|简洁重写README，删除历史废话和过时说明|README.md|211行精简为65行，平台/上手/配置/开发/Build触发和文档链接核对|已完成，文档待推送|
+|94|用户再次要求确认所有需求均已实现、细节完善|.ai/ACCEPTANCE_018.md；.ai/ITERATION_018.md|全100项复核；本轮补齐拖拽变更/只读树/SVG和分类创建细节|100项逐条复核；191单元/84浏览器/最终33脚本及原生验收，已发布|
+|95|用户质疑默认Action中Ubuntu图形界面/portable损坏恢复验收的耗时及点击报错|.github/workflows/build.yml；native-ui.yml；scripts/workflow.test.mjs|默认移出Ubuntu图形自动化；按需复用Build DEB/对应源码、不编译不发布|已实现；最终DEB按需验收通过|
+|96|用户要求在启动Action前再次确认全部需求和细节：先完成完整清单复核、本地检查及已知缺陷修复，再推送（含自动Validate）或手动触发新Ac…|本地全部检查及完整需求清单|在任何新Action/推送前复核、修复已知失败；本地Ubuntu隔离容器验收|已执行；本地门禁先于新Action，交付已完成|
+|97|Android手机端禁止浏览器整页双指缩放，保留滚动、选区和星图自身缩放|src-tauri/mobile/android/PageGestures.kt；scripts/configure-android.mjs|创建回调安装/幂等/已有安全区升级回归，31脚本通过；Android包编译及设备范围另记|已实现；APK编译通过，实体机手势未实测|
+|98|普通提交不触发test，整套检查合并到Build前置阶段|.github/workflows/build.yml；scripts/workflow.test.mjs；AGENTS.md|无push/PR触发；共享前端测试仅一次，失败阻止打包；原生更新回归先于打包|已实现；Build前置检查通过，普通提交不触发测试|
+|99|Android启动器统一软件图标，覆盖模板圆圈|scripts/configure-android.mjs；src-tauri/icons/android|生成工程旧普通/圆形图标覆盖、全部密度字节一致、Manifest绑定和幂等回归|已发布；APK绑定/安全区/15张PNG像素核对通过|
+|100|简洁重写README，删除历史废话和过时说明|README.md|211行精简为65行，平台/上手/配置/开发/Build触发和文档链接核对|已重写推送；65行及文档链接核对通过|
 
 ## 明确的验证边界
 
@@ -111,5 +111,5 @@
 - 真实本地SFTPGo2.7.6验证继承上轮同协议实现；未连接用户自建实例。模拟AI/代理/流式服务和实际MCP stdio/原生网络检查，不等于所有真实提供商账号兼容性均已验证。
 - Android按用户要求arm64构建和包/签名验证，不运行默认模拟器；实体手机/系统后台策略和旧开发APK签名连续性未由浏览器测试证明。
 - FSRS是有来源的预测模型；新条目“已学会”是用户指定先验，不伪称实测或已完成个体训练。
-- 保留Ubuntu原生点击失败的首轮证据；修正后本地Ubuntu24完整验收通过，仍须对最终DEB做按需诊断。移出默认流水线是耗时选择，不是修复完成证据。
+- 保留Ubuntu原生点击失败的首轮证据；修正后本地Ubuntu24完整验收通过，最终DEB按需诊断也已通过。移出默认流水线是耗时选择，不是修复完成证据。
 - 本地全量结果、最终源码/云端Run/按需诊断/发布标签和五资产校验在STATUS中更新；最终只将有证据的部分标为通过。

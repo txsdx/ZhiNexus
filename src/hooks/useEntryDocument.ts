@@ -268,7 +268,7 @@ export function useEntryDocument(
     const target = window.document.querySelector(
       `[data-blockid="${CSS.escape(blockId)}"]`,
     );
-    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    target?.scrollIntoView({ block: "center", behavior: "instant" });
   };
 
   return {

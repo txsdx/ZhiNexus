@@ -52,7 +52,7 @@ jobs:
           import fs from 'node:fs';
           import {createHash} from 'node:crypto';
           import {execFileSync} from 'node:child_process';
-          const root='src-tauri/target/release/bundle/deb', files=fs.readdirSync(root).filter(f=>f.endsWith('.deb'));
+          const root='src-tauri/target/release/bundle/deb', files=fs.readdirSync(root,{recursive:true}).filter(f=>f.endsWith('.deb'));
           if(files.length!==1)throw Error('Expected exactly one Ubuntu package');
           const file=root+'/'+files[0], version=execFileSync('dpkg-deb',['-f',file,'Version'],{encoding:'utf8'}).trim();
           if(version!==JSON.parse(fs.readFileSync('versions.json','utf8')).platforms.ubuntu)throw Error('Package/source version mismatch');

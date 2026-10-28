@@ -12,6 +12,7 @@ import {
   Edit3,
   History,
   ImagePlus,
+  MessageSquare,
   Save,
   Sparkles,
   Trash2,
@@ -120,50 +121,123 @@ export function EntryPage({
         {t("返回知识库", "Back to library")}
       </button>
       <div className="entry-heading">
-        <div>
+        <div className="entry-heading-top">
           <span className="category-dot">
             {s.categories.find((c) => c.id === entry.category)?.name ||
               t("未分类", "Uncategorized")}
           </span>
-          {editing ? (
-            <input
-              className="title-input"
-              disabled={saving}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          ) : (
-            <h1>{entry.title}</h1>
-          )}
-          <p>
-            {t("创建于", "Created")}{" "}
-            {new Date(entry.createdAt).toLocaleDateString()} ·{" "}
-            {t("最近更新", "Updated")}{" "}
-            {new Date(entry.updatedAt).toLocaleString()}
-          </p>
-        </div>
-        <div className="actions">
-          <button
-            className="icon"
-            title={t("变更历史", "History")}
-            onClick={() => setHistory(true)}
-          >
-            <History size={19} />
-          </button>
-          <button disabled={saving} onClick={beginEditing}>
-            <Edit3 size={16} />
-            {editing ? t("取消", "Cancel") : t("编辑", "Edit")}
-          </button>
-          {editing && (
+          <div className="actions">
             <button
-              className="primary"
-              disabled={saving}
-              onClick={() => void act(t("保存中", "Saving"), () => save())}
+              className="icon"
+              title={t("变更历史", "History")}
+              onClick={() => setHistory(true)}
             >
-              <Save size={16} />
-              {t("保存", "Save")}
+              <History size={19} />
             </button>
-          )}
+            <button disabled={saving} onClick={beginEditing}>
+              <Edit3 size={16} />
+              {editing ? t("取消", "Cancel") : t("编辑", "Edit")}
+            </button>
+            <button
+              title={t("与当前词条对话", "Chat about this entry")}
+              disabled={saving}
+              onClick={() => onChat(id)}
+            >
+              <MessageSquare size={16} />
+              {t("AI 对话", "AI chat")}
+            </button>
+            {editing && (
+              <button
+                className="primary"
+                disabled={saving}
+                onClick={() => void act(t("保存中", "Saving"), () => save())}
+              >
+                <Save size={16} />
+                {t("保存", "Save")}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="entry-heading-row">
+          <div className="entry-title">
+            {editing ? (
+              <input
+                className="title-input"
+                disabled={saving}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            ) : (
+              <h1>{entry.title}</h1>
+            )}
+            <p>
+              {t("创建于", "Created")}{" "}
+              {new Date(entry.createdAt).toLocaleDateString()} ·{" "}
+              {t("最近更新", "Updated")}{" "}
+              {new Date(entry.updatedAt).toLocaleString()}
+            </p>
+          </div>
+          <section
+            className="entry-meta"
+            aria-label={t("词条信息", "Entry details")}
+          >
+            <label>
+              {t("所属分类", "Category")}
+              <select
+                value={entry.category}
+                onChange={(e) =>
+                  void store.patch("entry", id, { category: e.target.value })
+                }
+              >
+                <option value="">{t("未分类", "Uncategorized")}</option>
+                {s.categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {t("标签（逗号分隔）", "Tags (comma separated)")}
+              <input
+                defaultValue={entry.tags.join(", ")}
+                key={entry.id + entry.tags.join(",")}
+                onBlur={(e) =>
+                  void store.patch("entry", id, {
+                    tags: json(
+                      e.target.value
+                        .split(/[,，]/)
+                        .map((x) => x.trim())
+                        .filter(Boolean),
+                    ),
+                  })
+                }
+              />
+            </label>
+            <p>
+              {t("复习次数", "Reviews")}: {entry.card.reps}
+              <br />
+              {t("下次复习", "Next review")}: {entry.card.due.toLocaleString()}
+            </p>
+            <button
+              className="danger full"
+              onClick={() => {
+                void confirmation.request(
+                  t(
+                    "删除此条目？日志将保留，可在数据库管理中恢复。",
+                    "Delete this entry? Its history remains recoverable.",
+                  ),
+                  async () => {
+                    await store.patch("entry", id, { deleted: true });
+                    onBack();
+                  },
+                );
+              }}
+            >
+              <Trash2 size={15} />
+              {t("删除词条", "Delete entry")}
+            </button>
+          </section>
         </div>
       </div>
       {Object.keys(doc?.conflicts ?? {}).length > 0 && (
@@ -177,65 +251,6 @@ export function EntryPage({
           </button>
         </div>
       )}
-      <section className="entry-meta">
-        <h3>{t("词条信息", "Entry details")}</h3>
-        <label>
-          {t("所属分类", "Category")}
-          <select
-            value={entry.category}
-            onChange={(e) =>
-              void store.patch("entry", id, { category: e.target.value })
-            }
-          >
-            <option value="">{t("未分类", "Uncategorized")}</option>
-            {s.categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("标签（逗号分隔）", "Tags (comma separated)")}
-          <input
-            defaultValue={entry.tags.join(", ")}
-            key={entry.id + entry.tags.join(",")}
-            onBlur={(e) =>
-              void store.patch("entry", id, {
-                tags: json(
-                  e.target.value
-                    .split(/[,，]/)
-                    .map((x) => x.trim())
-                    .filter(Boolean),
-                ),
-              })
-            }
-          />
-        </label>
-        <p>
-          {t("复习次数", "Reviews")}: {entry.card.reps}
-          <br />
-          {t("下次复习", "Next review")}: {entry.card.due.toLocaleString()}
-        </p>
-        <button
-          className="danger full"
-          onClick={() => {
-            void confirmation.request(
-              t(
-                "删除此条目？日志将保留，可在数据库管理中恢复。",
-                "Delete this entry? Its history remains recoverable.",
-              ),
-              async () => {
-                await store.patch("entry", id, { deleted: true });
-                onBack();
-              },
-            );
-          }}
-        >
-          <Trash2 size={15} />
-          {t("删除词条", "Delete entry")}
-        </button>
-      </section>
       <div className="entry-columns">
         <aside className="entry-outline">
           <details

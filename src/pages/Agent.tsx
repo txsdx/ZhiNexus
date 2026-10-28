@@ -19,10 +19,12 @@ export function Agent({
   notify,
   initialTopic = "",
   quote = "",
+  onOpenEntry,
 }: {
   entryId?: string;
   initialTopic?: string;
   quote?: string;
+  onOpenEntry?: (id: string) => void;
   notify: (message: string) => void;
 }) {
   const s = useKnowledge(),
@@ -272,7 +274,20 @@ export function Agent({
               )}
             </button>
             <h1>{topic?.title ?? t("新对话", "New conversation")}</h1>
-            {entry && <span className="chat-entry-context">{entry.title}</span>}
+            {entry &&
+              (onOpenEntry ? (
+                <button
+                  type="button"
+                  className="chat-entry-context"
+                  onClick={() => onOpenEntry(entry.id)}
+                  title={t("返回词条", "Back to entry")}
+                  aria-label={t("返回词条：", "Back to entry: ") + entry.title}
+                >
+                  {entry.title}
+                </button>
+              ) : (
+                <span className="chat-entry-context">{entry.title}</span>
+              ))}
           </header>
           <div className="chat-message-region">
             <div

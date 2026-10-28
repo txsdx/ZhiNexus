@@ -128,3 +128,8 @@ The Agent route uses a bounded flex viewport below the global toolbar. Conversat
 Completed chat/title jobs are automatically retired after their result is persisted; historical completed jobs are retired on queue initialization without replaying work. Failed storage cleanup preserves results and offers manual cleanup. Knowledge proposals, review scoring and writes retain their explicit application boundaries. Built-in queries run directly. MCP tools bypass confirmation only with `readOnlyHint: true` and no `destructiveHint: true`; unknown/conflicting annotations and pending uncertain action receipts require confirmation.
 
 Interaction references and implementation scope are recorded in [CHAT_UX_REFERENCES.md](CHAT_UX_REFERENCES.md).
+
+
+## Compact entry header (0.16)
+
+`EntryPage` groups history/edit/chat actions in one toolbar and places the title and existing metadata controls in a wrapping flex row. Metadata uses a compact four-column grid, switching to two columns on phones; no knowledge fields or confirmation boundaries change. The direct AI button uses the existing `onChat(entryId)` route and clears any previous selection quote. `Agent.onOpenEntry` returns through the workspace controller, preserving the mounted entry draft. Existing per-entry topic filtering/provider context and global navigation scope remain authoritative.

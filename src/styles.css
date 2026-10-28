@@ -774,17 +774,35 @@ pre.report,
 }
 .entry-heading {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.entry-heading-top {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 15px;
-  margin-bottom: 25px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.entry-heading-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.entry-title {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .entry-heading h1 {
-  margin-top: 12px;
+  margin: 0 0 8px;
 }
 .entry-heading p {
   font-size: 0.8rem;
   color: var(--muted);
+  margin-bottom: 0;
 }
 .title-input {
   font-size: 1.7rem;
@@ -1748,12 +1766,6 @@ details pre {
   .page-note {
     font-size: 0.8rem;
   }
-  .entry-heading {
-    display: block;
-  }
-  .entry-heading > .actions {
-    margin-top: 15px;
-  }
   .entry-heading p {
     font-size: 0.8rem;
   }
@@ -2264,27 +2276,30 @@ textarea::placeholder {
   min-width: 0;
 }
 .entry-meta {
-  display: flex;
-  align-items: end;
-  gap: 14px;
-  flex-wrap: wrap;
+  flex: 3 1 640px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  align-items: center;
+  gap: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-}
-.entry-meta h3 {
-  font-size: 1rem;
-  margin: 0 4px 8px 0;
+  padding: 12px;
 }
 .entry-meta label {
   margin: 0;
-  min-width: 160px;
-  flex: 1;
+  min-width: 0;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+.entry-meta input,
+.entry-meta select {
+  width: 100%;
+  padding: 8px;
 }
 .entry-meta p {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   margin: 0;
   line-height: 1.6;
 }
@@ -2292,6 +2307,7 @@ textarea::placeholder {
   width: auto;
   min-width: 100px;
   align-self: center;
+  justify-self: end;
 }
 .selection-toolbar {
   display: flex;
@@ -2342,9 +2358,6 @@ textarea::placeholder {
   .entry-meta {
     gap: 10px;
   }
-  .entry-meta label {
-    min-width: 140px;
-  }
   .ai-review-status {
     flex-wrap: wrap;
   }
@@ -2390,13 +2403,18 @@ textarea::placeholder {
   }
   .entry-meta {
     padding: 10px;
-  }
-  .entry-meta h3 {
     flex-basis: 100%;
-    margin: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .entry-meta p {
+    white-space: normal;
   }
   .entry-meta .danger.full {
     font-size: 0.85rem;
+    justify-self: end;
+  }
+  .entry-title {
+    flex-basis: 100%;
   }
 }
 /* The explicit navigation toggle takes precedence over automatic desktop icon layouts. */

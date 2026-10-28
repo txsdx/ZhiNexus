@@ -714,6 +714,7 @@ function Shell() {
               entryId={chatEntry}
               initialTopic={chatTopic}
               quote={chatQuote}
+              onOpenEntry={open}
               notify={notify}
             />
           )}{" "}

@@ -804,6 +804,16 @@ pre.report,
   color: var(--muted);
   margin-bottom: 0;
 }
+.entry-heading .entry-timestamps {
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+.entry-timestamps > span {
+  display: block;
+}
+.entry-timestamps time {
+  white-space: nowrap;
+}
 .title-input {
   font-size: 1.7rem;
   width: 100%;

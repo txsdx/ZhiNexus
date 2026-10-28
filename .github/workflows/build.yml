@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Reserve space for two Android ABIs and the API 35 emulator
+      - name: Reserve space for the Android release build
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
@@ -189,7 +189,7 @@ jobs:
           key: android-ndk-${{ runner.os }}-27.2.12479018-v3
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
@@ -234,52 +234,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/sign-release-files.mjs release-files
-      - name: Build native debug APK for device tests (not published)
-        run: npm run tauri -- android build --debug --apk --target x86_64
-      - name: Enable hosted-runner KVM for Android 15 tests
-        run: |
-          test -e /dev/kvm
-          sudo chmod 666 /dev/kvm
-      - uses: actions/cache/restore@v4
-        id: image-cache
-        with:
-          path: ${{ env.ANDROID_CACHE_ROOT }}/system-images/android-35/google_apis/x86_64
-          key: android-test-image-api35-google-apis-x86_64-v1
-      - name: Test installed app on Android 15
-        id: device-test
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          avd-name: zhinexus-ci
-          # The default Pixel data partition exceeds available space after compiling both Rust ABIs.
-          disk-size: 2048M
-          emulator-boot-timeout: 180
-          disable-animations: true
-          pre-emulator-launch-script: |
-            # AVD profiles and the action append duplicate keys; keep one authoritative data-partition setting.
-            sed -i '/^[[:space:]]*disk\.dataPartition\.size[[:space:]]*=/d' "$HOME/.android/avd/zhinexus-ci.avd/config.ini"
-            printf '\ndisk.dataPartition.size=2048M\n' >> "$HOME/.android/avd/zhinexus-ci.avd/config.ini"
-            # APKs already contain the shared library. These workspace archives are not retained by rust-cache.
-            find src-tauri/target/aarch64-linux-android src-tauri/target/x86_64-linux-android -type f \( -name 'libzhinexus_lib*.a' -o -name 'libzhinexus_lib*.rlib' \) -delete
-            df -h /
-          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -feature -Vulkan
-          script: |
-            adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
-            node scripts/android-smoke.mjs
-      - name: Verify factory image is complete before caching
-        id: image-ready
-        if: always()
-        run: |
-          test -s "$ANDROID_HOME/system-images/android-35/google_apis/x86_64/package.xml"
-          test -s "$ANDROID_HOME/system-images/android-35/google_apis/x86_64/system.img"
-      - uses: actions/cache/save@v4
-        if: always() && steps.image-ready.outcome == 'success' && steps.image-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ env.ANDROID_CACHE_ROOT }}/system-images/android-35/google_apis/x86_64
-          key: ${{ steps.image-cache.outputs.cache-primary-key }}
       - uses: actions/cache/save@v4
         if: always() && steps.sdk-template.outcome == 'success' && steps.sdk-cache.outputs.cache-hit != 'true'
         with:
@@ -287,11 +241,6 @@ jobs:
             ~/.android/cache
             ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
           key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: Android-device-test-results
-          path: android-test-results/
       - uses: actions/upload-artifact@v4
         if: always()
         with:

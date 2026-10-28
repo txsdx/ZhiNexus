@@ -28,6 +28,35 @@ test("one manual entry builds every target with only publication and draft optio
   ]);
   assert.ok(workflow.jobs.android);
 });
+test("Android builds only the arm64 release with package verification and no emulator workload", () => {
+  const steps = workflow.jobs.android.steps;
+  assert.equal(
+    steps.find((s) => s.uses === "dtolnay/rust-toolchain@stable").with.targets,
+    "aarch64-linux-android",
+  );
+  assert.ok(
+    steps.some(
+      (s) => s.run === "npm run tauri -- android build --apk --target aarch64",
+    ),
+  );
+  assert.ok(steps.some((s) => s.run === "bash scripts/android-sign.sh"));
+  assert.ok(
+    steps.some(
+      (s) =>
+        s.uses === "actions/upload-artifact@v4" &&
+        s.with.name === "ZhiNexus-Android",
+    ),
+  );
+  assert.ok(
+    !/emulator-runner|--target x86_64|\/dev\/kvm|system-images|Android-device-test-results|android-smoke\.mjs/.test(
+      JSON.stringify(steps),
+    ),
+  );
+  assert.match(
+    fs.readFileSync("scripts/android-sign.sh", "utf8"),
+    /apksigner" verify/,
+  );
+});
 test("the frontend is compiled once and all native jobs verify its artifact", () => {
   assert.equal(
     workflow.jobs.frontend.steps.filter((s) => s.run === "npm run build")

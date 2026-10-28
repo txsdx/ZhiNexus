@@ -170,11 +170,19 @@ export function EntryPage({
             ) : (
               <h1>{entry.title}</h1>
             )}
-            <p>
-              {t("创建于", "Created")}{" "}
-              {new Date(entry.createdAt).toLocaleDateString()} ·{" "}
-              {t("最近更新", "Updated")}{" "}
-              {new Date(entry.updatedAt).toLocaleString()}
+            <p className="entry-timestamps">
+              <span>
+                {t("创建于", "Created")}{" "}
+                <time dateTime={entry.createdAt}>
+                  {new Date(entry.createdAt).toLocaleDateString()}
+                </time>
+              </span>
+              <span>
+                {t("最近更新", "Updated")}{" "}
+                <time dateTime={entry.updatedAt}>
+                  {new Date(entry.updatedAt).toLocaleString()}
+                </time>
+              </span>
             </p>
           </div>
           <section

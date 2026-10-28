@@ -39,6 +39,12 @@ test("entry metadata shares the title row and actions stay together without over
     expect(meta!.y).toBeLessThan(title!.y + title!.height);
     expect(meta!.y + meta!.height).toBeGreaterThan(title!.y);
   }
+  const times = page.locator(".entry-timestamps > span");
+  await expect(times.nth(0)).toContainText("创建于");
+  await expect(times.nth(1)).toContainText("最近更新");
+  const created = await times.nth(0).boundingBox(),
+    updated = await times.nth(1).boundingBox();
+  expect(updated!.y).toBeGreaterThanOrEqual(created!.y + created!.height);
   const edit = await page
       .getByRole("button", { name: "编辑", exact: true })
       .boundingBox(),

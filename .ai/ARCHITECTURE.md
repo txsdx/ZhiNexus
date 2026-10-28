@@ -156,3 +156,5 @@ Startup validates recovery copies and event/blob integrity without replaying ide
 GTK overlay horizontal scrollbars can intercept the final table row. KnowledgeTable observes actual horizontal overflow and reserves16px only while needed; localized header labels wrap within their compact columns. Native smoke explicitly constrains the table to420px, checks top/center/bottom pointer targets and clicks the recovered entry. Default Ubuntu release builds omit GUI-driver setup; the opt-in native-ui workflow downloads a built DEB and checks out its exact source, without rebuilding or publishing.
 
 Android整页缩放策略由mobile/android/PageGestures.kt负责，通过configure-android注入Tauri公开onWebViewCreate回调，在每次WebView创建时关闭supportZoom/builtInZoomControls/displayZoomControls；不使用touchmove阻断或全局touch-action:none，避免影响滚动、选区和ReactFlow内部缩放。
+
+构建触发：移除独立push/PR Validate，Build frontend在生产编译前运行一次单元/发布脚本/浏览器回归，失败阻止三平台打包；Ubuntu release profile先运行原生更新边界测试。Android工程生成后configureLauncherIcons覆盖已提交各密度与adaptive normal/round引用，不依赖Tauri模板图标。

@@ -25,6 +25,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:release
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser regressions before building
+        run: CHROMIUM_PATH=$(find "$HOME/.cache/ms-playwright" -type f -path '*/chrome-linux*/chrome' | head -1) npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: test-results/
       - run: npm run build
       - name: Seal shared frontend
         run: node scripts/frontend-artifact.mjs create
@@ -92,6 +104,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           BUILD_PLATFORM: ${{ matrix.platform }}
         run: node scripts/release-config.mjs
+      - name: Check native update boundaries before packaging
+        if: runner.os == 'Linux'
+        run: |
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib github_release::tests
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib updates::tests
       - uses: tauri-apps/tauri-action@v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}

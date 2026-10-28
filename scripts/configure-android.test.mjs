@@ -1,7 +1,14 @@
 /** Android target support is independent of newer stable compile-SDK templates. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { configureAndroid, configureActivity } from "./configure-android.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  configureAndroid,
+  configureActivity,
+  configureLauncherIcons,
+} from "./configure-android.mjs";
 test("retains current compileSdk while enforcing Android 15 minimum", () => {
   const r = configureAndroid("compileSdk = 37\nminSdk = 26", 35);
   assert.equal(r.compileSdk, 37);
@@ -9,6 +16,52 @@ test("retains current compileSdk while enforcing Android 15 minimum", () => {
 });
 test("does not allow unsupported older Android targets", () =>
   assert.throws(() => configureAndroid("compileSdk = 37", 26)));
+test("both adaptive launcher shapes replace generated placeholder artwork, including reconfigured projects", () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "zhinexus-launcher-"));
+  try {
+    const adaptive = path.join(fixture, "mipmap-anydpi-v26");
+    fs.mkdirSync(adaptive, { recursive: true });
+    fs.writeFileSync(
+      path.join(adaptive, "ic_launcher_round.xml"),
+      "<adaptive-icon>template circles</adaptive-icon>",
+    );
+    const manifest =
+      '<manifest><application android:icon="@drawable/template" android:roundIcon="@mipmap/template_round" android:label="知枢"><activity/></application></manifest>';
+    const configured = configureLauncherIcons(manifest, fixture);
+    assert.match(configured, /android:icon="@mipmap\/ic_launcher"/);
+    assert.match(configured, /android:roundIcon="@mipmap\/ic_launcher_round"/);
+    assert.match(configured, /android:label="知枢"/);
+    for (const name of ["ic_launcher.xml", "ic_launcher_round.xml"]) {
+      assert.equal(
+        fs.readFileSync(path.join(adaptive, name), "utf8"),
+        fs.readFileSync(
+          "src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+          "utf8",
+        ),
+      );
+    }
+    for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
+      for (const name of [
+        "ic_launcher",
+        "ic_launcher_round",
+        "ic_launcher_foreground",
+      ]) {
+        const relative = `mipmap-${density}/${name}.png`;
+        assert.deepEqual(
+          fs.readFileSync(path.join(fixture, relative)),
+          fs.readFileSync("src-tauri/icons/android/" + relative),
+        );
+      }
+    }
+    assert.equal(configureLauncherIcons(configured, fixture), configured);
+    assert.match(
+      configureLauncherIcons("<manifest><application /></manifest>", fixture),
+      /android:roundIcon="@mipmap\/ic_launcher_round"/,
+    );
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+  }
+});
 test("native safe areas attach after WebView setup without replacing generated activity behavior", () => {
   const text =
     "class MainActivity : TauriActivity() {\noverride fun onCreate(savedInstanceState: Bundle?) {\nenableEdgeToEdge()\nsuper.onCreate(savedInstanceState)\nsetupOtherPlugin()\n}\n}\n";

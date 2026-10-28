@@ -28,6 +28,35 @@ test("one manual entry builds every target with only publication and draft optio
   ]);
   assert.ok(workflow.jobs.android);
 });
+test("commits do not trigger tests; the build gates packaging on a single frontend regression stage", () => {
+  for (const file of fs.readdirSync(".github/workflows")) {
+    const triggers = parse(
+      fs.readFileSync(".github/workflows/" + file, "utf8"),
+    ).on;
+    assert.ok(
+      !triggers.push && !triggers.pull_request,
+      file + " must not run tests on each commit",
+    );
+  }
+  const steps = workflow.jobs.frontend.steps;
+  const build = steps.findIndex((s) => s.run === "npm run build");
+  for (const command of ["npm test", "npm run test:release"]) {
+    const indices = steps.flatMap((s, i) => (s.run === command ? [i] : []));
+    assert.equal(indices.length, 1);
+    assert.ok(indices[0] < build);
+  }
+  assert.ok(
+    steps.findIndex(
+      (s) => s.name === "Run browser regressions before building",
+    ) < build,
+  );
+  const native = workflow.jobs.desktop.steps;
+  assert.ok(
+    native.findIndex(
+      (s) => s.name === "Check native update boundaries before packaging",
+    ) < native.findIndex((s) => s.uses === "tauri-apps/tauri-action@v0"),
+  );
+});
 test("Android builds only the arm64 release with package verification and no emulator workload", () => {
   const steps = workflow.jobs.android.steps;
   assert.equal(

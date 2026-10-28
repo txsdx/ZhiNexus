@@ -43,6 +43,32 @@ export function configureActivity(text) {
   }
   return text;
 }
+/** Replace generated template launcher resources and bind normal/round icons to the committed application artwork. */
+export function configureLauncherIcons(manifest, resourceDir) {
+  fs.cpSync("src-tauri/icons/android", resourceDir, { recursive: true });
+  fs.copyFileSync(
+    "src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+    resourceDir + "/mipmap-anydpi-v26/ic_launcher_round.xml",
+  );
+  if (!/<application\b[^>]*>/.test(manifest))
+    throw Error("Android application manifest tag not found");
+  return manifest.replace(/<application\b[^>]*>/, (tag) => {
+    for (const [attribute, value] of [
+      ["icon", "@mipmap/ic_launcher"],
+      ["roundIcon", "@mipmap/ic_launcher_round"],
+    ]) {
+      const pattern = new RegExp(`android:${attribute}="[^"]*"`);
+      const replacement = `android:${attribute}="${value}"`;
+      tag = pattern.test(tag)
+        ? tag.replace(pattern, replacement)
+        : tag.replace(
+            /\s*(\/?)>$/,
+            (_, slash) => ` ${replacement}${slash ? " /" : ""}>`,
+          );
+    }
+    return tag;
+  });
+}
 /** Modify only Tauri's ignored generated project, keeping source requirements and CI metadata synchronized. */
 export function run() {
   const file = "src-tauri/gen/android/app/build.gradle.kts";
@@ -97,7 +123,10 @@ export function run() {
     xmlDir + "/zhinexus_update_paths.xml",
   );
   const manifestPath = "src-tauri/gen/android/app/src/main/AndroidManifest.xml";
-  let manifest = fs.readFileSync(manifestPath, "utf8");
+  let manifest = configureLauncherIcons(
+    fs.readFileSync(manifestPath, "utf8"),
+    "src-tauri/gen/android/app/src/main/res",
+  );
   if (!manifest.includes("android.permission.REQUEST_INSTALL_PACKAGES"))
     manifest = manifest.replace(
       "<application",

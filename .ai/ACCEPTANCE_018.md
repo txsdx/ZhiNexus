@@ -1,6 +1,6 @@
 # 0.18 完整需求逐项复核
 
-北京时间2026-10-29。编号与初始提示词1–99严格对应；本文件记录实现和验证证据，不作“绝无缺陷”保证。99项实现及本地验证复核已完成，最终构建/Ubuntu按需实包诊断/正式Release尚未收尾，不能标为全部交付。
+北京时间2026-10-29。编号与初始提示词1–100严格对应；本文件记录实现和验证证据，不作“绝无缺陷”保证。100项实现及本地验证复核已完成，最终构建/Ubuntu按需实包诊断/正式Release尚未收尾，不能标为全部交付。
 
 |编号|需求摘要|实现位置|验证证据|状态|
 |---|---|---|---|---|
@@ -97,12 +97,13 @@
 |91|安装 Node24、Rust稳定工具链、Tauri所需Linux/Windows依赖，Android JDK17/SDK35/NDK27.2及a…|初始提示词；AGENTS.md；.ai/ARCHITECTURE.md|重建顺序、依赖、逐项状态和源码结构核对|已落实|
 |92|开始工作先读本文件及 AGENTS.md，再维护逐条清单|初始提示词；AGENTS.md；.ai/ARCHITECTURE.md|重建顺序、依赖、逐项状态和源码结构核对|已落实|
 |93|新建词条窗口应更大（桌面约900px宽，正文约10行，手机限制视口范围），提供按钮打开小分类树选择所属分类|src/App.tsx；src/components/CategoryPicker.tsx；src/pages/Entry.tsx|900px/10行、共享搜索/方向键/折叠、嵌套取消、保存失败保留|已实现，已回归|
-|94|用户再次要求确认所有需求均已实现、细节完善|.ai/ACCEPTANCE_018.md；.ai/ITERATION_018.md|全99项复核；本轮补齐拖拽变更/只读树/SVG和分类创建细节|完整清单/191单元/31脚本/84浏览器/本地原生已通过，交付待收尾|
+|94|用户再次要求确认所有需求均已实现、细节完善|.ai/ACCEPTANCE_018.md；.ai/ITERATION_018.md|全100项复核；本轮补齐拖拽变更/只读树/SVG和分类创建细节|完整清单/191单元/31脚本/84浏览器/本地原生已通过，交付待收尾|
 |95|用户质疑默认Action中Ubuntu图形界面/portable损坏恢复验收的耗时及点击报错|.github/workflows/build.yml；native-ui.yml；scripts/workflow.test.mjs|默认移出Ubuntu图形自动化；按需复用Build DEB/对应源码、不编译不发布|已实现；本轮按需实包诊断仍需运行|
 |96|用户要求在启动Action前再次确认全部需求和细节：先完成完整清单复核、本地检查及已知缺陷修复，再推送（含自动Validate）或手动触发新Ac…|本地全部检查及完整需求清单|在任何新Action/推送前复核、修复已知失败；本地Ubuntu隔离容器验收|本地门禁已通过；推送前记录，随后启动云端交付|
 |97|Android手机端禁止浏览器整页双指缩放，保留滚动、选区和星图自身缩放|src-tauri/mobile/android/PageGestures.kt；scripts/configure-android.mjs|创建回调安装/幂等/已有安全区升级回归，31脚本通过；Android包编译及设备范围另记|已实现；实体机手势未实测|
 |98|普通提交不触发test，整套检查合并到Build前置阶段|.github/workflows/build.yml；scripts/workflow.test.mjs；AGENTS.md|无push/PR触发；共享前端测试仅一次，失败阻止打包；原生更新回归先于打包|已实现；本次Build验证|
 |99|Android启动器统一软件图标，覆盖模板圆圈|scripts/configure-android.mjs；src-tauri/icons/android|生成工程旧普通/圆形图标覆盖、全部密度字节一致、Manifest绑定和幂等回归|已实现；最终APK资源待核对|
+|100|简洁重写README，删除历史废话和过时说明|README.md|211行精简为65行，平台/上手/配置/开发/Build触发和文档链接核对|已完成，文档待推送|
 
 ## 明确的验证边界
 

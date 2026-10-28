@@ -50,17 +50,37 @@ export function publicationPlan({ tag, sha, draft, existing, artifacts }) {
   if (!draft) commands.push(["release", "edit", tag, "--draft=false"]);
   return commands;
 }
-/** Resolve an existing tag through the authenticated GitHub CLI; permission/network failures are never treated as absence. */
-function existingRelease(repository, tag) {
+/** Execute authenticated JSON queries without printing credential-bearing CLI diagnostics. */
+function queryGitHub(args) {
+  return JSON.parse(
+    execFileSync("gh", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }),
+  );
+}
+/** Find published releases or drafts: the tag endpoint can return 404 for an existing draft. */
+export function existingRelease(repository, tag, query = queryGitHub) {
   try {
-    return JSON.parse(
-      execFileSync("gh", ["api", `repos/${repository}/releases/tags/${tag}`], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      }),
-    );
+    return query(["api", `repos/${repository}/releases/tags/${tag}`]);
   } catch (error) {
-    if (String(error.stderr).includes("HTTP 404")) return null;
+    if (String(error.stderr).includes("HTTP 404")) {
+      try {
+        for (let page = 1; ; page++) {
+          const releases = query([
+            "api",
+            `repos/${repository}/releases?per_page=100&page=${page}`,
+          ]);
+          const match = releases.find((release) => release.tag_name === tag);
+          if (match) return match;
+          if (releases.length < 100) return null;
+        }
+      } catch {
+        throw Error(
+          "Unable to inspect draft Releases; check repository permissions and network",
+        );
+      }
+    }
     throw Error(
       "Unable to inspect Release; check the job's repository permissions and network",
     );

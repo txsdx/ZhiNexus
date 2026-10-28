@@ -22,7 +22,7 @@
 - 各平台读取同一个最新 Release/latest.json，含平台版本、下载地址、摘要及更新内容，提供一键下载校验和系统安装流程。
 - 所有平台 major.minor 相同、patch 独立。共享实现修改提升 shared 并重置各 patch；只改某平台则仅 bump 对应 patch。未来 AI 每次实现迭代必须更新版本，并更新本目录记录。
 
-实现约定：push 执行 Validate，打包仅手动/API dispatch，避免平台专属补丁重复打包未选择平台。Ubuntu Artifact 仅含 .deb/.sig，不上传打包中间目录。
+历史实现约定（已被末尾2026-10-29要求覆盖）：曾在push执行Validate；现仅Build前运行测试，打包仅手动/API dispatch。Ubuntu Artifact 仅含 .deb/.sig，不上传打包中间目录。
 
 ## 后续第 12–20 项
 
@@ -161,3 +161,5 @@
 - 2026-10-29：Android页面双指缩放不舒适，应禁用浏览器整页缩放；保留正常滚动/文本选择和应用内图画布交互。继续默认不运行Android模拟器，设备手势与编译证据分开记录。
 
 - 2026-10-29：仅Build前运行test，普通提交/push不跑整套测试；Android启动器统一软件图标，排除绿/黄圆圈生成模板。最新约定覆盖旧Validate触发规则。
+
+- 2026-10-29：重写杂乱README，删除废话和过时示例，保留清晰的用户与开发入口。

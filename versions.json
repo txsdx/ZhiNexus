@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "shared": "0.20",
+  "shared": "0.21",
   "platforms": {
-    "windows": "0.20.0",
-    "android": "0.20.0",
-    "ubuntu": "0.20.0"
+    "windows": "0.21.0",
+    "android": "0.21.0",
+    "ubuntu": "0.21.0"
   }
 }

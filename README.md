@@ -6,7 +6,7 @@
 
 ## 下载
 
-当前正式版为 [v0.19.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.19.0)；主分支 0.20.0 的捕获增强尚待发布验收。
+当前正式版为 [v0.19.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.19.0)；主分支 0.21.0 的捕获增强与公开更新修复尚待发布验收。
 
 在 [最新 Release](https://github.com/txsdx/ZhiNexus/releases/latest) 下载对应文件：
 
@@ -65,7 +65,7 @@ npm run tauri dev  # 原生桌面开发
 ## 仓库说明
 
 - [完整复现规格](.ai/初始提示词.txt)：全部编号需求与 AI 工作规则。
-- [实现与验收清单](.ai/ACCEPTANCE_020.md)、[当前状态](.ai/STATUS.md)、[验证边界](.ai/KNOWN_ISSUES.md)。
+- [实现与验收清单](.ai/ACCEPTANCE_021.md)、[当前状态](.ai/STATUS.md)、[验证边界](.ai/KNOWN_ISSUES.md)。
 - [架构](.ai/ARCHITECTURE.md)、[复习设计依据](.ai/LEARNING_DESIGN.md)、[更新日志](.ai/CHANGELOG.md)。
 
 本机未保存草稿不参与知识同步。备份与恢复入口位于数据库设置；迁移或覆盖安装前先备份。

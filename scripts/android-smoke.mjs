@@ -330,7 +330,7 @@ try {
     "PASS: Android native WebView, SQLite capture, rich blocks, restored tabs, mobile navigation, process restart, per-device reminder, OS alarm registration and genuine SSE chat before completion.\n",
   );
   console.log(
-    "PASS: Android native storage, restart, OS notification scheduling, genuine SSE chat and authenticated private Release manifest download",
+    "PASS: Android native storage, restart, OS notification scheduling, genuine SSE chat and validated GitHub Release manifest download",
   );
 } catch (error) {
   fs.writeFileSync(

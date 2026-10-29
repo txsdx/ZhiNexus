@@ -172,3 +172,7 @@ categoryPath统一完整层级；CategoryPicker保留共用树弹窗，但改为
 0.20关于页：复用横向`.toggle`而非未定义`.check`，品牌/版本独立flex头部，更新控件用纵向容器统一间距和左对齐。只有available为真显示升级箭头，其余用版本说明；当前与无平台文件状态区分。更新控制器/原生校验与数据模式未变，原生UI读取版本说明的格式同步调整。
 
 0.20捕获增强：CaptureEditor复用表单，CaptureSession合并异步保存、保留未确认输入，主webview的CaptureRepository串行/CAS管理本机草稿。图片先存本机meta暂存，Save后按哈希校验转入blobs；稳定创建ID防清草稿失败/响应丢失重复创建，保存过的草稿新编辑可另开创建ID保留。QuickCapture不初始化数据库/同步/AI，通过有窗口来源检查、限量与超时的Rust队列RPC访问唯一主写入者；关闭和全局退出/迁移先flush。DOCX在动态Mammoth/Turndown转换中保留简单语义与图片，fflate限制ZIP展开，HTML只作惰性DOM转换不挂载。
+
+## 0.21公开更新读取
+
+ReleaseClient每个受信请求先匿名GET，成功/重定向不使用内置凭证；仅API401/403/404且构建配置非空凭证时重试一次同URL的只读GET。request_headers严格限制API仓库和CDN，匿名仍带API版本，凭证Header敏感且只对仓库API发送。凭证从option_env!(ZHINEXUS_GITHUB_UPDATE_TOKEN)编入Rust，CI由可选GITHUB_UPDATE_TOKEN Secret注入，build.rs跟踪环境变化；移除已失效的明文资源文件。默认公开构建无需任何更新Token；私有读取需要有效配置后重编。数据目录、文件替换/回退、TLS、摘要与可选签名保持。临时恢复分支已清理，当前从main Build生成新包，不能把旧0.20二进制当成已修复。

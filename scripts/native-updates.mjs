@@ -1,4 +1,4 @@
-/** Exercise private GitHub Release discovery in the installed app without launching an installer. */
+/** Exercise public/private GitHub Release discovery in the installed app without launching an installer. */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -124,6 +124,6 @@ export async function testNativeUpdates({ click, script, waitFor }) {
     /^(?:\d+\.\d+\.\d+\s*→\s*|版本说明\s+|Release notes\s+)\d+\.\d+\.\d+$/,
   );
   console.log(
-    "PASS: embedded GitHub credential reads the private Release and downloads latest.json through the native updater",
+    "PASS: native updater reads the published GitHub Release and downloads latest.json through the validated asset API",
   );
 }

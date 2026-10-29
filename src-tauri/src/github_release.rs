@@ -1,4 +1,4 @@
-//! Repository-pinned GitHub Release API reads with the user's embedded updater credential.
+//! Repository-pinned public Release reads with optional build-time credentials for private repositories.
 use futures_util::StreamExt;
 use reqwest::{header, Client, Response, Url};
 use serde::Deserialize;
@@ -6,7 +6,7 @@ use std::time::Duration;
 
 const REPOSITORY: &str = "/repos/txsdx/ZhiNexus/";
 const RELEASE_PATH: &str = "/txsdx/ZhiNexus/releases/download/";
-const EMBEDDED_TOKEN: &str = include_str!("github-update-token.txt");
+const EMBEDDED_TOKEN: Option<&str> = option_env!("ZHINEXUS_GITHUB_UPDATE_TOKEN");
 const JSON_LIMIT: usize = 2 * 1024 * 1024;
 
 /// Minimal GitHub metadata; asset IDs are used to construct pinned API URLs ourselves.
@@ -44,7 +44,11 @@ fn validate_request_url(url: &Url) -> Result<(), String> {
 }
 
 /// Mark the bearer sensitive and attach it only to the exact project's GitHub API requests.
-fn request_headers(url: &Url, token: &str, accept: &str) -> Result<header::HeaderMap, String> {
+fn request_headers(
+    url: &Url,
+    token: Option<&str>,
+    accept: &str,
+) -> Result<header::HeaderMap, String> {
     validate_request_url(url)?;
     let mut headers = header::HeaderMap::new();
     headers.insert(
@@ -52,10 +56,13 @@ fn request_headers(url: &Url, token: &str, accept: &str) -> Result<header::Heade
         header::HeaderValue::from_str(accept).map_err(|_| "Invalid update media type")?,
     );
     if url.host_str() == Some("api.github.com") {
-        let mut authorization = header::HeaderValue::from_str(&format!("Bearer {}", token.trim()))
-            .map_err(|_| "Invalid embedded updater credential")?;
-        authorization.set_sensitive(true);
-        headers.insert(header::AUTHORIZATION, authorization);
+        if let Some(token) = token.filter(|value| !value.trim().is_empty()) {
+            let mut authorization =
+                header::HeaderValue::from_str(&format!("Bearer {}", token.trim()))
+                    .map_err(|_| "Invalid embedded updater credential")?;
+            authorization.set_sensitive(true);
+            headers.insert(header::AUTHORIZATION, authorization);
+        }
         headers.insert(
             "X-GitHub-Api-Version",
             header::HeaderValue::from_static("2022-11-28"),
@@ -66,6 +73,13 @@ fn request_headers(url: &Url, token: &str, accept: &str) -> Result<header::Heade
         header::HeaderValue::from_static("no-cache"),
     );
     Ok(headers)
+}
+
+/// Only a failed API read may retry once with a configured credential; public downloads and CDN redirects remain anonymous.
+fn retry_authenticated(url: &Url, status: reqwest::StatusCode, token: Option<&str>) -> bool {
+    url.host_str() == Some("api.github.com")
+        && matches!(status.as_u16(), 401 | 403 | 404)
+        && token.is_some_and(|value| !value.trim().is_empty())
 }
 
 /// Read only this repository's canonical browser-download namespace, decoding path segments once.
@@ -124,7 +138,7 @@ pub struct ReleaseClient {
 }
 
 impl ReleaseClient {
-    /// Compile the credential into native packages; no token is returned to JavaScript or device settings.
+    /// Optional build-time credentials stay native; public Release reads require no credential or device setting.
     pub fn new(app: &tauri::AppHandle, timeout: Duration) -> Result<Self, String> {
         Ok(Self {
             client: crate::network::client(app, timeout)?
@@ -138,7 +152,7 @@ impl ReleaseClient {
     /// Follow bounded validated redirects, rebuilding headers to prevent bearer forwarding to signed CDNs.
     async fn get(&self, mut url: Url, accept: &str) -> Result<Response, String> {
         for hop in 0..=8 {
-            let headers = request_headers(&url, EMBEDDED_TOKEN, accept)?;
+            let headers = request_headers(&url, None, accept)?;
             let response = self
                 .client
                 .get(url.clone())
@@ -146,6 +160,16 @@ impl ReleaseClient {
                 .send()
                 .await
                 .map_err(|e| e.without_url().to_string())?;
+            let response = if retry_authenticated(&url, response.status(), EMBEDDED_TOKEN) {
+                self.client
+                    .get(url.clone())
+                    .headers(request_headers(&url, EMBEDDED_TOKEN, accept)?)
+                    .send()
+                    .await
+                    .map_err(|e| e.without_url().to_string())?
+            } else {
+                response
+            };
             if response.status().is_redirection() {
                 if hop == 8 {
                     return Err("Too many GitHub update redirects".into());
@@ -190,7 +214,7 @@ impl ReleaseClient {
         serde_json::from_slice(&bytes).map_err(|_| "Invalid GitHub update metadata".into())
     }
 
-    /// Resolve the latest private Release and download its manifest through the authenticated asset API.
+    /// Resolve the latest Release anonymously when public, or with an optional native credential when private.
     pub async fn latest_manifest(&self) -> Result<serde_json::Value, String> {
         let url =
             Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
@@ -233,7 +257,8 @@ mod tests {
     fn bearer_is_sensitive_and_not_forwarded_to_asset_hosts() {
         let api =
             Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
-        let headers = request_headers(&api, "fixture-github-token", "application/json").unwrap();
+        let headers =
+            request_headers(&api, Some("fixture-github-token"), "application/json").unwrap();
         assert_eq!(
             headers[header::AUTHORIZATION],
             "Bearer fixture-github-token"
@@ -246,12 +271,55 @@ mod tests {
         ] {
             let headers = request_headers(
                 &Url::parse(url).unwrap(),
-                "fixture-github-token",
+                Some("fixture-github-token"),
                 "application/octet-stream",
             )
             .unwrap();
             assert!(!headers.contains_key(header::AUTHORIZATION));
         }
+    }
+
+    #[test]
+    fn public_reads_do_not_send_an_embedded_or_expired_credential() {
+        let api =
+            Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
+        let headers = request_headers(&api, None, "application/json").unwrap();
+        assert!(!headers.contains_key(header::AUTHORIZATION));
+        assert_eq!(headers["X-GitHub-Api-Version"], "2022-11-28");
+        assert!(!retry_authenticated(
+            &api,
+            reqwest::StatusCode::OK,
+            Some("expired-fixture")
+        ));
+        assert!(!retry_authenticated(
+            &api,
+            reqwest::StatusCode::FOUND,
+            Some("expired-fixture")
+        ));
+    }
+
+    #[test]
+    fn private_or_rate_limited_api_reads_retry_only_with_a_configured_credential() {
+        let api =
+            Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
+        for status in [401, 403, 404] {
+            let status = reqwest::StatusCode::from_u16(status).unwrap();
+            assert!(retry_authenticated(&api, status, Some("fixture")));
+            assert!(!retry_authenticated(&api, status, None));
+            assert!(!retry_authenticated(&api, status, Some("  ")));
+        }
+        assert!(!retry_authenticated(
+            &api,
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            Some("fixture")
+        ));
+        let cdn =
+            Url::parse("https://release-assets.githubusercontent.com/file?sig=fixture").unwrap();
+        assert!(!retry_authenticated(
+            &cdn,
+            reqwest::StatusCode::FORBIDDEN,
+            Some("fixture")
+        ));
     }
 
     #[test]
@@ -267,7 +335,12 @@ mod tests {
             "https://attacker.example/file",
         ] {
             assert!(
-                request_headers(&Url::parse(url).unwrap(), "fixture", "application/json").is_err(),
+                request_headers(
+                    &Url::parse(url).unwrap(),
+                    Some("fixture"),
+                    "application/json"
+                )
+                .is_err(),
                 "{url}"
             );
         }

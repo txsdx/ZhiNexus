@@ -48,6 +48,8 @@ jobs:
           retention-days: 7
   desktop:
     needs: frontend
+    env:
+      ZHINEXUS_GITHUB_UPDATE_TOKEN: ${{ secrets.GITHUB_UPDATE_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -117,6 +119,7 @@ jobs:
           cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib executable_update::tests
           cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib paths::tests
           cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib quick_capture::tests
+          cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib github_release::tests
       - uses: tauri-apps/tauri-action@v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
@@ -164,6 +167,8 @@ jobs:
             src-tauri/target/release/bundle/deb/*.sig
   android:
     needs: frontend
+    env:
+      ZHINEXUS_GITHUB_UPDATE_TOKEN: ${{ secrets.GITHUB_UPDATE_TOKEN }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

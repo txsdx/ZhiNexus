@@ -1,5 +1,6 @@
 /** Real Tauri/WebKit smoke test: native SQLite edits, portable isolation, restart and physical-corruption recovery. */
 import fs from "node:fs";
+import { nativeDriverValue } from "./native-driver.mjs";
 import { testNativeShortcuts } from "./native-shortcuts.mjs";
 import { testNativeNetwork } from "./native-network.mjs";
 import { testNativeOcr } from "./native-ocr.mjs";
@@ -32,10 +33,7 @@ async function command(method, suffix, body) {
       ...(body ? { body: JSON.stringify(body) } : {}),
     },
   );
-  const data = await res.json();
-  if (data.value?.error)
-    throw Error(data.value.error + ": " + data.value.message);
-  return data.value;
+  return nativeDriverValue(res);
 }
 /** Poll a real rendered state while allowing startup and recovery work to complete. */
 async function waitFor(fn, timeout = 45000) {

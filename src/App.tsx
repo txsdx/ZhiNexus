@@ -1,14 +1,16 @@
 /** Application shell, responsive navigation, capture flow and per-device background services. */
 import { needsReview, reviewTarget, nextReviewAt } from "./core/review-policy";
 import { useReviewClock } from "./hooks/useReviewClock";
-import { diagnostics } from "./services/diagnostics";
 import {
   navigationHistory,
   startNavigationHistory,
 } from "./services/navigation";
 import { NavigationButtons } from "./components/NavigationButtons";
 import { ContextMenu } from "./components/ContextMenu";
-import { CategoryPicker } from "./components/CategoryPicker";
+import { Capture } from "./components/Capture";
+import { startCaptureHost, showQuickCapture } from "./services/quick-capture";
+import { useAppearance } from "./hooks/useAppearance";
+import { flushSync } from "react-dom";
 import { CategoryDeletionHost } from "./components/CategoryDeletion";
 import { UpdateStatus } from "./components/UpdateStatus";
 import { SyncStatus } from "./components/SyncStatus";
@@ -17,7 +19,6 @@ import { useAIJobs } from "./hooks/useAIJobs";
 import type { AITarget, AIJob } from "./core/ai-jobs";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
-  BookOpen,
   Brain,
   ChartSpline,
   ChevronRight,
@@ -34,9 +35,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
-import Fuse from "fuse.js";
 import { reconcileReminders } from "./services/reminders";
-import { enrichEntry } from "./services/enrichment";
 import { native } from "./core/database";
 import {
   listenDesktop,
@@ -47,8 +46,7 @@ import {
 import { EntryTabs } from "./components/editor/EntryTabs";
 import { useEntryWorkspace } from "./hooks/useEntryWorkspace";
 import { OcrResult } from "./components/OcrResult";
-import { unbase64 } from "./core/crypto";
-import { Locale, useKnowledge, useT, Modal } from "./components/common";
+import { Locale, useKnowledge, useT } from "./components/common";
 import { Library } from "./pages/Library";
 const AIJobReview = lazy(() =>
   import("./components/AIJobView").then((m) => ({ default: m.AIJobReview })),
@@ -79,221 +77,13 @@ const Settings = lazy(() =>
 import { store } from "./core/store";
 import { startAutomaticSync } from "./services/auto-sync";
 import { remind } from "./services/device";
-/** Collect new concepts while treating fuzzy duplicates as a request to revisit existing knowledge. */
-function Capture({
-  onClose,
-  onOpen,
-  initial = "",
-  notify,
-  source = "manual-capture",
-  image = "",
-}: {
-  onClose: () => void;
-  onOpen: (id: string) => void;
-  initial?: string;
-  image?: string;
-  source?: string;
-  notify: (text: string) => void;
-}) {
-  const s = useKnowledge(),
-    t = useT(),
-    [title, setTitle] = useState(initial.split(/\r?\n/)[0].slice(0, 120)),
-    [content, setContent] = useState(initial),
-    [category, setCategory] = useState(""),
-    [saving, setSaving] = useState(false),
-    [error, setError] = useState(""),
-    submitting = useRef(false);
-  const matches = title.trim()
-    ? new Fuse(s.entries, { keys: ["title"], threshold: 0.35 })
-        .search(title)
-        .slice(0, 5)
-    : [];
-  return (
-    <Modal
-      title={t("捕捉一个新的概念", "Capture a new concept")}
-      className="capture-modal"
-      onClose={onClose}
-    >
-      {initial && <p className="muted">{t("来源：", "Source: ") + source}</p>}
-      <form
-        onKeyDown={(event) => {
-          if (
-            event.key === "Enter" &&
-            (event.nativeEvent.isComposing ||
-              event.nativeEvent.keyCode === 229 ||
-              event.repeat)
-          ) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (submitting.current) return;
-          submitting.current = true;
-          setSaving(true);
-          const exact = s.entries.find(
-            (e) =>
-              e.title.toLocaleLowerCase() === title.trim().toLocaleLowerCase(),
-          );
-          const action = exact
-            ? Promise.resolve(exact.id)
-            : (async () => {
-                let material = content;
-                if (image) {
-                  const hash = await store.db.putBlob(
-                    unbase64(image.split(",")[1]),
-                    "image/png",
-                  );
-                  material += `
-
-![截图 / Screenshot](asset:${hash})`;
-                }
-                return store.createEntry(
-                  title,
-                  material || undefined,
-                  source,
-                  category,
-                );
-              })();
-          void action
-            .then((id) => {
-              onClose();
-              onOpen(id);
-              if (!exact)
-                void enrichEntry(id)
-                  .then(() => {
-                    if (store.getSnapshot().device.apiKey)
-                      notify(
-                        t(
-                          "整理任务已排队，生成后请到 AI 任务队列审阅",
-                          "Enrichment queued; review the result in AI tasks",
-                        ),
-                      );
-                  })
-                  .catch((e) =>
-                    notify(
-                      t(
-                        "原始词条已保存；自动整理未完成：",
-                        "Raw entry saved; enrichment incomplete: ",
-                      ) + String(e.message),
-                    ),
-                  );
-            })
-            .catch((e) => {
-              diagnostics.error(
-                "ai",
-                "词条自动整理失败 / Entry enrichment failed",
-                e,
-              );
-              setError(String(e));
-            })
-            .finally(() => {
-              submitting.current = false;
-              setSaving(false);
-            });
-        }}
-      >
-        <label>
-          {t("概念 / 知识名称", "Concept / knowledge name")}
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={t(
-              "例如：认知负荷、贝叶斯定理…",
-              "For example: cognitive load, Bayes’ theorem…",
-            )}
-          />
-        </label>
-        {matches.length > 0 && (
-          <div className="capture-matches">
-            <small>
-              {t(
-                "你可能想复习这些概念",
-                "Perhaps you want to revisit these concepts",
-              )}
-            </small>
-            {matches.map((r) => (
-              <button
-                type="button"
-                key={r.item.id}
-                onClick={() => {
-                  onClose();
-                  onOpen(r.item.id);
-                }}
-              >
-                <BookOpen size={15} />
-                {r.item.title}
-                <ChevronRight size={15} />
-              </button>
-            ))}
-          </div>
-        )}
-        <label>
-          {t("所属分类", "Category")}
-          <CategoryPicker value={category} onChange={setCategory} />
-        </label>
-        <label>
-          {t(
-            "随手记下的理解或原始材料（可选）",
-            "Your understanding or source material (optional)",
-          )}
-          <textarea
-            rows={10}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={t(
-              "支持 Markdown。创建后可用 AI 生成标准解释。",
-              "Markdown supported. Use AI to create a structured explanation after capture.",
-            )}
-          />
-        </label>
-        {error && <p role="alert">{error}</p>}
-        <button className="primary full" disabled={!title.trim() || saving}>
-          <Plus size={16} />
-          {t("保存到知识库", "Save to knowledge library")}
-        </button>
-      </form>
-    </Modal>
-  );
-}
 /** Choose locale from synced preferences while retaining automatic system detection. */
 export default function App() {
   const s = useKnowledge(),
     appearance =
       s.docs.find((d) => d.collection === "setting" && d.id === "appearance")
         ?.fields ?? {};
-  const language = String(appearance.language ?? "auto"),
-    locale =
-      language === "auto"
-        ? navigator.language.toLowerCase().startsWith("zh")
-          ? "zh"
-          : "en"
-        : language === "en"
-          ? "en"
-          : "zh";
-  useEffect(() => {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-    document.documentElement.dataset.theme = String(
-      appearance.theme ?? "light",
-    );
-    document.documentElement.dataset.layout = String(
-      appearance.layout ?? "comfortable",
-    );
-    document.documentElement.dataset.mobile = String(
-      appearance.mobileLayout ?? "bottom",
-    );
-    document.documentElement.dataset.font = String(appearance.font ?? "sans");
-    document.documentElement.style.setProperty(
-      "--accent",
-      String(appearance.accent ?? "#7562d9"),
-    );
-    document.documentElement.style.setProperty(
-      "--scale",
-      String(appearance.scale ?? 1),
-    );
-  }, [appearance, locale]);
+  const locale = useAppearance(appearance);
   return (
     <Locale value={locale}>
       <Shell />
@@ -362,9 +152,16 @@ function Shell() {
   useEffect(() => {
     let cleanup: undefined | (() => void),
       live = true;
-    void listenDesktop((action) =>
-      setActions((previous) => [...previous, action]),
-    )
+    void startCaptureHost()
+      .then(async (stopHost) => {
+        const stopDesktop = await listenDesktop((action) =>
+          setActions((previous) => [...previous, action]),
+        );
+        return () => {
+          stopDesktop();
+          stopHost();
+        };
+      })
       .then((fn) => {
         if (live) cleanup = fn;
         else fn();
@@ -389,12 +186,32 @@ function Shell() {
       stop?.();
     };
   }, []);
+  const actionRunning = useRef(false);
   useEffect(() => {
-    if (capture || ocr || !actions.length) return;
+    if (ocr || !actions.length || actionRunning.current) return;
+    if (capture && !["quick-capture", "quit"].includes(actions[0].kind)) return;
     const action = actions[0];
     setActions((previous) => previous.slice(1));
+    if (action.kind === "quick-capture") {
+      actionRunning.current = true;
+      void showQuickCapture({ text: action.text, source: action.source }, () =>
+        flushSync(() => setCapture(false)),
+      )
+        .catch((error) => setToast(String(error)))
+        .finally(() => {
+          actionRunning.current = false;
+          setActions((previous) => [...previous]);
+        });
+      return;
+    }
     if (action.kind === "quit") {
-      void quitDesktop().catch((e) => setToast(String(e)));
+      actionRunning.current = true;
+      void quitDesktop()
+        .catch((e) => setToast(String(e)))
+        .finally(() => {
+          actionRunning.current = false;
+          setActions((previous) => [...previous]);
+        });
       return;
     }
     if (action.kind === "error") {
@@ -411,6 +228,12 @@ function Shell() {
     setCapture(true);
   }, [actions, capture, ocr]);
   const notify = (text: string) => setToast(text);
+  useEffect(() => {
+    const receive = (event: Event) =>
+      setToast(String((event as CustomEvent).detail));
+    window.addEventListener("zhinexus:notify", receive);
+    return () => window.removeEventListener("zhinexus:notify", receive);
+  }, []);
   useEffect(() => {
     if (store.db.recoveryNotice)
       notify(

@@ -110,11 +110,13 @@ jobs:
           cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib github_release::tests
           cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib updates::tests
           cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib executable_update::tests
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib quick_capture::tests
       - name: Check Windows file replacement before building
         if: runner.os == 'Windows'
         run: |
           cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib executable_update::tests
           cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib paths::tests
+          cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib quick_capture::tests
       - uses: tauri-apps/tauri-action@v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}

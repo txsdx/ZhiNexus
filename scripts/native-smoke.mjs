@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { testNativeShortcuts } from "./native-shortcuts.mjs";
 import { testNativeNetwork } from "./native-network.mjs";
 import { testNativeOcr } from "./native-ocr.mjs";
+import { testNativeCapture } from "./native-capture.mjs";
 import {
   testNativeUpdates,
   testExecutableReplacement,
@@ -279,6 +280,7 @@ try {
   await testNativeNetwork({ click, type, script, waitFor });
   await testNativeUpdates({ click, script, waitFor });
   await testNativeOcr({ command, script, click, type, waitFor });
+  await testNativeCapture({ command, script, click, type, waitFor });
   await click(".sidebar-bottom>button");
   await click('[data-settings-tab="database"]');
   await click("[data-storage-location] summary");

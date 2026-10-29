@@ -119,7 +119,10 @@ export async function testNativeUpdates({ click, script, waitFor }) {
     90000,
   );
   assert.ok(!result.error, result.error);
-  assert.match(result.heading, /^\d+\.\d+\.\d+\s*→\s*\d+\.\d+\.\d+$/);
+  assert.match(
+    result.heading,
+    /^(?:\d+\.\d+\.\d+\s*→\s*|版本说明\s+|Release notes\s+)\d+\.\d+\.\d+$/,
+  );
   console.log(
     "PASS: embedded GitHub credential reads the private Release and downloads latest.json through the native updater",
   );

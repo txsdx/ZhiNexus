@@ -16,6 +16,8 @@ mod network;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod ocr;
 mod paths;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod quick_capture;
 #[cfg(target_os = "windows")]
 mod startup;
 mod storage;
@@ -38,6 +40,7 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder
         .manage(desktop::DesktopState::default())
+        .manage(quick_capture::Bridge::default())
         .manage(mcp::Sessions::default())
         .manage(ocr::CaptureState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
@@ -74,6 +77,17 @@ pub fn run() {
         desktop::begin_shortcut_capture,
         desktop::end_shortcut_capture,
         desktop::take_desktop_actions,
+        quick_capture::capture_request,
+        quick_capture::take_capture_requests,
+        quick_capture::complete_capture_request,
+        quick_capture::capture_window_ready,
+        quick_capture::flush_capture_window,
+        quick_capture::complete_capture_flush,
+        quick_capture::resume_capture_window,
+        quick_capture::open_quick_capture,
+        quick_capture::set_capture_topmost,
+        quick_capture::hide_quick_capture,
+        quick_capture::show_main_window,
         desktop::quit_desktop,
         migration::storage_migration_plan,
         migration::launch_storage_migration,

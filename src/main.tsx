@@ -42,7 +42,16 @@ const root = createRoot(document.getElementById("root")!);
 root.render(
   <div className="boot-error">知枢 · ZhiNexus · 正在打开本地知识库…</div>,
 );
-if (new URLSearchParams(location.search).has("ocr-overlay")) {
+if (new URLSearchParams(location.search).has("quick-capture")) {
+  document.documentElement.dataset.window = "quick-capture";
+  void import("./components/QuickCapture").then(({ QuickCapture }) =>
+    root.render(
+      <ErrorBoundary>
+        <QuickCapture />
+      </ErrorBoundary>,
+    ),
+  );
+} else if (new URLSearchParams(location.search).has("ocr-overlay")) {
   root.render(
     <ErrorBoundary>
       <OcrOverlay />

@@ -1943,10 +1943,41 @@ details pre {
   object-fit: contain;
 }
 .about-icon {
-  width: 90px;
-  height: 90px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
-  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.about-header > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.about-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.about-header p {
+  margin: 6px 0 0;
+}
+.about-update-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.about-update-controls > p,
+.about-update-controls > label {
+  margin: 0;
+}
+.about-update-controls .toggle > input {
+  flex-shrink: 0;
 }
 .category-edit-row {
   display: flex;
@@ -3279,6 +3310,133 @@ fieldset.ai-result-review {
 .capture-modal {
   width: min(900px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.capture-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
+}
+.capture-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  max-height: calc(100dvh - 250px);
+  padding: 3px;
+  margin: -3px;
+}
+.capture-form label {
+  margin: 0;
+}
+.capture-material {
+  flex: 1;
+}
+.capture-material textarea {
+  flex: 1;
+  min-height: 140px;
+}
+.capture-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.capture-footer small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.capture-source {
+  overflow-wrap: anywhere;
+}
+.capture-form[data-dragging="true"] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 5px;
+  border-radius: 8px;
+}
+.capture-images {
+  display: flex;
+  gap: 10px;
+  overflow: auto;
+  flex-shrink: 0;
+  padding: 4px;
+}
+.capture-image {
+  position: relative;
+  width: 100px;
+  height: 76px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--soft);
+}
+.capture-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.capture-image > button {
+  position: absolute;
+  right: 0;
+  top: 0;
+  padding: 3px;
+  background: var(--surface);
+}
+.capture-error,
+.capture-warnings {
+  overflow-wrap: anywhere;
+}
+.capture-error p,
+.capture-warnings p {
+  margin: 6px 0;
+}
+html[data-window="quick-capture"],
+html[data-window="quick-capture"] body,
+html[data-window="quick-capture"] #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--surface);
+}
+.quick-capture-window {
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+}
+.quick-capture-window .capture-fields {
+  max-height: none;
+}
+.quick-capture-window textarea {
+  resize: none;
+}
+.quick-capture-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.quick-capture-tools h1 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+.capture-notice {
+  margin: 0;
+  padding: 8px;
+  background: var(--soft);
+  border-radius: 6px;
 }
 .capture-modal textarea {
   min-height: 240px;

@@ -2111,7 +2111,10 @@ test("mobile rich headings keep the viewport and bottom navigation reachable aft
     const page = await context.newPage();
     await page.goto("/");
     await page.locator(".page-heading .primary").click();
-    await page.locator(".modal input").fill("移动块编辑导航");
+    await page
+      .getByRole("dialog", { name: "捕捉一个新的概念" })
+      .getByLabel("概念 / 知识名称")
+      .fill("移动块编辑导航");
     await page.locator(".modal textarea").fill("# 初始章节\n\n初始内容。");
     await page.locator(".modal .primary").click();
     await page.locator(".entry-heading h1").waitFor();

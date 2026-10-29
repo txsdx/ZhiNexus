@@ -74,6 +74,10 @@ pub fn mark_exiting(app: &tauri::AppHandle) {
         .exiting
         .store(true, Ordering::SeqCst);
 }
+/// Auxiliary windows obey the same explicit-exit decision as the main close-to-tray window.
+pub fn is_exiting(app: &tauri::AppHandle) -> bool {
+    app.state::<DesktopState>().exiting.load(Ordering::SeqCst)
+}
 /// Interpret shortcut events on the native side, so hidden windows remain responsive.
 pub fn shortcut(app: &tauri::AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     if app
@@ -109,6 +113,11 @@ pub fn shortcut(app: &tauri::AppHandle, shortcut: &Shortcut, state: ShortcutStat
             }
         });
     } else if matches(&settings.capture_shortcut) {
+        if let Some(window) = app.get_webview_window("quick-capture") {
+            if window.is_focused().unwrap_or(false) {
+                return;
+            }
+        }
         let handle = app.clone();
         tauri::async_runtime::spawn(async move {
             let captured = crate::capture::capture_knowledge().await;
@@ -116,13 +125,12 @@ pub fn shortcut(app: &tauri::AppHandle, shortcut: &Shortcut, state: ShortcutStat
             push(
                 &handle,
                 Action {
-                    kind: "capture".into(),
+                    kind: "quick-capture".into(),
                     text,
                     source,
                     image: None,
                 },
             );
-            show(&handle);
         });
     }
 }
@@ -308,13 +316,12 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
                 push(
                     app,
                     Action {
-                        kind: "capture".into(),
+                        kind: "quick-capture".into(),
                         text: String::new(),
                         source: "tray".into(),
                         image: None,
                     },
                 );
-                show(app);
             }
             "ocr" => {
                 let handle = app.clone();

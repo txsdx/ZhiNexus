@@ -50,59 +50,71 @@ export function AboutPanel() {
             "Update ready; OS installation approval required",
           ),
     installing: t("正在应用更新…", "Applying update…"),
-    current: t(
-      "此平台已是最新版本，或尚无可用产物",
-      "Already current, or no artifact is published",
-    ),
+    current: state.update
+      ? t("已是最新版本", "Up to date")
+      : t("暂无此平台的更新文件", "No update file for this platform"),
     error: t("更新未完成，可重试", "Update incomplete; retry available"),
   };
   return (
     <>
-      <img className="about-icon" src="/app-icon.png" alt="ZhiNexus" />
-      <h2>知枢 · ZhiNexus</h2>
-      <p>{current}</p>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={device.autoUpdate !== false}
-          onChange={(e) =>
-            setDevice({ ...device, autoUpdate: e.target.checked })
-          }
-        />
-        {t(
-          "自动检查并后台下载更新",
-          "Automatically check and download updates",
-        )}
-      </label>
-      <p role="status" data-update-phase={state.phase}>
-        {state.phase === "ready" && device.autoUpdate === false
-          ? t("更新已就绪，可手动更新", "Update ready; manual update available")
-          : labels[state.phase]}
-      </p>
-      <div className="actions">
-        <button
-          disabled={working}
-          onClick={() =>
-            void act(t("读取更新信息…", "Checking updates…"), () =>
-              autoUpdates.check().then(() => {}),
-            )
-          }
-        >
-          <RefreshCw size={16} />
-          {t("检查更新", "Check for updates")}
-        </button>
-        <button
-          className="primary"
-          disabled={!native || state.phase !== "ready"}
-          onClick={() =>
-            void act(t("应用更新…", "Applying update…"), installReadyUpdate)
-          }
-        >
-          <Download size={16} />
-          {state.update?.kind === "portable"
-            ? t("立即更新并重启", "Update and restart")
-            : t("立即安装更新", "Install update now")}
-        </button>
+      <header className="about-header">
+        <img className="about-icon" src="/app-icon.png" alt="ZhiNexus" />
+        <div>
+          <h2>知枢 · ZhiNexus</h2>
+          <p>
+            {t("当前版本", "Current version")} · {current}
+          </p>
+        </div>
+      </header>
+      <div className="about-update-controls">
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={device.autoUpdate !== false}
+            onChange={(e) =>
+              setDevice({ ...device, autoUpdate: e.target.checked })
+            }
+          />
+          <span>
+            {t(
+              "自动检查并后台下载更新",
+              "Automatically check and download updates",
+            )}
+          </span>
+        </label>
+        <p role="status" data-update-phase={state.phase}>
+          {state.phase === "ready" && device.autoUpdate === false
+            ? t(
+                "更新已就绪，可手动更新",
+                "Update ready; manual update available",
+              )
+            : labels[state.phase]}
+        </p>
+        <div className="actions">
+          <button
+            disabled={working}
+            onClick={() =>
+              void act(t("读取更新信息…", "Checking updates…"), () =>
+                autoUpdates.check().then(() => {}),
+              )
+            }
+          >
+            <RefreshCw size={16} />
+            {t("检查更新", "Check for updates")}
+          </button>
+          <button
+            className="primary"
+            disabled={!native || state.phase !== "ready"}
+            onClick={() =>
+              void act(t("应用更新…", "Applying update…"), installReadyUpdate)
+            }
+          >
+            <Download size={16} />
+            {state.update?.kind === "portable"
+              ? t("立即更新并重启", "Update and restart")
+              : t("立即安装更新", "Install update now")}
+          </button>
+        </div>
       </div>
       {state.error && (
         <p role="alert" className="warning">
@@ -117,7 +129,9 @@ export function AboutPanel() {
       {state.update && (
         <section>
           <h3>
-            {state.update.current} → {state.update.version}
+            {state.update.available
+              ? `${state.update.current} → ${state.update.version}`
+              : `${t("版本说明", "Release notes")} ${state.update.version}`}
           </h3>
           <Markdown>{state.update.notes}</Markdown>
         </section>

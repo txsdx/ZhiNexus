@@ -9,13 +9,18 @@ import {
 } from "lucide-react";
 import { Modal, useKnowledge, useT } from "./common";
 import { categoryPath } from "../services/categories";
+import type { Category } from "../core/types";
 /** Selecting a node commits exactly one choice; cancel, Escape and failed persistence retain the previous value. */
 export function CategoryPicker({
   value,
   onChange,
+  categories: suppliedCategories,
+  disabled = false,
 }: {
   value: string;
   onChange: (id: string) => void | Promise<void>;
+  categories?: Category[];
+  disabled?: boolean;
 }) {
   const s = useKnowledge(),
     t = useT(),
@@ -25,12 +30,13 @@ export function CategoryPicker({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     choosing = useRef(false);
-  const path = categoryPath(s.categories, value);
+  const categories = suppliedCategories ?? s.categories;
+  const path = categoryPath(categories, value);
   const pathLabel = path.length
     ? path.join(" / ")
     : t("未分类", "Uncategorized");
   const choose = async (id: string) => {
-    if (choosing.current) return;
+    if (choosing.current || disabled) return;
     choosing.current = true;
     setBusy(true);
     setError("");
@@ -45,7 +51,7 @@ export function CategoryPicker({
     }
   };
   const matches = new Set(
-    s.categories
+    categories
       .filter((c) =>
         c.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
       )
@@ -54,16 +60,16 @@ export function CategoryPicker({
   if (query)
     for (const id of [...matches]) {
       const visited = new Set<string>();
-      let current = s.categories.find((c) => c.id === id);
+      let current = categories.find((c) => c.id === id);
       while (current?.parent && !visited.has(current.parent)) {
         visited.add(current.parent);
         matches.add(current.parent);
-        current = s.categories.find((c) => c.id === current!.parent);
+        current = categories.find((c) => c.id === current!.parent);
       }
     }
   const visited = new Set<string>();
   const render = (parent: string, depth = 1): React.ReactNode =>
-    s.categories
+    categories
       .filter(
         (c) =>
           c.parent === parent &&
@@ -72,7 +78,7 @@ export function CategoryPicker({
       )
       .map((c) => {
         visited.add(c.id);
-        const children = s.categories.some((child) => child.parent === c.id),
+        const children = categories.some((child) => child.parent === c.id),
           closed = !query && collapsed.has(c.id);
         return (
           <li key={c.id}>
@@ -141,6 +147,7 @@ export function CategoryPicker({
           className="category-picker-trigger"
           aria-label={t("选择所属分类", "Choose category")}
           aria-haspopup="dialog"
+          disabled={disabled}
           onClick={() => {
             setQuery("");
             setError("");
@@ -174,7 +181,7 @@ export function CategoryPicker({
               ) {
                 e.preventDefault();
                 e.stopPropagation();
-                const first = s.categories.find((c) =>
+                const first = categories.find((c) =>
                   c.name
                     .toLocaleLowerCase()
                     .includes(query.toLocaleLowerCase()),
@@ -213,7 +220,7 @@ export function CategoryPicker({
                 id = current?.dataset.categoryId;
               if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
                 if (!id || query) return;
-                const hasChildren = s.categories.some((c) => c.parent === id);
+                const hasChildren = categories.some((c) => c.parent === id);
                 if (
                   event.key === "ArrowLeft" &&
                   hasChildren &&
@@ -232,7 +239,7 @@ export function CategoryPicker({
                 else if (event.key === "ArrowRight" && hasChildren)
                   rows[index + 1]?.focus();
                 else if (event.key === "ArrowLeft") {
-                  const parent = s.categories.find((c) => c.id === id)?.parent;
+                  const parent = categories.find((c) => c.id === id)?.parent;
                   rows
                     .find((row) => row.dataset.categoryId === parent)
                     ?.focus();
@@ -264,7 +271,7 @@ export function CategoryPicker({
               </button>
             </li>
             {tree}
-            {s.categories
+            {categories
               .filter((c) => {
                 if (visited.has(c.id) || (query && !matches.has(c.id)))
                   return false;
@@ -273,7 +280,7 @@ export function CategoryPicker({
                 while (parent) {
                   if (seen.has(parent)) return true;
                   seen.add(parent);
-                  const ancestor = s.categories.find(
+                  const ancestor = categories.find(
                     (category) => category.id === parent,
                   );
                   if (!ancestor) return true;

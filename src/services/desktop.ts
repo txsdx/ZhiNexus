@@ -6,6 +6,7 @@ import { autoUpdates } from "./auto-updates";
 import { applyUpdate, type UpdateInfo } from "./updates";
 import { native } from "../core/database";
 import { store } from "../core/store";
+import { prepareCaptureShutdown, resumeCaptureWindows } from "./quick-capture";
 import { entryWorkspace } from "../core/workspace";
 import type { DesktopPreferences } from "../core/types";
 export const desktopAvailable = native && !/Android/i.test(navigator.userAgent);
@@ -18,7 +19,7 @@ export const defaultDesktop: DesktopPreferences = {
 };
 /** Pending payloads survive the gap between native hotkey callbacks and webview listener setup. */
 export interface DesktopAction {
-  kind: "capture" | "ocr" | "quit" | "error";
+  kind: "capture" | "quick-capture" | "ocr" | "quit" | "error";
   text: string;
   source: string;
   image?: string;
@@ -76,6 +77,7 @@ export async function quitDesktop(update?: UpdateInfo) {
   quitting = true;
   try {
     await flushSettings();
+    await prepareCaptureShutdown();
     await (await import("./ai-jobs")).stopAIJobsForShutdown();
     await diagnostics.flush().catch(() => {});
     await entryWorkspace.init();
@@ -100,6 +102,7 @@ export async function quitDesktop(update?: UpdateInfo) {
     await invoke("quit_desktop");
   } catch (error) {
     await store.resume();
+    await resumeCaptureWindows();
     throw error;
   } finally {
     quitting = false;
@@ -124,6 +127,7 @@ export async function migrateStorage(plan: MigrationPlan) {
   )
     return;
   try {
+    await prepareCaptureShutdown();
     await (await import("./ai-jobs")).stopAIJobsForShutdown();
     await entryWorkspace.init();
     await entryWorkspace.flush();
@@ -131,6 +135,7 @@ export async function migrateStorage(plan: MigrationPlan) {
     await invoke("launch_storage_migration", { id: plan.id });
   } catch (error) {
     await store.resume();
+    await resumeCaptureWindows();
     throw error;
   }
 }

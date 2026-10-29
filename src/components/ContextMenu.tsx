@@ -125,6 +125,13 @@ export function ContextMenu({ notify }: { notify: (message: string) => void }) {
             input.select();
           },
         });
+      if (target.closest(".capture-form"))
+        items.push({
+          label: t("粘贴图片", "Paste image"),
+          run: () => {
+            window.dispatchEvent(new Event("zhinexus:capture-paste-image"));
+          },
+        });
       if (
         !input &&
         !(target instanceof HTMLElement && target.isContentEditable)

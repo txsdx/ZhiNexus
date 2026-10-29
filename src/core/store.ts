@@ -245,10 +245,20 @@ export class KnowledgeStore {
     content = entryTemplate,
     source = "manual",
     category = "",
+    creationId?: string,
   ): Promise<string> {
     if (!title.trim()) throw Error("请输入词条名称");
-    const id = crypto.randomUUID(),
+    const id = creationId ?? crypto.randomUUID(),
       now = new Date().toISOString();
+    const existing = () =>
+      this.state.docs.find((d) => d.collection === "entry" && d.id === id);
+    if (existing()) {
+      if (existing()!.fields.deleted)
+        throw Error(
+          "上次保存的条目已删除 / Previously saved entry was deleted",
+        );
+      return id;
+    }
     if (
       !(await this.batchWhen(
         [
@@ -269,12 +279,21 @@ export class KnowledgeStore {
           },
         ],
         source,
-        () => !category || this.state.categories.some((c) => c.id === category),
+        () =>
+          !existing() &&
+          (!category || this.state.categories.some((c) => c.id === category)),
       ))
-    )
+    ) {
+      const saved = existing();
+      if (saved && !saved.fields.deleted) return id;
+      if (saved?.fields.deleted)
+        throw Error(
+          "上次保存的条目已删除 / Previously saved entry was deleted",
+        );
       throw Error(
         "所选分类已不存在，请重新选择 / Selected category no longer exists",
       );
+    }
     return id;
   }
   /** Persist provider settings without replicating authentication secrets. */

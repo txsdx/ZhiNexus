@@ -26,13 +26,25 @@
 | 预留 | 对象存储/专属服务端 SyncTransport，按要求尚不完整实现 |
 | 大库 | 有界压缩日志块、已知批次跳过下载；仍有批次/附件全名字发现和全日志投影，增量 Merkle 子树与超大库验证待完成 |
 
-## 0.20 本轮进度（待Windows实包恢复与正式发布）
+## 0.20 本轮进度（Actions账号额度阻塞，未正式发布）
 
 107–109已实现，应用/标签源码`a3eb9ac5e097be1c122bba46cdcc804d0fe5a08c`，三平台0.20.0。关于页五宽度截图/无溢出/自动保存重载、媒体/MD/TXT/DOCX导入、完整本机草稿、默认置顶可缩放独立窗口与单写入者保护均已接入并通过本地专项。
 
 [Build40907744178](https://github.com/txsdx/ZhiNexus/actions/runs/40907744178)前端218单元/36脚本/93浏览器全量及生产构建、Ubuntu13原生/DEB、Android arm64编译/签名/包验证成功。Windows8原生和单文件编译成功，但新增烟测在预期拒绝主窗口capture_request时，被通用驱动错误地将HTTP200脚本值的error字段当成WebDriver协议异常。该程序拒绝是正确行为；测试封装需按HTTP失败状态识别协议错误，新增两项回归后38发布脚本通过。
 
-不重新编译或重复前端门禁：将固定原Build三平台实际包及摘要，仅重跑Windows实包与发布；当前未正式发布。实际读回WindowsPE版本0.20.0/x64，32,267,776字节；APK0.20.0/API35/arm64及普通/圆形/自适应和15图标像素、DEB0.20.0/amd64均检查通过。Windows完整交互仍须实际跑完才记为完成。
+不重新编译或重复前端门禁：固定原Build三平台实际包及摘要，仅重跑Windows实包与发布。测试修复主分支`4fea15bf933379227f72e7f9ea4c3f3403f1fbc8`，与应用标签的src/src-tauri/包锁/版本文件完全一致，新增两项协议回归后38发布脚本通过。恢复分支`recovery-020-native`的`5d3322a3f03034b0d1d1c4db76d9e772d75ffff5`保留原包校验和复验入口，无编译/前端重跑，只有Windows完整验收成功才上传到现有草稿。
+
+恢复Run [40911810320](https://github.com/txsdx/ZhiNexus/actions/runs/40911810320)与[40911901294](https://github.com/txsdx/ZhiNexus/actions/runs/40911901294)均在任何步骤启动前被GitHub账号计费检查拒绝，annotations原文：`The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings`。两次均未运行测试/编译，不是新的业务失败；后一次同时使用完整测试修复SHA固定检出。需账号恢复额度/付款或提供可用Windows执行环境后继续，不擅自降低门禁或将草稿转正式。
+
+v0.20.0目前为现有空资产草稿（ID428089853），未正式发布；未完成Windows新增快捷键/置顶/缩放/OS关闭/系统图片剪贴板交互、后续存储/恢复与实包helper全套复验。本轮已实际下载三平台Build产物，WindowsPE0.20.0/x64，APK0.20.0/API35/arm64（普通/圆形/自适应和15图标像素通过），DEB0.20.0/amd64。首次Windows启动首帧854ms，进程+驱动4259ms，仅单次CI样本。
+
+|原Build文件|实际字节|SHA-256|
+|---|---:|---|
+|Windows protable EXE|32,267,776|`5be8736692607898a378dff9cd6b8a4735307baf17fc3d2425a6dd25b04e7029`|
+|Ubuntu DEB|25,488,152|`6bc406856db7180764cdada9b99e75d4c2714fc553badb23d4cf752e76ec1ba8`|
+|Android development APK|41,016,115|`f5d2922a9996fbb08837cf5e93b06dc659bbefd09032a306edfc28c5eeb57430`|
+
+恢复额度后手动运行：`gh workflow run build.yml --repo txsdx/ZhiNexus --ref recovery-020-native -f create_release=true -f draft=true`。完整复验及上传/缓存收尾成功后，再实际下载Release资产、核对平台/包/清单/标签，然后正式发布，更新109条清单。不要重跑原全平台Build。
 
 ## 0.19 最终验收（2026-10-29，北京时间）
 

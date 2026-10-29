@@ -112,9 +112,11 @@
 |106|右键菜单颜色色块应更醒目、易区分；实际词条背景仍使用较浅柔和颜色，不能遮盖文字，深色主题对应检查|styles .color-swatch；浅/深主题 --entry-tint|已落实|浅色/深色截图人工检查；色块鲜明、实际浅底与文字对比保留|v0.19.0已发布|
 |107|关于与更新页开关/版本/状态与按钮布局、手机无溢出、准确的同版本说明|AboutPanel；styles.toggle/about-header/about-update-controls；native-updates|已实现|五宽度截图/无溢出/同版本说明/自动保存重载通过|待0.20发布|
 
-|108|图片/MD捕获、本机草稿、置顶独立窗口与单写入者|Capture/QuickCapture；capture-draft/repository；quick_capture.rs|已实现|6捕获浏览器/13数据专项通过；Windows实包待完成|未发布|
+|108|图片/MD捕获、本机草稿、置顶独立窗口与单写入者|Capture/QuickCapture；capture-draft/repository；quick_capture.rs|已实现|6捕获浏览器/13数据专项通过；Windows实包待完成（Actions付款/额度阻塞）|未发布|
 |109|DOCX转简单Markdown与内嵌图片|capture-import；Mammoth/Turndown/fflate|已实现|真实OOXML结构/图片/损坏输入及新输入保留专项通过|未发布|
 
 ## 本轮验证
 
 本地218单元、36脚本、locked Rust check及2桥接边界通过；捕获浏览器专项6/6已过，全量浏览器首轮92/93通过，旧定位修正后失败项及6捕获专项共7项复验通过，最终生产构建通过。107五宽度截图已检查，自动保存重载通过。尚未启动Action/发布0.20。原有真实服务、实体设备、签名与更新边界继续适用，详见KNOWN_ISSUES和STATUS。
+
+云端Build40907744178最终218/36/93、生产构建、Ubuntu13原生/DEB、Android和Windows编译成功；Windows烟测驱动误判已修，最终38脚本通过。恢复40911810320/40911901294均未启动即被GitHub计费检查拒绝，尚未完成Windows实包及正式发布，详见STATUS。编号1–106的既有发布证据不等同于本轮新包完整复验。

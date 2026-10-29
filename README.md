@@ -6,6 +6,8 @@
 
 ## 下载
 
+当前正式版为 [v0.19.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.19.0)；主分支 0.20.0 的捕获增强尚待发布验收。
+
 在 [最新 Release](https://github.com/txsdx/ZhiNexus/releases/latest) 下载对应文件：
 
 | 平台 | 文件 |

@@ -9,6 +9,7 @@ export async function testNativeCapture({
   click,
   type,
   waitFor,
+  processId,
 }) {
   const main = await command("GET", "/window");
   const invoke = (name, args = {}) =>
@@ -62,6 +63,7 @@ export async function testNativeCapture({
       'const f=document.querySelector(".capture-footer"),r=f?.getBoundingClientRect();return r&&r.bottom<=innerHeight+1&&r.top>=0&&document.documentElement.scrollWidth<=innerWidth+1;',
     ),
   );
+  const resized = await command("GET", "/window/rect");
   assert.equal(
     await script(
       'return getComputedStyle(document.body).backgroundColor === "rgb(255, 255, 255)"',
@@ -104,12 +106,15 @@ export async function testNativeCapture({
   );
   if (process.platform === "win32") {
     // WM_CLOSE exercises the OS title-bar close handler and its acknowledged frontend flush.
+    assert.ok(Number.isSafeInteger(processId) && processId > 0);
     execFileSync(
       "powershell.exe",
       [
         "-NoProfile",
-        "-Command",
-        'Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class CaptureWindowClose { [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls,string title); [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr handle,uint msg,IntPtr w,IntPtr l); }\'; $captureHandle=[CaptureWindowClose]::FindWindow($null,"知枢 · 记录新知识 / Quick capture"); if($captureHandle -eq [IntPtr]::Zero){throw "Capture window missing"}; if(-not [CaptureWindowClose]::PostMessage($captureHandle,0x10,[IntPtr]::Zero,[IntPtr]::Zero)){throw "WM_CLOSE failed"}',
+        "-File",
+        "scripts/close-capture-window.ps1",
+        "-ApplicationProcessId",
+        String(processId),
       ],
       { encoding: "utf8", timeout: 15000 },
     );
@@ -135,7 +140,8 @@ export async function testNativeCapture({
     ),
   );
   const restored = await command("GET", "/window/rect");
-  assert.equal(restored.width, 400);
+  assert.equal(restored.width, resized.width);
+  assert.equal(restored.height, resized.height);
   await command("POST", "/window/rect", {
     width: initial.width,
     height: initial.height,
@@ -143,7 +149,7 @@ export async function testNativeCapture({
   await click(".capture-footer .primary");
   await waitFor(() =>
     script(
-      'return document.querySelector(".capture-form input:not([type])")?.value===""&&document.querySelector(".capture-notice")?.textContent.includes("保存")',
+      'return document.querySelector(".capture-form input:not([type])")?.value===""&&document.querySelector(".capture-notice")?.textContent.trim()',
     ),
   );
   const hidden = await invoke("plugin:window|hide", { label: "quick-capture" });

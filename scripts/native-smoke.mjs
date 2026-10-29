@@ -278,7 +278,14 @@ try {
   await testNativeNetwork({ click, type, script, waitFor });
   await testNativeUpdates({ click, script, waitFor });
   await testNativeOcr({ command, script, click, type, waitFor });
-  await testNativeCapture({ command, script, click, type, waitFor });
+  await testNativeCapture({
+    command,
+    script,
+    click,
+    type,
+    waitFor,
+    processId: ownedApplication?.pid,
+  });
   await click(".sidebar-bottom>button");
   await click('[data-settings-tab="database"]');
   await click("[data-storage-location] summary");

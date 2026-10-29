@@ -75,7 +75,7 @@ export function documentExtensions(
   return [
     StarterKit.configure({
       codeBlock: overrides.codeBlock ? false : undefined,
-      link: { openOnClick: false, autolink: false },
+      link: { openOnClick: false, autolink: false, protocols: ["entry"] },
     }),
     ...(overrides.codeBlock ? [overrides.codeBlock] : []),
     TableKit.configure({ table: { resizable: false } }),

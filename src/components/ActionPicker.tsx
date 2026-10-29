@@ -12,6 +12,7 @@ export function ActionPicker({
   onClose,
   onChoose,
   extra,
+  searchItems,
 }: {
   title: string;
   placeholder: string;
@@ -19,6 +20,7 @@ export function ActionPicker({
   recent?: string[];
   onClose: () => void;
   onChoose: (id: string) => void;
+  searchItems?: (items: PickerItem[], query: string) => PickerItem[];
   extra?: (query: string) => PickerItem | undefined;
 }) {
   const t = useT(),
@@ -27,8 +29,12 @@ export function ActionPicker({
   const [query, setQuery] = useState(""),
     [active, setActive] = useState(0);
   const results = useMemo(
-    () => rankPickerItems(items, query, recent).slice(0, 40),
-    [items, query, recent],
+    () =>
+      (query && searchItems
+        ? searchItems(items, query)
+        : rankPickerItems(items, query, recent)
+      ).slice(0, 40),
+    [items, query, recent, searchItems],
   );
   const additional = extra?.(query),
     rows = additional ? [...results, additional] : results;

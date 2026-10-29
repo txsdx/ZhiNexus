@@ -17,6 +17,9 @@ import { store, json } from "../core/store";
 import type { Collection, Json } from "../core/types";
 import { reviewTarget, needsReview, nextReviewAt } from "../core/review-policy";
 import { useReviewClock } from "../hooks/useReviewClock";
+import { startSelfReview } from "../services/self-review";
+import { SelfReview } from "../components/SelfReview";
+import { resolveModel } from "../core/ai-config";
 import { schedule, suggestedRating } from "../core/review";
 import { useConfirmation } from "../hooks/useConfirmation";
 /** Continue review state across navigation; queue requests stay alive until explicitly stopped. */
@@ -38,6 +41,10 @@ export function Review({
   const [selected, setSelected] = useState(initialSession),
     [busy, setBusy] = useState("");
   const working = useRef(false);
+  const [practiceAll, setPracticeAll] = useState(false);
+  const method =
+    s.device.reviewMode ??
+    (s.device.apiKey && resolveModel(s.ai, "question") ? "ai" : "self");
   const confirmation = useConfirmation(notify, {
     title: t("确认复习操作", "Confirm review action"),
     confirmLabel: t("确认", "Confirm"),
@@ -73,6 +80,7 @@ export function Review({
     const rate = (event: KeyboardEvent) => {
       if (
         session?.phase !== "graded" ||
+        session.mode === "self" ||
         busy ||
         active ||
         event.isComposing ||
@@ -94,7 +102,7 @@ export function Review({
     };
     document.addEventListener("keydown", rate);
     return () => document.removeEventListener("keydown", rate);
-  }, [session?.phase, busy, active]);
+  }, [session?.phase, session?.mode, busy, active]);
   const act = async (label: string, work: () => Promise<void>) => {
     if (working.current) return;
     working.current = true;
@@ -118,6 +126,10 @@ export function Review({
     );
   };
   const start = async (id: string) => {
+    if (method === "self") {
+      setSelected(await startSelfReview(id));
+      return;
+    }
     const r = store
       .getSnapshot()
       .reviews.find(
@@ -240,6 +252,7 @@ export function Review({
         patch: {
           phase: "done",
           rating: ratingOverride ?? suggestedRating(session.grade.score),
+          completedAt: new Date().toISOString(),
         },
       },
     ];
@@ -283,6 +296,38 @@ export function Review({
           {due.length} {t("个待复习", "due")}
         </span>
       </div>
+      {!session && (
+        <div className="review-method-controls">
+          <label>
+            {t("复习方式", "Review method")}
+            <select
+              aria-label={t("复习方式", "Review method")}
+              value={method}
+              disabled={!!busy || !!active}
+              onChange={(event) =>
+                void store
+                  .updateDevice({
+                    reviewMode: event.target.value as "ai" | "self",
+                  })
+                  .catch((error) => notify(String(error)))
+              }
+            >
+              <option value="self">
+                {t("自主回忆 · 离线", "Offline recall")}
+              </option>
+              <option value="ai">{t("AI 出题", "AI questions")}</option>
+            </select>
+          </label>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={practiceAll}
+              onChange={(event) => setPracticeAll(event.target.checked)}
+            />
+            {t("包含未到期条目", "Include entries not due")}
+          </label>
+        </div>
+      )}
       {busy && (
         <div className="notice">
           <Busy label={busy} />
@@ -309,7 +354,17 @@ export function Review({
           <AIJobStream job={active} />
         </section>
       )}
-      {session && entry ? (
+      {session?.mode === "self" && entry ? (
+        <SelfReview
+          key={session.id}
+          entry={entry}
+          session={session}
+          retention={targetRetention}
+          onCancel={() => void cancel()}
+          onDone={() => setSelected("")}
+          notify={notify}
+        />
+      ) : session && entry ? (
         <section className="review-workspace">
           <div className="section-heading">
             <span className="category-dot">{entry.title}</span>
@@ -517,9 +572,9 @@ export function Review({
             )
           )}
         </section>
-      ) : due.length ? (
+      ) : (practiceAll ? s.entries.length : due.length) ? (
         <div className="queue">
-          {due.map((e, index) => (
+          {(practiceAll ? s.entries : due).map((e, index) => (
             <button
               key={e.id}
               disabled={

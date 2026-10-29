@@ -36,9 +36,10 @@ export function Modal({
   onConfirm?: () => void;
   className?: string;
 }) {
-  const section = useRef<HTMLElement>(null);
+  const section = useRef<HTMLElement>(null),
+    returnFocus = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = returnFocus.current;
     if (!section.current?.contains(document.activeElement))
       section.current
         ?.querySelector<HTMLElement>("[data-confirm],input,textarea,button")

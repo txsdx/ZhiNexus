@@ -1,5 +1,5 @@
 /** Global task streams, durable proposal reviews and reviewable external-tool approvals. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, RefreshCw, Square, X } from "lucide-react";
 import { aiJobs } from "../services/ai-jobs";
 import { aiJobIsStale, applyAIJob } from "../services/ai-apply";
@@ -250,6 +250,16 @@ export function AIJobReview({
     s = useKnowledge(),
     t = useT(),
     labels = useStateLabel();
+  const closeGeneration = useRef(0),
+    closing = useRef(false);
+  useEffect(() => {
+    closeGeneration.current++;
+    closing.current = false;
+    setBusy(false);
+    return () => {
+      closeGeneration.current++;
+    };
+  }, [id]);
   const job = state.jobs.find((j) => j.id === id),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -282,24 +292,43 @@ export function AIJobReview({
       setBusy(false);
     }
   };
-  const close = () => {
-    // Close this view synchronously: an older save must never close a newly reopened review.
-    onClose();
-    if (!state.readOnly)
-      void aiJobs
-        .flush()
-        .catch((error) =>
-          notify(
-            t("AI 任务保存失败：", "AI task save failed: ") +
-              String(error instanceof Error ? error.message : error),
-          ),
-        );
+  const close = (after?: () => void) => {
+    if (closing.current || busy) return;
+    const generation = closeGeneration.current;
+    closing.current = true;
+    setBusy(true);
+    setError("");
+    void (async () => {
+      try {
+        if (!state.readOnly) await aiJobs.flush();
+        // A completed save may only close the view that requested it, never a newer review.
+        if (generation === closeGeneration.current) {
+          onClose();
+          after?.();
+        }
+      } catch (error) {
+        if (generation === closeGeneration.current)
+          setError(
+            t(
+              "AI任务保存失败，输入已保留，请重试关闭：",
+              "AI task save failed; input retained. Retry closing: ",
+            ) + String(error instanceof Error ? error.message : error),
+          );
+      } finally {
+        if (generation === closeGeneration.current) {
+          closing.current = false;
+          setBusy(false);
+        }
+      }
+    })();
   };
-  const edit = (key: string, value: Json) =>
+  const edit = (key: string, value: Json) => {
+    const current = aiJobs.find(id);
     aiJobs.editReview(id, {
-      ...((job.reviewData ?? job.result) as Record<string, Json>),
+      ...((current.reviewData ?? current.result) as Record<string, Json>),
       [key]: value,
     });
+  };
   const classification =
     !alreadyApplied && job.kind === "classification" && job.state === "review"
       ? (value as unknown as {
@@ -326,7 +355,7 @@ export function AIJobReview({
           ? t("确认知识分类变更", "Confirm taxonomy changes")
           : job.title
       }
-      onClose={close}
+      onClose={() => close()}
       onConfirm={
         job.state === "approval" && !state.readOnly && !busy
           ? () => void run(() => aiJobs.decide(id, true))
@@ -337,8 +366,7 @@ export function AIJobReview({
         <span className="pill">{labels[job.state]}</span>
         <button
           onClick={() => {
-            onNavigate(job.target);
-            close();
+            close(() => onNavigate(job.target));
           }}
         >
           <ArrowUpRight size={15} />

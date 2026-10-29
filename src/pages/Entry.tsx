@@ -1,5 +1,9 @@
 import { reviewTarget, nextReviewAt } from "../core/review-policy";
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
+import { EntryReferences } from "../components/EntryReferences";
+import { EntrySwitcher } from "../components/EntrySwitcher";
+import { entryLinkMarkdown, entryLinkTarget } from "../core/entry-links";
+import { Star, Link2 } from "lucide-react";
 import { CategoryPicker } from "../components/CategoryPicker";
 import { moveEntry, categoryPath } from "../services/categories";
 import { diagnostics } from "../services/diagnostics";
@@ -72,8 +76,10 @@ export function EntryPage({
     save,
     beginEditing,
     appendImage,
+    appendReference,
     locate,
   } = useEntryDocument(id, entry, notify);
+  const [insertingReference, setInsertingReference] = useState(false);
   const [chatOpen, setChatOpen] = useState(false),
     [chatQuote, setChatQuote] = useState(""),
     [chatTopic, setChatTopic] = useState("");
@@ -182,12 +188,34 @@ export function EntryPage({
           <div className="actions">
             <button
               className="icon"
+              aria-label={t(
+                entry.starred ? "取消收藏" : "收藏词条",
+                entry.starred ? "Unstar entry" : "Star entry",
+              )}
+              aria-pressed={!!entry.starred}
+              onClick={() =>
+                void store
+                  .patch("entry", id, {
+                    starred: !entry.starred,
+                    updatedAt: new Date().toISOString(),
+                  })
+                  .catch((error) => notify(String(error)))
+              }
+            >
+              <Star size={18} fill={entry.starred ? "currentColor" : "none"} />
+            </button>
+            <button
+              className="icon"
               title={t("变更历史", "History")}
               onClick={() => setHistory(true)}
             >
               <History size={19} />
             </button>
-            <button disabled={saving} onClick={beginEditing}>
+            <button
+              data-entry-action="edit"
+              disabled={saving}
+              onClick={beginEditing}
+            >
               <Edit3 size={16} />
               {editing ? t("取消", "Cancel") : t("编辑", "Edit")}
             </button>
@@ -308,6 +336,19 @@ export function EntryPage({
           )}
         </div>
       </div>
+      {insertingReference && (
+        <EntrySwitcher
+          insert
+          exclude={id}
+          onClose={() => setInsertingReference(false)}
+          onChoose={(target) => {
+            const entry = store
+              .getSnapshot()
+              .entries.find((entry) => entry.id === target);
+            if (entry) appendReference(entryLinkMarkdown(entry));
+          }}
+        />
+      )}
       {chatOpen && (
         <aside
           className="entry-chat-panel"
@@ -361,8 +402,42 @@ export function EntryPage({
             />
           </details>
         </aside>
-        <article className="paper">
+        <article
+          className="paper"
+          onClickCapture={(event) => {
+            const anchor = (
+              event.target as HTMLElement
+            ).closest<HTMLAnchorElement>("a[href]");
+            if (!anchor || !/^entry:/i.test(anchor.getAttribute("href") ?? ""))
+              return;
+            event.preventDefault();
+            if (editing && !event.ctrlKey && !event.metaKey) return;
+            event.stopPropagation();
+            const target = entryLinkTarget(anchor.getAttribute("href") ?? "");
+            if (
+              !target ||
+              !store.getSnapshot().entries.some((entry) => entry.id === target)
+            )
+              notify(
+                t(
+                  "引用词条不存在或已删除",
+                  "Referenced entry is missing or deleted",
+                ),
+              );
+            else
+              window.dispatchEvent(
+                new CustomEvent("zhinexus:open-entry", { detail: target }),
+              );
+          }}
+        >
           <div className="editor-toolbar">
+            <button
+              disabled={saving}
+              onClick={() => setInsertingReference(true)}
+            >
+              <Link2 size={16} />
+              {t("引用词条", "Link entry")}
+            </button>
             <button
               disabled={!!busy || dirty}
               onClick={() =>
@@ -514,6 +589,7 @@ export function EntryPage({
               }}
             />
           )}
+          <EntryReferences id={id} />
         </article>
       </div>
       {confirmation.dialog}

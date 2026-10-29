@@ -1,5 +1,7 @@
 /** Safe Markdown, KaTeX, strict Mermaid diagrams and verified local attachment rendering. */
-import { useEffect, useId, useState, useMemo } from "react";
+import { useEffect, useId, useState, useMemo, type ReactNode } from "react";
+import { useKnowledge } from "./common";
+import { entryLinkTarget } from "../core/entry-links";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -112,15 +114,20 @@ export function Markdown({
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         urlTransform={(url) =>
-          url.startsWith("asset:") ? url : defaultUrlTransform(url)
+          url.startsWith("asset:") || /^entry:/i.test(url)
+            ? url
+            : defaultUrlTransform(url)
         }
         components={{
           img: Image,
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) =>
+            href && /^entry:/i.test(href) ? (
+              <EntryLink href={href}>{children}</EntryLink>
+            ) : (
+              <a href={href} target="_blank" rel="noopener noreferrer">
+                {children}
+              </a>
+            ),
           code: ({ className, children, ...props }) =>
             className === "language-mermaid" ? (
               <Diagram code={String(children)} />
@@ -134,5 +141,27 @@ export function Markdown({
         {children}
       </ReactMarkdown>
     </div>
+  );
+}
+
+/** Subscribe only internal links to destination changes, leaving ordinary Markdown messages memoizable. */
+function EntryLink({ href, children }: { href: string; children: ReactNode }) {
+  const s = useKnowledge(),
+    id = entryLinkTarget(href),
+    target = s.entries.find((entry) => entry.id === id);
+  return (
+    <button
+      className="entry-inline-link"
+      title={target?.title ?? "词条不存在或已删除 / Entry missing or deleted"}
+      disabled={!target}
+      onClick={() => {
+        if (id && store.getSnapshot().entries.some((entry) => entry.id === id))
+          window.dispatchEvent(
+            new CustomEvent("zhinexus:open-entry", { detail: id }),
+          );
+      }}
+    >
+      {children}
+    </button>
   );
 }

@@ -52,6 +52,15 @@ export function schedule(
   selectedRating?: 1 | 2 | 3 | 4,
 ): Card {
   const rating = selectedRating ?? suggestedRating(score);
+  return scheduleRecall(raw, rating, now, retention);
+}
+/** Schedule an explicit human recall rating; offline practice never needs a fabricated AI score. */
+export function scheduleRecall(
+  raw: Card,
+  rating: 1 | 2 | 3 | 4,
+  now = new Date(),
+  retention = 0.9,
+): Card {
   return fsrs({ request_retention: retention }).next(
     reviveCard(raw),
     now,

@@ -226,7 +226,31 @@ test("streamed OCR stays editable and creates knowledge only after confirmation"
     await page
       .getByRole("checkbox", { name: "保留截图", exact: true })
       .uncheck();
+    await repository(
+      page,
+      `const original=store.db.setLocal.bind(store.db);store.db.restoreReviewSave=original;store.db.setLocal=async(key,value)=>{if(key==='ai-jobs')throw Error('review-close disk failure');return original(key,value)};`,
+    );
     await page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText(
+      "review-close disk failure",
+    );
+    await expect(
+      page.getByRole("textbox", { name: "识别文字（可编辑）", exact: true }),
+    ).toHaveValue("人工核对的内容");
+    await repository(
+      page,
+      `store.db.setLocal=async(key,value)=>{if(key==='ai-jobs')await new Promise(resolve=>store.db.releaseReviewSave=resolve);return store.db.restoreReviewSave(key,value)};`,
+    );
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect
+      .poll(() => repository(page, "return typeof store.db.releaseReviewSave"))
+      .toBe("function");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await repository(
+      page,
+      "store.db.setLocal=store.db.restoreReviewSave;store.db.releaseReviewSave();",
+    );
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.reload();
     await page.locator(".ai-queue-button").click();

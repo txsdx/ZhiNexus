@@ -3843,3 +3843,189 @@ html {
   padding: 0;
   white-space: nowrap;
 }
+/* Linked knowledge, offline retrieval and a bounded activity calendar share existing full-width surfaces. */
+.library-filters,
+.review-method-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.library-filters [aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+.review-method-controls label {
+  margin: 0;
+}
+.review-method-controls select {
+  min-width: 180px;
+}
+.entry-inline-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+  border-radius: 2px;
+}
+.entry-references {
+  padding: 18px 24px;
+  border-top: 1px solid var(--border);
+}
+.entry-references summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.entry-references > div {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.entry-references h3 {
+  width: 100%;
+  font-size: 0.9rem;
+  margin: 0;
+}
+.entry-references button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.self-review {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+}
+.self-review > button {
+  margin: 8px 10px 0 0;
+}
+.self-review-answer {
+  border-block: 1px solid var(--border);
+  padding: 16px 0;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.recall-prompt {
+  padding: 32px 0;
+}
+.study-activity {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-block: 20px;
+}
+.study-activity h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.study-activity-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-block: 12px;
+  font-size: 0.85rem;
+}
+.study-calendar-scroll {
+  overflow-x: auto;
+  padding: 4px 2px;
+}
+.study-calendar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 16px);
+  grid-auto-columns: minmax(12px, 1fr);
+  gap: 4px;
+  min-width: 420px;
+}
+.study-calendar button,
+.study-activity footer i {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+.study-calendar [data-level="1"],
+.study-activity i[data-level="1"] {
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+}
+.study-calendar [data-level="2"],
+.study-activity i[data-level="2"] {
+  background: color-mix(in srgb, var(--accent) 40%, var(--surface));
+}
+.study-calendar [data-level="3"],
+.study-activity i[data-level="3"] {
+  background: color-mix(in srgb, var(--accent) 65%, var(--surface));
+}
+.study-calendar [data-level="4"],
+.study-activity i[data-level="4"] {
+  background: var(--accent);
+}
+.study-calendar button:hover {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.study-activity footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+}
+.study-activity footer span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.study-activity footer i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+}
+.study-day-events {
+  padding: 0;
+  list-style: none;
+}
+.study-day-events li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-block: 10px;
+}
+.study-day-events button {
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.capture-markdown-tools select {
+  width: auto;
+  min-width: 90px;
+  max-width: 145px;
+  padding: 4px;
+  font-size: 0.8rem;
+}
+@media (max-width: 600px) {
+  .self-review {
+    padding: 16px;
+  }
+  .entry-references {
+    padding: 16px;
+  }
+  .study-activity {
+    padding: 12px;
+  }
+  .study-calendar {
+    grid-template-rows: repeat(7, 20px);
+  }
+}

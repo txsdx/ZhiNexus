@@ -397,3 +397,42 @@ it("a changed local draft or ambiguous selected text rejects a stale proposal", 
     ),
   ).rejects.toThrow("ambiguous");
 });
+
+it("AI bookmark changes require review and atomically reuse the existing receipt without changing content", async () => {
+  const before = {
+    ...fixture.state.docs.find((d: any) => d.collection === "entry").fields,
+  };
+  expect(
+    await executeKnowledgeTool(
+      "update_entry",
+      { id: "entry", starred: true },
+      "star-denied",
+      async () => false,
+    ),
+  ).toEqual({ cancelled: true });
+  expect(fixture.commits).toHaveLength(0);
+  const approve = vi.fn(async () => true);
+  await executeKnowledgeTool(
+    "update_entry",
+    { id: "entry", starred: true },
+    "star-confirmed",
+    approve,
+  );
+  await executeKnowledgeTool(
+    "update_entry",
+    { id: "entry", starred: true },
+    "star-confirmed",
+    approve,
+  );
+  expect(approve).toHaveBeenCalledOnce();
+  expect(fixture.commits).toHaveLength(1);
+  const result = fixture.state.docs.find(
+    (d: any) => d.collection === "entry",
+  ).fields;
+  expect(result.starred).toBe(true);
+  expect(result.content).toBe(before.content);
+  expect(result.card).toEqual(before.card);
+  expect(fixture.commits[0].some((p: any) => p.collection === "setting")).toBe(
+    true,
+  );
+});

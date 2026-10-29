@@ -1,6 +1,6 @@
 import { reviewTarget, needsReview, nextReviewAt } from "../core/review-policy";
 /** Structured knowledge-control tools with atomic receipts, explicit write previews and stale-state rejection. */
-import Fuse from "fuse.js";
+import { searchKnowledge } from "../core/knowledge-search";
 import { z } from "zod";
 import { store, json, type StorePatch } from "../core/store";
 import { entryWorkspace } from "../core/workspace";
@@ -88,8 +88,9 @@ const definitions = {
     schema: z.object({}).strict(),
   },
   search_knowledge: {
-    description: "模糊搜索知识词条",
-    schema: z.object({ query: z.string() }).strict(),
+    description:
+      "搜索知识，支持title:/body:/tag:/category:、is:due、is:starred、has:image/has:link，双引号短语与-排除词",
+    schema: z.object({ query: z.string().max(500) }).strict(),
   },
   list_entries: {
     description: "分页列出词条，可按分类筛选；category 为空表示未分类",
@@ -148,7 +149,7 @@ const definitions = {
   },
   update_entry: {
     description:
-      "修改词条的标题、正文、摘要、分类、标签或背景色；未传字段保留；需确认",
+      "修改词条标题、正文、摘要、分类、标签、背景色或starred收藏；未传字段保留；需确认",
     schema: z
       .object({
         id,
@@ -158,6 +159,7 @@ const definitions = {
         category: parent.optional(),
         tags: z.array(z.string()).max(100).optional(),
         color: color.optional(),
+        starred: z.boolean().optional(),
       })
       .strict(),
   },
@@ -205,6 +207,7 @@ export const knowledgeTools: ToolSpec[] = Object.entries(definitions).map(
   }),
 );
 interface Arguments {
+  starred?: boolean;
   positions?: { id: string; x: number; y: number }[];
   source?: string;
   target?: string;
@@ -280,17 +283,19 @@ export async function executeKnowledgeTool(
       };
     }
     case "search_knowledge":
-      return new Fuse(s.entries, {
-        keys: ["title", "content", "tags"],
-        threshold: 0.4,
-      })
-        .search(a.query!)
+      return searchKnowledge(
+        s.entries,
+        s.categories,
+        a.query!,
+        reviewTarget(s.docs),
+      )
         .slice(0, 12)
-        .map((r) => ({
-          id: r.item.id,
-          title: r.item.title,
-          category: r.item.category,
-          excerpt: r.item.content.slice(0, 400),
+        .map((entry) => ({
+          id: entry.id,
+          title: entry.title,
+          category: entry.category,
+          starred: !!entry.starred,
+          excerpt: entry.content.slice(0, 400),
         }));
     case "list_entries": {
       const entries = s.entries.filter(
@@ -557,6 +562,7 @@ export async function executeKnowledgeTool(
           "category",
           "tags",
           "color",
+          "starred",
         ] as const)
           if (a[key] !== undefined) patch[key] = a[key]!;
         if (a.category !== undefined) assertCategory(a.category);

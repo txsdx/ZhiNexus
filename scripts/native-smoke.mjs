@@ -302,7 +302,7 @@ try {
       'return document.querySelector(".title-input")?.value==="Native portable recovery"',
     )
   )
-    await click(".entry-heading .actions button:nth-child(2)");
+    await click('.entry-heading [data-entry-action="edit"]');
   await click(".capture-button");
   await type(".modal input", "Native portable recovery");
   await type(".modal textarea", "Native SQLite first draft");
@@ -312,7 +312,7 @@ try {
       'return document.querySelector(".entry-heading h1")?.innerText==="Native portable recovery"',
     ),
   );
-  await click(".entry-heading .actions button:nth-child(2)");
+  await click('.entry-heading [data-entry-action="edit"]');
   await click('[data-editor-mode="rich"]');
   await click('.block-document[contenteditable="true"]');
   const richText = "native rich block editing persists.";
@@ -345,7 +345,7 @@ try {
       'return !document.querySelector(".title-input")&&document.querySelector(".rich-editor")?.textContent.includes("native rich block editing persists.")',
     ),
   );
-  await click(".entry-heading .actions button:nth-child(2)");
+  await click('.entry-heading [data-entry-action="edit"]');
   await click('[data-editor-mode="source"]');
   await type(
     ".content-editor",

@@ -52,6 +52,11 @@ import { useEntryWorkspace } from "./hooks/useEntryWorkspace";
 import { OcrResult } from "./components/OcrResult";
 import { Locale, useKnowledge, useT } from "./components/common";
 import { Library } from "./pages/Library";
+const EntrySwitcher = lazy(() =>
+  import("./components/EntrySwitcher").then((m) => ({
+    default: m.EntrySwitcher,
+  })),
+);
 const CommandPalette = lazy(() =>
   import("./components/CommandPalette").then((module) => ({
     default: module.CommandPalette,
@@ -121,6 +126,7 @@ function Shell() {
     [selectedJob, setSelectedJob] = useState(""),
     [query, setQuery] = useState(""),
     [capture, setCapture] = useState(false),
+    [entrySwitcherOpen, setEntrySwitcherOpen] = useState(false),
     [commandsOpen, setCommandsOpen] = useState(false),
     [shortcutsOpen, setShortcutsOpen] = useState(false),
     [captureText, setCaptureText] = useState(""),
@@ -429,6 +435,24 @@ function Shell() {
       window.removeEventListener("zhinexus:ai-job-error", failed);
     };
   }, []);
+  useEffect(() => {
+    const quick = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "p" &&
+        !event.isComposing &&
+        !event.repeat
+      ) {
+        event.preventDefault();
+        if (!document.querySelector('[role="dialog"]'))
+          setEntrySwitcherOpen(true);
+      }
+    };
+    window.addEventListener("keydown", quick);
+    return () => window.removeEventListener("keydown", quick);
+  }, []);
   const nav = [
     { id: "home", name: t("学习概览", "Overview"), icon: Home },
     { id: "library", name: t("我的知识库", "Knowledge"), icon: LibraryBig },
@@ -494,6 +518,19 @@ function Shell() {
     ],
   ];
   const commandItems: AppCommand[] = [
+    {
+      id: "quick-entry",
+      label: t("快速切换词条", "Go to entry"),
+      shortcut: modifier + "+P",
+      run: () => setEntrySwitcherOpen(true),
+    },
+    {
+      id: "starred",
+      label: t("查看收藏", "Show starred entries"),
+      run: () => {
+        if (navigate("library")) setQuery("is:starred");
+      },
+    },
     {
       id: "capture",
       label: t("新建词条", "New entry"),
@@ -708,6 +745,7 @@ function Shell() {
             <div className="search-box">
               <Search size={17} />
               <input
+                maxLength={500}
                 ref={search}
                 aria-label={t("搜索知识", "Search knowledge")}
                 placeholder={t("搜索你的知识…", "Search your knowledge…")}
@@ -852,6 +890,14 @@ function Shell() {
           )}
         </Suspense>
       </main>
+      {entrySwitcherOpen && (
+        <Suspense fallback={null}>
+          <EntrySwitcher
+            onClose={() => setEntrySwitcherOpen(false)}
+            onChoose={open}
+          />
+        </Suspense>
+      )}
       {commandsOpen && (
         <Suspense fallback={null}>
           <CommandPalette

@@ -2,7 +2,9 @@
 import { needsReview, reviewTarget } from "../core/review-policy";
 import { useReviewClock } from "../hooks/useReviewClock";
 import { useMemo } from "react";
-import Fuse from "fuse.js";
+import { searchKnowledge } from "../core/knowledge-search";
+import { StudyActivity } from "../components/StudyActivity";
+import { useState } from "react";
 import {
   ArrowUpRight,
   BookOpen,
@@ -35,18 +37,19 @@ export function Library({
   const due = s.entries.filter((e) =>
     needsReview(e, reviewTarget(s.docs), now),
   );
-  const results = useMemo(() => {
-    let rows = query.trim()
-      ? new Fuse(s.entries, {
-          keys: [{ name: "title", weight: 3 }, "tags", "content", "summary"],
-          threshold: 0.35,
-          ignoreLocation: true,
-        })
-          .search(query)
-          .map((r) => r.item)
-      : [...s.entries];
-    return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }, [s.entries, query]);
+  const [starredOnly, setStarredOnly] = useState(false),
+    [searchHelp, setSearchHelp] = useState(false);
+  const results = useMemo(
+    () =>
+      searchKnowledge(
+        starredOnly ? s.entries.filter((entry) => entry.starred) : s.entries,
+        s.categories,
+        query,
+        reviewTarget(s.docs),
+        now,
+      ),
+    [s.entries, s.categories, query, starredOnly, now, s.docs],
+  );
   return (
     <div className="page">
       <div className="page-heading">
@@ -131,6 +134,31 @@ export function Library({
           </section>
         </>
       )}
+      {!dashboard && (
+        <div className="library-filters">
+          <button
+            aria-pressed={starredOnly}
+            onClick={() => setStarredOnly((value) => !value)}
+          >
+            {t("收藏", "Starred")}
+          </button>
+          <button
+            aria-expanded={searchHelp}
+            onClick={() => setSearchHelp((value) => !value)}
+          >
+            {t("检索语法", "Search filters")}
+          </button>
+        </div>
+      )}
+      {searchHelp && !dashboard && (
+        <p className="notice">
+          {t(
+            "支持 tag:标签、category:分类、title:标题、body:正文、is:due、is:starred、has:image、has:link；双引号精确短语，-词语排除。",
+            "Filters: tag:, category:, title:, body:, is:due, is:starred, has:image, has:link. Quotes match phrases; -term excludes.",
+          )}
+        </p>
+      )}
+      {dashboard && <StudyActivity onOpen={onOpen} />}
       <div className="section-heading">
         <div>
           <h2>
@@ -147,13 +175,16 @@ export function Library({
           categories={s.categories}
           onOpen={onOpen}
           compact={dashboard}
+          searchOrder={!!query.trim() || starredOnly}
         />
       ) : (
         <Empty
           title={
-            query
-              ? t("没有匹配的词条", "No matching entries")
-              : t("暂无词条", "No entries")
+            starredOnly
+              ? t("暂无匹配的收藏", "No matching starred entries")
+              : query
+                ? t("没有匹配的词条", "No matching entries")
+                : t("暂无词条", "No entries")
           }
           description={t(
             "添加自己的知识，或载入三个示例，体验解释、公式和关系图。",

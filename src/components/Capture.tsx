@@ -1,3 +1,4 @@
+import { captureTemplates } from "../core/capture-templates";
 /** Shared durable capture editor: paste/drop media, import documents and save raw material before AI enrichment. */
 import { formatMarkdown, type MarkdownAction } from "../core/markdown-edit";
 import { editTextarea } from "../services/textarea-edit";
@@ -525,6 +526,57 @@ export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
                     {symbol}
                   </button>
                 ))}
+                <select
+                  aria-label={t("插入录入模板", "Insert capture template")}
+                  value=""
+                  disabled={disabled || preview}
+                  onChange={(event) => {
+                    const template = captureTemplates(
+                        t("zh", "en") === "zh" ? "zh" : "en",
+                      ).find((template) => template.id === event.target.value),
+                      current = session.getSnapshot().draft,
+                      field = text.current;
+                    if (
+                      !template ||
+                      !current ||
+                      !field ||
+                      blocked.current ||
+                      submitting.current ||
+                      closePending.current
+                    )
+                      return;
+                    try {
+                      const from = field.selectionEnd,
+                        to = from,
+                        insertion =
+                          (from && current.content[from - 1] !== "\n"
+                            ? "\n\n"
+                            : "") + template.content;
+                      const value =
+                        current.content.slice(0, from) +
+                        insertion +
+                        current.content.slice(to);
+                      editTextarea(field, current.content, {
+                        value,
+                        start: from + insertion.length,
+                        end: from + insertion.length,
+                      });
+                      if (session.getSnapshot().draft?.content !== value)
+                        session.patch({ content: value });
+                    } catch (error) {
+                      setError(String(error));
+                    }
+                  }}
+                >
+                  <option value="">{t("插入模板…", "Insert template…")}</option>
+                  {captureTemplates(t("zh", "en") === "zh" ? "zh" : "en").map(
+                    (template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.label}
+                      </option>
+                    ),
+                  )}
+                </select>
                 <button
                   type="button"
                   className="capture-preview-toggle"

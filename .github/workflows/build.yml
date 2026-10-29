@@ -14,7 +14,19 @@ on:
 permissions:
   contents: read
 jobs:
+  signing:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate fixed Android signing before running tests or builds
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash scripts/android-sign.sh --check
   frontend:
+    needs: signing
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -244,7 +256,7 @@ jobs:
         id: sdk-template
         run: sdkmanager "${{ steps.project.outputs.platform_package }}" "build-tools;${{ steps.project.outputs.compile_sdk }}.0.0"
       - run: npm run tauri -- android build --apk --target aarch64
-      - name: Sign installable APK (custom release key optional)
+      - name: Sign installable APK with the fixed release key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

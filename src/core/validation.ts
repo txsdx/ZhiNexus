@@ -38,6 +38,7 @@ const schemas = {
     title: text.min(1),
     content: text,
     summary: text.max(600).optional(),
+    starred: z.boolean().optional(),
     color: z.enum(entryColors).optional(),
     reviewCount: z.number().int().nonnegative().optional(),
     editorDocument: z
@@ -74,6 +75,12 @@ const schemas = {
   }),
   review: z.object({
     entryId: text,
+    mode: z.enum(["ai", "self"]).optional(),
+    referenceHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    completedAt: z.iso.datetime().optional(),
     phase: z.enum(["question", "answer", "graded", "done", "cancelled"]),
     question: questionSchema,
     answer: text,

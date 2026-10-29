@@ -8,7 +8,7 @@
 
 交付：运行有意义的测试；报告实际结果、未验证部分与下一项工作。更新 CHANGELOG、STATUS、KNOWN_ISSUES。不要只输出计划或伪实现。
 
-版本：每次实现迭代都运行版本脚本。共享代码改动用 npm run version:bump -- shared；只涉及 Windows/Android/Ubuntu 用对应 windows/android/ubuntu，仅提高该平台 patch。保持所有平台共同 major.minor，不让仓库 tag 导致其余平台无效更新。发布 latest.json 必须保留未构建平台同发布线的 metadata；格式严格为 *_protable.exe、*_setup.exe、.apk、.deb。
+版本：每次实现迭代都运行版本脚本。共享代码改动用 npm run version:bump -- shared；只涉及 Windows/Android/Ubuntu 用对应 windows/android/ubuntu，仅提高该平台 patch。保持所有平台共同 major.minor，不让仓库 tag 导致其余平台无效更新。发布 latest.json 必须保留未构建平台同发布线的 metadata；格式严格为 *_protable.exe、.apk、.deb；不生成Windows安装包。
 
 
 0.7：只有一个手动 Build and release 入口，默认全平台，前端只编译一次。不要恢复旧平台勾选入口。块编辑须保留 Markdown/JSON 缓存绑定、持久块 ID、聚焦区域外边界；测聚焦全选删除、异步配图和标签切换、保存后立即重启。草稿是设备局部，不能覆盖更新的已保存内容。学习思源交互不等于复制其 AGPL 实现。用户要求历史作者/提交者名 codex，已明确授权本轮强制推送。
@@ -33,3 +33,5 @@ Windows实际命令：`tauri build --no-bundle -- --profile release-windows`；p
 
 
 0.22：遵循初始提示词85/110/114，软件更新仅使用公开Release匿名直链，彻底移除可选私有认证及Token构建注入。Actions自动发布凭证不进入应用。持续维护112–113跨软件开源交互清单及Android页面缩放回归；具体证据见ACCEPTANCE_022.md。
+
+0.23：延续用户休息期间授权的自主迭代，实际阅读高水平公开源码/资料，维护OSS_UX_RESEARCH_023和ACCEPTANCE_023的115–123项。快捷切换/结构检索、稳定Markdown引用、收藏、真实学习日历、离线自主回忆和捕获模板均保持既有数据与草稿边界。Android只能使用固定发布身份，公开证书已固定；私钥在私有备份与四个Actions Secrets，不得复制进仓库。禁止临时新密钥回退，签名前后校验指纹，Secrets缺失在编译前失败。当前连接Secrets管理HTTP403，等待维护者配置；未配置不启动必败Build，不把独立重签旧包证明冒充新版本编译或安装通过。

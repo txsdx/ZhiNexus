@@ -41,6 +41,8 @@ export interface Entry {
   title: string;
   content: string;
   summary?: string;
+  /** A synchronized bookmark, independent of the card schedule and taxonomy. */
+  starred?: boolean;
   /** Soft row/document background chosen from the built-in palette. */
   color?: import("./entry-colors").EntryColor;
   editorDocument?: { schema: 1; markdown: string; json: Json };
@@ -144,6 +146,8 @@ export interface AIConfig {
 export interface DeviceConfig {
   /** Check and stage updates in the background; Windows installs on a normal safe exit. */
   autoUpdate?: boolean;
+  /** Explicit review method; unset chooses offline practice when no AI provider is usable. */
+  reviewMode?: "ai" | "self";
   /** Local curve display preferences; time panning remains transient. */
   curveView?: {
     limit: number;
@@ -210,6 +214,10 @@ export interface Grade {
 export interface ReviewSession {
   id: string;
   entryId: string;
+  /** Offline self-rating is separate from AI grading. */
+  mode?: "ai" | "self";
+  referenceHash?: string;
+  completedAt?: string;
   phase: "question" | "answer" | "graded" | "done" | "cancelled";
   question: Question;
   answer: string;

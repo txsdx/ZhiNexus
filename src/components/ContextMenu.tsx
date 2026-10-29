@@ -150,6 +150,17 @@ export function ContextMenu({ notify }: { notify: (message: string) => void }) {
               },
             },
             {
+              label: t(
+                entry.starred ? "取消收藏" : "收藏词条",
+                entry.starred ? "Unstar entry" : "Star entry",
+              ),
+              run: () =>
+                store.patch("entry", entry.id, {
+                  starred: !entry.starred,
+                  updatedAt: new Date().toISOString(),
+                }),
+            },
+            {
               label: t("复制标题", "Copy title"),
               run: () => copyText(entry.title),
             },

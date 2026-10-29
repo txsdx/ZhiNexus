@@ -3,6 +3,7 @@ package io.github.txsdx.zhinexus.updates
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.result.ActivityResult
@@ -44,6 +45,15 @@ class UpdateInstaller(private val activity: Activity) : Plugin(activity) {
         val file = File(invoke.parseArgs(InstallApkArgs::class.java).path).canonicalFile
         require(file.exists() && file.extension == "apk" && file.parentFile?.name == "updates")
         require(file.toPath().startsWith(File(activity.applicationInfo.dataDir).canonicalFile.toPath()))
+        val archive = activity.packageManager.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES)
+            ?: throw IllegalArgumentException("无法读取更新包签名 / Unable to read APK signing certificate")
+        require(archive.packageName == activity.packageName) { "更新包不属于当前应用 / APK package does not match this application" }
+        val installed = activity.packageManager.getPackageInfo(activity.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        val current = installed.signingInfo?.apkContentsSigners ?: throw IllegalArgumentException("Installed signature unavailable")
+        val incoming = archive.signingInfo?.apkContentsSigners ?: throw IllegalArgumentException("APK signature unavailable")
+        require(current.isNotEmpty() && current.toSet() == incoming.toSet()) {
+            "安装包签名与当前应用不同。请先在数据库设置中导出备份，并保留未保存草稿；旧临时签名版本不能直接覆盖安装。新固定签名首次安装后，后续版本可正常覆盖。 / Signing certificate mismatch. Export a backup and retain unsaved drafts before replacing a legacy development-signed app. Future releases reuse the fixed signing certificate."
+        }
         return file
     }
     /** Grant the system package installer temporary read access to this one verified APK. */

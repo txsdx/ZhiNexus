@@ -25,11 +25,13 @@ export function KnowledgeTable({
   categories,
   onOpen,
   compact = false,
+  searchOrder = false,
 }: {
   entries: Entry[];
   categories: Category[];
   onOpen: (id: string) => void;
   compact?: boolean;
+  searchOrder?: boolean;
 }) {
   const [selecting, setSelecting] = useState(false),
     [selectedIds, setSelectedIds] = useState<string[]>([]),
@@ -64,9 +66,10 @@ export function KnowledgeTable({
   }, []);
   const t = useT(),
     [collapsed, setCollapsed] = useState<Set<string>>(new Set()),
-    [sort, setSort] = useState("review"),
+    [chosenSort, setSort] = useState<string | null>(null),
     [ascending, setAscending] = useState(true),
     [now, setNow] = useState(() => new Date());
+  const sort = chosenSort ?? (searchOrder ? "relevance" : "review");
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
@@ -77,22 +80,24 @@ export function KnowledgeTable({
   );
   /** Sort inside each branch, keeping the taxonomy hierarchy intact. */
   const order = (rows: Entry[]) =>
-    [...rows].sort((a, b) => {
-      let diff =
-        sort === "title"
-          ? a.title.localeCompare(b.title)
-          : sort === "created"
-            ? a.createdAt.localeCompare(b.createdAt)
-            : sort === "review"
-              ? nextReviewAt(a, targetRetention).getTime() -
-                nextReviewAt(b, targetRetention).getTime()
-              : sort === "memory"
-                ? 1 -
-                  (retention.get(a.id) ?? 2) -
-                  (1 - (retention.get(b.id) ?? 2))
-                : a.updatedAt.localeCompare(b.updatedAt);
-      return (ascending ? diff : -diff) || a.title.localeCompare(b.title);
-    });
+    sort === "relevance"
+      ? rows
+      : [...rows].sort((a, b) => {
+          let diff =
+            sort === "title"
+              ? a.title.localeCompare(b.title)
+              : sort === "created"
+                ? a.createdAt.localeCompare(b.createdAt)
+                : sort === "review"
+                  ? nextReviewAt(a, targetRetention).getTime() -
+                    nextReviewAt(b, targetRetention).getTime()
+                  : sort === "memory"
+                    ? 1 -
+                      (retention.get(a.id) ?? 2) -
+                      (1 - (retention.get(b.id) ?? 2))
+                    : a.updatedAt.localeCompare(b.updatedAt);
+          return (ascending ? diff : -diff) || a.title.localeCompare(b.title);
+        });
   /** Keep dates compact while showing the actual local review and creation times. */
   const date = (value: Date | string | undefined) =>
     value ? (

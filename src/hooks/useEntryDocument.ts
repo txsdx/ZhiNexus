@@ -256,6 +256,28 @@ export function useEntryDocument(
     setTitle(current.editing ? current.title : e.title);
     setEditing(true);
   };
+  /** Explicit reference insertion appends to the newest full draft and clears any scoped editor cache. */
+  const appendReference = (markdown: string) => {
+    const current = latest.current,
+      e = current.entry;
+    if (!e) return;
+    if (!current.editing)
+      base.current = {
+        title: e.title,
+        content: e.content,
+        summary: e.summary ?? "",
+      };
+    const next =
+      (current.editing ? current.content : e.content) +
+      "\n\n" +
+      markdown +
+      "\n";
+    setFocusId(null);
+    setRichCache(null);
+    setContent(next);
+    setTitle(current.editing ? current.title : e.title);
+    setEditing(true);
+  };
   /** Exit zoom before locating a block in the complete document. */
   const locate = (blockId: string) => {
     setFocusId(null);
@@ -297,6 +319,7 @@ export function useEntryDocument(
     save,
     beginEditing,
     appendImage,
+    appendReference,
     locate,
   };
 }

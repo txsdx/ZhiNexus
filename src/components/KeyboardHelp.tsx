@@ -13,6 +13,7 @@ export function KeyboardHelp({
   const t = useT(),
     modifier = shortcutModifier();
   const rows = [
+    [t("快速切换词条", "Go to entry"), `${modifier}+P`],
     [t("命令面板", "Command palette"), `${modifier}+Shift+P`],
     [t("搜索知识", "Search knowledge"), `${modifier}+K`],
     [t("上一个位置 / 下一个位置", "Previous / next position"), "Alt+← / Alt+→"],

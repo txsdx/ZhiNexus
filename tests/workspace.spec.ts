@@ -2118,7 +2118,7 @@ test("mobile rich headings keep the viewport and bottom navigation reachable aft
     await page.locator(".modal textarea").fill("# 初始章节\n\n初始内容。");
     await page.locator(".modal .primary").click();
     await page.locator(".entry-heading h1").waitFor();
-    await page.locator(".entry-heading .actions button:nth-child(2)").click();
+    await page.getByRole("button", { name: "编辑", exact: true }).click();
     await page.locator('[data-editor-mode="rich"]').click();
     const body =
       "SQLite content survives a native restart. Rich blocks were edited on Android.";

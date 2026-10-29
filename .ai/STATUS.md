@@ -1,6 +1,6 @@
 # 需求完成情况
 
-当前正式版本：**Windows/Ubuntu/Android 0.18.0**；开发中：**三平台0.19.0**，新增101–106项，未发布。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
+当前正式版本：**Windows/Ubuntu/Android 0.19.0**，新增101–106项已实现、验收并正式发布。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
 
 | 需求 | 当前实现 |
 |---|---|
@@ -26,9 +26,24 @@
 | 预留 | 对象存储/专属服务端 SyncTransport，按要求尚不完整实现 |
 | 大库 | 有界压缩日志块、已知批次跳过下载；仍有批次/附件全名字发现和全日志投影，增量 Merkle 子树与超大库验证待完成 |
 
-## 0.19 本轮进度（未发布）
+## 0.19 最终验收（2026-10-29，北京时间）
 
-101–106的源实现已接入；205单元/35发布脚本及5浏览器专项通过，完整87浏览器/生产构建/locked Rust check与12原生边界均已通过。Build40874288806的前端/Ubuntu/Android已成功；Windows5项替换+1项目录原生测试通过，但Tauri参数位置错误阻止打包，已修正为Cargo转发并增加实际CLI解析回归，36脚本通过。体积/启动和实际helper待仅Windows恢复构建；不重编已验收的其他产物。详见ITERATION_019及完整106条ACCEPTANCE_019，不把待跑项记为完成。普通提交不触发测试，Action前先完成本地门禁。
+- **正式[v0.19.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.19.0)已发布**，北京时间21:19:24，非草稿/非预发布，三平台均0.19.0。打包应用源码与标签`e21ae1d835055ef4c38558700148309591698051`。后续主分支仅修复构建参数/加入实际CLI回归和文档，未更改应用负载。
+- 新增101–106：Windows单文件直接替换更新及体积优化；完整分类路径+独立修改按钮；全库AI依赖/递进/关联提案、流式批次/逐条确认/普通关联升级/DAG与过期保护；6图工具（共23工具）；左键框选整组拖动与原子持久保存；菜单醒目色块和柔和实际背景。完整106项见ACCEPTANCE_019、初始提示词。
+- 本地205单元、最终36脚本（含实际Tauri CLI参数解析）、87浏览器全量、生产构建、locked Rust check与12原生边界通过；浅/深色、分类路径及星图截图已检查。
+- [原Build40874288806](https://github.com/txsdx/ZhiNexus/actions/runs/40874288806)：前端205/35/87及构建、Ubuntu11原生/DEB、Android arm64编译/包/签名成功；Windows6边界成功，但后续Tauri参数错误阻止打包。错误是将Cargo profile当成Tauri参数，已改为`--no-bundle -- --profile release-windows`，真实CLI解析回归补齐。
+- [仅Windows恢复40878124395](https://github.com/txsdx/ZhiNexus/actions/runs/40878124395)：Windows Job123462141290与发布Job123470761838全部成功，含缓存收尾。固定同一应用源码、密封前端；DEB/APK按实际固定摘要复用，没有重编或再跑前端全量。正式前确认四资产后再发布，未将原失败Run称作全绿。
+- Windows6边界、真实exe的系统/portable数据隔离、快捷键/代理/模型/SSE/MCP/OCR/SQLite、清理/重启/主库+WAL+最新快照损坏恢复、实际helper替换两种模式/保留数据与标记/拒绝坏摘要全部通过。下载文件名protable不再改变默认数据模式。
+- Windows exe从0.18的39,344,640字节（37.52 MiB）降至31,886,336字节（30.41 MiB），整体减少18.96%；编译期opt-level=s/thin LTO/裁符号，无运行时解压器。本次CI首次首帧937ms，后续377/352/384ms；驱动+启动合计4326/1197/1006/1041ms。0.18首帧1194ms、后续479/355/352ms；CI样本未见明显退化，不作跨硬件固定速度保证。
+- 实际APK读回：0.19.0、API35、arm64，普通/圆形/自适应绑定、21dp安全区与15张启动图标像素全部符合软件图标。无模拟器；Ubuntu本轮未重复按需GUI验收。真实服务、实体手机及旧安装版首启等边界见KNOWN_ISSUES。
+- 三包+latest.json四资产均实际下载读回，字节/SHA-256/平台版本/最终URL/源码tag全部一致；更新清单不含Windows setup。普通提交不触发测试，仅Build前集中执行。
+
+|资产|字节|SHA-256|
+|---|---|---|
+|ZhiNexus_0.19.0_amd64.deb|25,288,072|`ef4f444f95c924d51421f02863d5d61d90e2c00908f8e9d851e82c2bf5a126a5`|
+|ZhiNexus_android_arm64_0.19.0_development.apk|40,901,427|`d07353cedcf08bac397312fcf442d39c734df602f4ba2b7c782619d2201b90f2`|
+|ZhiNexus_windows_x64_0.19.0_protable.exe|31,886,336|`4173419495ee2a45818a4e35e8d014dfd931473dc84012653b95fce1da299e9c`|
+|latest.json|83,515|`e2562eb72471581c5f13cb816c9b98f38d04acf8330c9dec3b6c4e2429106ca6`|
 
 ## 0.18 最终验收（2026-10-29，北京时间）
 

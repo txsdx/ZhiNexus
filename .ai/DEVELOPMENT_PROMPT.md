@@ -24,3 +24,5 @@
 README保持简洁的使用/开发入口，及时同步当前平台、配置和构建规则；历史排错/验收明细放.ai，不把流水账、冗长示例和过时说明堆进README。
 
 0.19最新规则：Windows只发布单文件protable.exe，禁止安装器；数据默认系统应用目录，portable只决定_data，不影响更新产物。使用release-windows编译期体积优化，不加运行时解压器，实际测量文件大小/启动。星图增加可编辑graph任务模板、全库分批关联/预览选择/防循环与过时保护、图读写/布局/批量坐标工具；左键框选整组拖动原子保存。分类显示完整路径+修改按钮，菜单色块醒目而实际背景柔和。对应106条规格和ITERATION_019。
+
+Windows实际命令：`tauri build --no-bundle -- --profile release-windows`；profile经Cargo参数转发，不能作为Tauri参数。先用已安装CLI解析回归检查，避免完成原生编译后才发现无效命令。

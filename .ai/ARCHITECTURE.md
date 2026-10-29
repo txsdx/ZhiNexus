@@ -84,7 +84,7 @@ A focused section records its outside sibling IDs once. Replacements update only
 
 ## Unified build and release
 
-`github_release` handles native private-Release reads using the user-authorized embedded updater credential. GitHub API requests are pinned to `/repos/txsdx/ZhiNexus/`, use sensitive bearer headers, and follow redirects manually without sending authorization to signed asset CDNs. The webview only receives manifest JSON through `read_update_manifest`; installer downloads resolve a pinned tag/name/browser URL to its repository asset ID, then retain existing size/hash/publisher checks. User authorization explicitly permits this single credential in native source/builds; provider credentials remain governed by the normal encryption policy. Browser previews retain anonymous public discovery.
+`github_release` uses only anonymous public Release download URLs. It reads the exact project `/releases/latest/download/latest.json`, pins tagged files to this repository, validates each bounded HTTPS CDN redirect, and never creates Authorization/API-version headers or reads an updater token. The native update boundary retains device proxy, system TLS trust, byte limits, platform versions, SHA-256 and configured publisher signatures. Browser previews use the same public manifest. CI's automatic publication token remains scoped to uploading artifacts and never enters application code.
 
 Android native update clients explicitly load system roots from the Conscrypt APEX and legacy system CA directories, since rustls-native-certs' Unix probe otherwise searches Termux paths. HTTPS chain and hostname verification remain enabled. Update errors persist on the About page in addition to the existing diagnostic/toast path.
 
@@ -173,6 +173,14 @@ categoryPath统一完整层级；CategoryPicker保留共用树弹窗，但改为
 
 0.20捕获增强：CaptureEditor复用表单，CaptureSession合并异步保存、保留未确认输入，主webview的CaptureRepository串行/CAS管理本机草稿。图片先存本机meta暂存，Save后按哈希校验转入blobs；稳定创建ID防清草稿失败/响应丢失重复创建，保存过的草稿新编辑可另开创建ID保留。QuickCapture不初始化数据库/同步/AI，通过有窗口来源检查、限量与超时的Rust队列RPC访问唯一主写入者；关闭和全局退出/迁移先flush。DOCX在动态Mammoth/Turndown转换中保留简单语义与图片，fflate限制ZIP展开，HTML只作惰性DOM转换不挂载。
 
-## 0.21公开更新读取
+## 0.22公开更新与交互
 
-ReleaseClient每个受信请求先匿名GET，成功/重定向不使用内置凭证；仅API401/403/404且构建配置非空凭证时重试一次同URL的只读GET。request_headers严格限制API仓库和CDN，匿名仍带API版本，凭证Header敏感且只对仓库API发送。凭证从option_env!(ZHINEXUS_GITHUB_UPDATE_TOKEN)编入Rust，CI由可选GITHUB_UPDATE_TOKEN Secret注入，build.rs跟踪环境变化；移除已失效的明文资源文件。默认公开构建无需任何更新Token；私有读取需要有效配置后重编。数据目录、文件替换/回退、TLS、摘要与可选签名保持。临时恢复分支已清理，当前从main Build生成新包，不能把旧0.20二进制当成已修复。
+公开Release直链更新取代0.21可选私有认证，不使用GitHub REST API，避免匿名配额使公开更新失败；build.rs和CI均无更新Token注入。旧二进制须手动更新一次。
+
+ActionPicker是共享的有界模糊命令/节点选择器；App拥有真实动作和导航保护，面板只记最近成功动作ID。按需加载，不启动额外AI请求。Modal只将实际tabIndex>=0的可见元素纳入焦点环。
+
+ChatDrafts在主窗口持有本机meta、250ms合并和串行排空，单个snapshot最大8MiB，错误保留输入，不静默驱逐；键为JSON[entryId,topicId]。异步建话题迁移最新草稿，入队成功仅清除与发送快照一致的字段；退出/迁移freeze并flush，失败恢复编辑。导出仅可见人类消息及明确标记的部分回复；再次提问不改历史。
+
+Capture源格式工具经纯文本变换/原生insertText形成一次可撤销编辑；预览复用安全Markdown，媒体经主写者preview RPC，子窗口不打开第二数据库。任务筛选不写队列；知识选择调用单一guarded batch；星图定位只改变视口/选择；复习间隔取实际FSRS schedule，无额外调度模型。
+
+Android除onWebViewCreate外在attach/post/resume重新应用WebSettings，viewport与touch-action:pan-x pan-y禁止整页缩放但保留平移/文字选择；ReactFlow局部手势继续独立控制画布。

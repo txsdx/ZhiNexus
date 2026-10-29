@@ -8,6 +8,8 @@ import {
 import { NavigationButtons } from "./components/NavigationButtons";
 import { ContextMenu } from "./components/ContextMenu";
 import { Capture } from "./components/Capture";
+import type { AppCommand } from "./components/CommandPalette";
+import { shortcutModifier } from "./core/action-picker";
 import { startCaptureHost, showQuickCapture } from "./services/quick-capture";
 import { useAppearance } from "./hooks/useAppearance";
 import { flushSync } from "react-dom";
@@ -41,6 +43,8 @@ import {
   listenDesktop,
   observeSystemScale,
   quitDesktop,
+  defaultDesktop,
+  desktopAvailable,
   type DesktopAction,
 } from "./services/desktop";
 import { EntryTabs } from "./components/editor/EntryTabs";
@@ -48,6 +52,16 @@ import { useEntryWorkspace } from "./hooks/useEntryWorkspace";
 import { OcrResult } from "./components/OcrResult";
 import { Locale, useKnowledge, useT } from "./components/common";
 import { Library } from "./pages/Library";
+const CommandPalette = lazy(() =>
+  import("./components/CommandPalette").then((module) => ({
+    default: module.CommandPalette,
+  })),
+);
+const KeyboardHelp = lazy(() =>
+  import("./components/KeyboardHelp").then((module) => ({
+    default: module.KeyboardHelp,
+  })),
+);
 const AIJobReview = lazy(() =>
   import("./components/AIJobView").then((m) => ({ default: m.AIJobReview })),
 );
@@ -107,6 +121,8 @@ function Shell() {
     [selectedJob, setSelectedJob] = useState(""),
     [query, setQuery] = useState(""),
     [capture, setCapture] = useState(false),
+    [commandsOpen, setCommandsOpen] = useState(false),
+    [shortcutsOpen, setShortcutsOpen] = useState(false),
     [captureText, setCaptureText] = useState(""),
     [captureSource, setCaptureSource] = useState("manual-capture"),
     [captureImage, setCaptureImage] = useState(""),
@@ -266,9 +282,23 @@ function Shell() {
   }, [toast]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if (e.isComposing || e.keyCode === 229 || e.repeat) return;
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "p"
+      ) {
         e.preventDefault();
-        search.current?.focus();
+        if (!document.querySelector('[role="dialog"]')) setCommandsOpen(true);
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "k"
+      ) {
+        e.preventDefault();
+        if (!document.querySelector('[role="dialog"]')) search.current?.focus();
       }
       if (
         !native &&
@@ -423,6 +453,132 @@ function Shell() {
       badge: jobs.jobs.length,
     },
   ];
+  const modifier = shortcutModifier();
+  const configuredDesktop = { ...defaultDesktop, ...s.device.desktop };
+  const settingCommands = [
+    [
+      "appearance",
+      t("外观与语言", "Appearance & language"),
+      "theme font language 外观 字体 语言",
+    ],
+    ["ai", t("AI 与模型", "AI & models"), "model provider API 模型 接口"],
+    ["prompts", t("任务与提示词", "Tasks & prompts"), "prompt 提示词 并发"],
+    ["mcp", "MCP", "tools 工具 服务"],
+    [
+      "categories",
+      t("知识分类", "Knowledge categories"),
+      "category 分类 层级 树",
+    ],
+    [
+      "database",
+      t("数据库与云同步", "Database & sync"),
+      "WebDAV backup storage 备份 同步",
+    ],
+    ["network", t("网络与代理", "Network & proxy"), "proxy 网络 代理"],
+    [
+      "memory",
+      t("复习与记忆", "Review & memory"),
+      "FSRS retention 复习 记忆 阈值",
+    ],
+    ["notifications", t("通知设置", "Notifications"), "reminder 通知 提醒"],
+    [
+      "desktop",
+      t("后台与快捷键", "Desktop & shortcuts"),
+      "hotkey shortcut 后台 快捷键",
+    ],
+    ["about", t("关于与更新", "About & updates"), "version update 版本 更新"],
+    [
+      "logs",
+      t("日志", "Logs"),
+      "AI request response error 日志 错误 请求 响应",
+    ],
+  ];
+  const commandItems: AppCommand[] = [
+    {
+      id: "capture",
+      label: t("新建词条", "New entry"),
+      keywords: "create capture 添加 新建 记录",
+      shortcut: modifier + "+Shift+N",
+      run: () => {
+        setCaptureText("");
+        setCaptureImage("");
+        setCaptureSource("manual-capture");
+        setCapture(true);
+      },
+    },
+    ...nav.map((item) => ({
+      id: "nav:" + item.id,
+      label: item.name,
+      keywords: item.id,
+      run: () => {
+        const accepted = navigate(item.id);
+        if (accepted && item.id === "agent") {
+          setChatEntry("");
+          setChatTopic("");
+          setChatQuote("");
+        }
+        return accepted;
+      },
+    })),
+    ...settingCommands.map(([tab, label, keywords]) => ({
+      id: "settings:" + tab,
+      label,
+      detail: t("设置与偏好", "Settings & preferences"),
+      keywords,
+      run: () => {
+        if (!navigate("settings")) return false;
+        setSettingsTab(tab);
+        return true;
+      },
+    })),
+    {
+      id: "search",
+      label: t("搜索知识", "Search knowledge"),
+      shortcut: modifier + "+K",
+      run: () => {
+        search.current?.focus();
+      },
+    },
+    {
+      id: "sidebar",
+      label: sidebarCollapsed
+        ? t("展开左侧栏", "Expand sidebar")
+        : t("收起左侧栏", "Collapse sidebar"),
+      keywords: "sidebar 侧栏",
+      run: () => store.updateDevice({ sidebarCollapsed: !sidebarCollapsed }),
+    },
+    {
+      id: "history:back",
+      label: t("后退到上一个位置", "Go to previous position"),
+      shortcut: "Alt+←",
+      disabled: !navigationHistory.getSnapshot().canBack,
+      run: () => navigationHistory.go(-1),
+    },
+    {
+      id: "history:forward",
+      label: t("前进到下一个位置", "Go to next position"),
+      shortcut: "Alt+→",
+      disabled: !navigationHistory.getSnapshot().canForward,
+      run: () => navigationHistory.go(1),
+    },
+    {
+      id: "shortcuts",
+      label: t("键盘快捷键", "Keyboard shortcuts"),
+      keywords: "help keyboard shortcut 帮助 快捷键",
+      run: () => setShortcutsOpen(true),
+    },
+  ];
+  if (desktopAvailable)
+    commandItems.splice(1, 0, {
+      id: "quick-capture",
+      label: t("快速记录（独立窗口）", "Quick capture (floating window)"),
+      shortcut: configuredDesktop.captureShortcut.replace(
+        "CommandOrControl",
+        modifier,
+      ),
+      run: () =>
+        showQuickCapture(undefined, () => flushSync(() => setCapture(false))),
+    });
   return (
     <div
       className={
@@ -490,7 +646,11 @@ function Shell() {
         >
           <Plus size={18} />
           <span>{t("记录新知识", "Capture knowledge")}</span>
-          <kbd>⇧ N</kbd>
+          <kbd>
+            {configuredDesktop.captureShortcut
+              .replace("CommandOrControl", modifier)
+              .replace("Shift", "⇧")}
+          </kbd>
         </button>
         <div className="nav-caption">{t("学习空间", "WORKSPACE")}</div>
         <nav>
@@ -566,11 +726,17 @@ function Shell() {
                   <X size={14} />
                 </button>
               ) : (
-                <kbd>
-                  <Command size={11} /> K
-                </kbd>
+                <kbd>{modifier} K</kbd>
               )}
             </div>
+            <button
+              className="icon command-palette-button"
+              aria-label={t("打开命令面板", "Open command palette")}
+              title={modifier + "+Shift+P"}
+              onClick={() => setCommandsOpen(true)}
+            >
+              <Command size={18} />
+            </button>
             <button
               className="icon mobile-settings"
               aria-label={t("设置", "Settings")}
@@ -686,6 +852,27 @@ function Shell() {
           )}
         </Suspense>
       </main>
+      {commandsOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            commands={commandItems}
+            onClose={() => setCommandsOpen(false)}
+            onError={notify}
+            onSearch={(value) => {
+              setQuery(value);
+              navigate("library");
+            }}
+          />
+        </Suspense>
+      )}
+      {shortcutsOpen && (
+        <Suspense fallback={null}>
+          <KeyboardHelp
+            desktop={desktopAvailable ? configuredDesktop : undefined}
+            onClose={() => setShortcutsOpen(false)}
+          />
+        </Suspense>
+      )}
       {selectedJob && (
         <Suspense fallback={null}>
           <AIJobReview

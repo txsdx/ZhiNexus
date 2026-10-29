@@ -1,4 +1,5 @@
 /** Native desktop event ownership, live DPI observation and safe storage handoff. */
+import { chatDrafts } from "./chat-drafts";
 import { flushSettings } from "./settings";
 import { diagnostics } from "./diagnostics";
 import { invoke } from "@tauri-apps/api/core";
@@ -78,6 +79,7 @@ export async function quitDesktop(update?: UpdateInfo) {
   try {
     await flushSettings();
     await prepareCaptureShutdown();
+    await chatDrafts.freeze();
     await (await import("./ai-jobs")).stopAIJobsForShutdown();
     await diagnostics.flush().catch(() => {});
     await entryWorkspace.init();
@@ -102,6 +104,7 @@ export async function quitDesktop(update?: UpdateInfo) {
     await invoke("quit_desktop");
   } catch (error) {
     await store.resume();
+    chatDrafts.resume();
     await resumeCaptureWindows();
     throw error;
   } finally {
@@ -128,6 +131,7 @@ export async function migrateStorage(plan: MigrationPlan) {
     return;
   try {
     await prepareCaptureShutdown();
+    await chatDrafts.freeze();
     await (await import("./ai-jobs")).stopAIJobsForShutdown();
     await entryWorkspace.init();
     await entryWorkspace.flush();
@@ -135,6 +139,7 @@ export async function migrateStorage(plan: MigrationPlan) {
     await invoke("launch_storage_migration", { id: plan.id });
   } catch (error) {
     await store.resume();
+    chatDrafts.resume();
     await resumeCaptureWindows();
     throw error;
   }

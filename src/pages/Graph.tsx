@@ -1,5 +1,6 @@
 /** Editable knowledge graph using React Flow; relationships and node positions are replicated documents. */
 import { useEffect, useMemo, useState, useRef } from "react";
+import { ActionPicker } from "../components/ActionPicker";
 import { copyText } from "../services/clipboard";
 import { openContextMenu } from "../services/context-menu";
 import { entryColors } from "../core/entry-colors";
@@ -44,6 +45,7 @@ export function Graph({
   const s = useKnowledge(),
     t = useT();
   const [error, setError] = useState("");
+  const [finding, setFinding] = useState(false);
   const [minimap, setMinimap] = useState(false),
     flow = useRef<ReactFlowInstance | null>(null);
   const dragBaseline = useRef<string | undefined>(undefined);
@@ -171,8 +173,53 @@ export function Graph({
       },
     );
   };
+  useEffect(() => {
+    const find = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "f" &&
+        !event.isComposing &&
+        !event.repeat &&
+        !document.querySelector('[role="dialog"]')
+      ) {
+        event.preventDefault();
+        setFinding(true);
+      }
+    };
+    document.addEventListener("keydown", find);
+    return () => document.removeEventListener("keydown", find);
+  }, []);
   return (
     <div className="page graph-page">
+      {finding && (
+        <ActionPicker
+          title={t("查找星图节点", "Find graph node")}
+          placeholder={t("输入词条标题…", "Entry title…")}
+          items={s.entries.map((entry) => ({
+            id: entry.id,
+            label: entry.title,
+            detail: entry.summary,
+          }))}
+          onClose={() => setFinding(false)}
+          onChoose={(item) => {
+            setFinding(false);
+            const node = flow.current?.getNode(item);
+            if (!node) return;
+            setNodes((nodes) =>
+              nodes.map((value) => ({
+                ...value,
+                selected: value.id === item,
+              })),
+            );
+            void flow.current?.fitView({
+              nodes: [node],
+              duration: 0,
+              padding: 0.5,
+            });
+          }}
+        />
+      )}
       {error && <p role="alert">{error}</p>}
       <div className="graph-canvas">
         <ReactFlow
@@ -183,6 +230,10 @@ export function Graph({
             openContextMenu(
               "nativeEvent" in event ? event.nativeEvent : event,
               [
+                {
+                  label: t("查找节点", "Find node"),
+                  run: () => setFinding(true),
+                },
                 {
                   label: t("自动整理布局", "Arrange automatically"),
                   run: arrange,

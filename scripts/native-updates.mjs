@@ -124,6 +124,6 @@ export async function testNativeUpdates({ click, script, waitFor }) {
     /^(?:\d+\.\d+\.\d+\s*→\s*|版本说明\s+|Release notes\s+)\d+\.\d+\.\d+$/,
   );
   console.log(
-    "PASS: native updater reads the published GitHub Release and downloads latest.json through the validated asset API",
+    "PASS: native updater reads the published GitHub Release and downloads latest.json anonymously through validated public Release URLs",
   );
 }

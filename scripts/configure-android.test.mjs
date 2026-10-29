@@ -114,3 +114,19 @@ test("existing safe-area setup also receives the gesture hook, while unknown hoo
     /Unsupported Android WebView hook/,
   );
 });
+
+test("page zoom policy refreshes after resume without replacing existing lifecycle behavior", () => {
+  const original =
+    "class MainActivity : TauriActivity() {\noverride fun onCreate(savedInstanceState: Bundle?) {\nsuper.onCreate(savedInstanceState)\n}\noverride fun onResume() {\nsuper.onResume()\nrefreshOtherPlugin()\n}\n}\n";
+  const result = configureActivity(original);
+  assert.match(
+    result,
+    /super\.onResume\(\)\n    window\.decorView\.post \{ io\.github\.txsdx\.zhinexus\.ui\.PageGestures\.refresh\(window\.decorView\) \}\nrefreshOtherPlugin\(\)/,
+  );
+  assert.equal(configureActivity(result), result);
+  assert.throws(
+    () =>
+      configureActivity(original.replace("super.onResume()", "customResume()")),
+    /Unsupported Android resume hook/,
+  );
+});

@@ -1,5 +1,5 @@
 /** Safe Markdown, KaTeX, strict Mermaid diagrams and verified local attachment rendering. */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useMemo } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -46,12 +46,27 @@ export function Diagram({ code }: { code: string }) {
   );
 }
 /** Resolve only content-addressed images; remote Markdown cannot silently track the reader. */
-export function AssetImage({ src, alt }: { src?: string; alt?: string }) {
+export function AssetImage({
+  src,
+  alt,
+  resolveAsset,
+}: {
+  src?: string;
+  alt?: string;
+  resolveAsset?: (hash: string) => Promise<string>;
+}) {
   const [url, setUrl] = useState("");
   useEffect(() => {
     let live = true,
       current = "";
-    if (src?.startsWith("asset:"))
+    setUrl("");
+    if (src?.startsWith("asset:") && resolveAsset) {
+      void resolveAsset(src.slice(6))
+        .then((value) => {
+          if (live) setUrl(value);
+        })
+        .catch(() => {});
+    } else if (src?.startsWith("asset:"))
       void store.db
         .blob(src.slice(6))
         .then((b) => {
@@ -67,7 +82,7 @@ export function AssetImage({ src, alt }: { src?: string; alt?: string }) {
       live = false;
       if (current) URL.revokeObjectURL(current);
     };
-  }, [src]);
+  }, [src, resolveAsset]);
   return url ? (
     <img src={url} alt={alt ?? ""} />
   ) : (
@@ -75,7 +90,22 @@ export function AssetImage({ src, alt }: { src?: string; alt?: string }) {
   );
 }
 /** Render rich text with raw HTML disabled and allow only explicit safe URL schemes. */
-export function Markdown({ children }: { children: string }) {
+export function Markdown({
+  children,
+  resolveAsset,
+}: {
+  children: string;
+  resolveAsset?: (hash: string) => Promise<string>;
+}) {
+  const Image = useMemo(
+    () =>
+      resolveAsset
+        ? ({ src, alt }: { src?: string; alt?: string }) => (
+            <AssetImage src={src} alt={alt} resolveAsset={resolveAsset} />
+          )
+        : AssetImage,
+    [resolveAsset],
+  );
   return (
     <div className="markdown">
       <ReactMarkdown
@@ -85,7 +115,7 @@ export function Markdown({ children }: { children: string }) {
           url.startsWith("asset:") ? url : defaultUrlTransform(url)
         }
         components={{
-          img: AssetImage,
+          img: Image,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noopener noreferrer">
               {children}

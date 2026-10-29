@@ -1,6 +1,6 @@
 /** Role-aligned messages, rendered Markdown, collapsible tool details and copy controls. */
 import { memo } from "react";
-import { Copy } from "lucide-react";
+import { Copy, Pencil } from "lucide-react";
 import { native } from "../../core/database";
 import type { Message } from "../../core/types";
 import { Markdown } from "../Markdown";
@@ -20,11 +20,13 @@ export const ChatMessage = memo(function ChatMessage({
   results = [],
   streaming = false,
   notify,
+  onReuse,
 }: {
   message: Message;
   results?: Message[];
   streaming?: boolean;
   notify: (message: string) => void;
+  onReuse?: (text: string) => void;
 }) {
   const t = useT();
   return (
@@ -59,6 +61,17 @@ export const ChatMessage = memo(function ChatMessage({
           </details>
         );
       })}
+      {message.role === "user" && onReuse && (
+        <div className="message-actions">
+          <button
+            className="icon"
+            aria-label={t("再次提问", "Ask again")}
+            onClick={() => onReuse(message.content)}
+          >
+            <Pencil size={15} />
+          </button>
+        </div>
+      )}
       {message.role === "assistant" && message.content && (
         <div className="message-actions">
           {streaming && (

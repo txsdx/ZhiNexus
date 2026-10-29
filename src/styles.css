@@ -3643,3 +3643,203 @@ html[data-window="quick-capture"] #root {
 :root[data-theme="dark"] {
   --curve-lightness: 65%;
 }
+
+/* Suppress browser pinch magnification while retaining ordinary panning; diagram canvases own their pointer zoom. */
+html {
+  touch-action: pan-x pan-y;
+}
+/* Invoked commands and keyboard help occupy a bounded dialog; normal workspaces retain their width. */
+.action-picker {
+  width: min(620px, calc(100vw - 24px));
+  padding: 18px;
+}
+.action-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-direction: row;
+  margin: 0 0 12px;
+}
+.action-picker-search input {
+  flex: 1;
+  min-width: 0;
+}
+.action-picker-results {
+  max-height: min(52dvh, 460px);
+  overflow: auto;
+}
+.action-picker-results > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border-color: transparent;
+  background: transparent;
+  padding: 10px 12px;
+}
+.action-picker-results > button[aria-selected="true"] {
+  background: var(--soft);
+  border-color: var(--accent);
+}
+.action-picker-results > button > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+.action-picker-results small {
+  color: var(--text);
+}
+.action-picker-results kbd {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow-wrap: anywhere;
+}
+.keyboard-help th {
+  font-weight: 500;
+  text-align: left;
+}
+.keyboard-help td {
+  text-align: right;
+}
+.keyboard-help td,
+.keyboard-help th {
+  padding: 10px 6px;
+  overflow-wrap: anywhere;
+}
+.command-palette-button {
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .action-picker-results > button {
+    min-height: 44px;
+  }
+  .keyboard-help {
+    padding: 18px;
+  }
+  .keyboard-help table {
+    font-size: 0.85rem;
+  }
+  .search-box {
+    min-width: 0;
+  }
+  .search-box input {
+    min-width: 0;
+  }
+}
+.capture-markdown-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  padding: 2px 0;
+}
+.capture-markdown-tools button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.capture-markdown-tools .capture-preview-toggle {
+  margin-left: auto;
+  font-weight: 500;
+}
+.capture-material > label {
+  margin: 0;
+}
+.capture-markdown-preview {
+  flex: 1;
+  min-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+.capture-markdown-preview .markdown > :first-child {
+  margin-top: 0;
+}
+.capture-markdown-preview .markdown img {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 600px) {
+  .capture-markdown-tools button {
+    min-height: 40px;
+  }
+}
+/* Bounded queue controls and compact selection retain the original four knowledge columns. */
+.task-filters,
+.knowledge-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.task-filters input {
+  flex: 1;
+  min-width: 160px;
+}
+.task-filters select {
+  width: auto;
+  max-width: 100%;
+}
+.knowledge-selection-bar {
+  border-bottom: 1px solid var(--border);
+}
+.knowledge-selection-bar label {
+  margin: 0;
+}
+.knowledge-selection-bar .category-picker {
+  min-width: 0;
+  flex: 0 1 300px;
+}
+.entry-select-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.entry-select-title input {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  cursor: pointer;
+}
+.entry-select-title button {
+  min-width: 0;
+}
+.recall-rating .rating-interval {
+  font-weight: 600;
+}
+.chat-thread-header h1 {
+  flex: 1;
+  min-width: 0;
+}
+.message.user .message-actions {
+  justify-content: flex-end;
+}
+@media (max-width: 600px) {
+  .task-filters input {
+    width: 100%;
+  }
+  .knowledge-selection-bar button {
+    min-height: 40px;
+  }
+}
+
+/* The actual configured shortcut stays compact enough to keep the capture title on one line. */
+.capture-button span {
+  white-space: nowrap;
+}
+.capture-button kbd {
+  font-size: 11px;
+  padding: 0;
+  white-space: nowrap;
+}

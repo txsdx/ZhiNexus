@@ -1,4 +1,4 @@
-# Artifact-only completion: the unchanged application and all three original packages are pinned and verified; no compilation.
+# One manual entry: compile the web assets once, then package and test every native target in parallel.
 name: Build and release
 on:
   workflow_dispatch:
@@ -13,94 +13,281 @@ on:
         default: true
 permissions:
   contents: read
-  actions: read
 jobs:
-  desktop:
-    runs-on: windows-latest
+  frontend:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Verify only the test harness changed and check protocol boundaries
+      - run: npm test
+      - run: npm run test:release
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser regressions before building
+        run: CHROMIUM_PATH=$(find "$HOME/.cache/ms-playwright" -type f -path '*/chrome-linux*/chrome' | head -1) npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: test-results/
+      - run: npm run build
+      - name: Seal shared frontend
+        run: node scripts/frontend-artifact.mjs create
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shared-frontend
+          include-hidden-files: true
+          path: dist/
+          retention-days: 7
+  desktop:
+    needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+          - platform: ubuntu
+            os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        if: runner.os == 'Windows'
+        with:
+          path: |
+            ~/AppData/Local/tauri
+            ~/AppData/Local/tauri-cli
+          key: tauri-bundlers-${{ runner.os }}-v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-all-crates: true
+          cache-on-failure: true
+          shared-key: desktop-${{ matrix.platform == 'windows' && 'windows-x64' || 'ubuntu-24.04-x64' }}
+      - if: runner.os == 'Linux'
+        name: Install Ubuntu native dependencies
         run: |
-          git diff --exit-code d96b75926788060ddbe99275ee9106ca4d29b588 HEAD -- src src-tauri package.json package-lock.json versions.json
-          if ($LASTEXITCODE -ne 0) { throw 'Application source changed: reusing the original binary is forbidden' }
-          node --test scripts/native-driver.test.mjs
-          if ($LASTEXITCODE -ne 0) { throw 'WebDriver protocol regressions failed' }
+          # Hosted images can use an indirect mirror+file URI, not a literal Azure URL.
+          sudo sed -E -i 's|mirror\+file:/etc/apt/apt-mirrors(-security)?\.txt|https://archive.ubuntu.com/ubuntu|g; s|https?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          grep '^URIs:' /etc/apt/sources.list.d/ubuntu.sources
+          if grep -Eq '^URIs:.*(mirror\+file|azure\.archive)' /etc/apt/sources.list.d/ubuntu.sources; then
+            echo 'Ubuntu mirror pinning did not match the runner image; inspect its source template.' >&2
+            exit 1
+          fi
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=30 install --no-install-recommends -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libpipewire-0.3-dev libgbm-dev libxcb-randr0-dev libclang-dev
+      - run: npm ci
       - uses: actions/download-artifact@v4
         with:
-          name: ZhiNexus-windows-x64
-          run-id: 40915600674
-          github-token: ${{ github.token }}
-          path: downloaded
-      - name: Verify and stage the original Windows executable without compiling
-        shell: pwsh
+          name: shared-frontend
+          path: dist
+      - name: Verify and use shared frontend
+        run: node scripts/frontend-artifact.mjs use
+      - run: node scripts/versions.mjs prepare ${{ matrix.platform }}
+      - name: Configure optional updater signing
+        id: metadata
+        env:
+          UPDATER_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          BUILD_PLATFORM: ${{ matrix.platform }}
+        run: node scripts/release-config.mjs
+      - name: Check native update boundaries before packaging
+        if: runner.os == 'Linux'
         run: |
-          $captureExe = @(Get-ChildItem downloaded -Recurse -File -Filter 'ZhiNexus_windows_x64_0.21.0_protable.exe')
-          if ($captureExe.Count -ne 1) { throw 'Expected exactly one original Windows executable' }
-          if ((Get-FileHash $captureExe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'dd8969a06438144462a6072bab6d2efc3ed5f03c0cdfcd00cce47819d50faa1e') { throw 'Original Windows executable digest mismatch' }
-          New-Item -ItemType Directory -Force release-files | Out-Null
-          Copy-Item $captureExe[0].FullName release-files/ZhiNexus_windows_x64_0.21.0_protable.exe
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib github_release::tests
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib updates::tests
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib executable_update::tests
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib quick_capture::tests
+      - name: Check Windows file replacement before building
+        if: runner.os == 'Windows'
+        run: |
+          cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib executable_update::tests
+          cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib paths::tests
+          cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib quick_capture::tests
+          cargo test --profile release-windows --locked --manifest-path src-tauri/Cargo.toml --lib github_release::tests
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: ${{ matrix.platform == 'windows' && '--no-bundle -- --profile release-windows' || '--bundles deb' }}
+      - name: Package the single Windows executable without recompiling
+        if: runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: pwsh
+        run: ./scripts/package-portable.ps1
       - name: Prepare Windows native UI driver
+        if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/start-windows-driver.ps1
-      - name: Windows 实包复验（窗口、存储、更新）
+      - name: Windows 实包验收（窗口、存储、更新）
+        if: runner.os == 'Windows'
         env:
-          TAURI_APPLICATION: release-files/ZhiNexus_windows_x64_0.21.0_protable.exe
+          TAURI_APPLICATION: ${{ env.WINDOWS_SINGLE_EXE }}
         run: node scripts/native-smoke.mjs
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && runner.os == 'Windows'
         with:
-          name: Windows-native-test-results
+          name: ${{ runner.os }}-native-test-results
           path: |
             native-test-results/
             ${{ runner.temp }}/tauri-driver.log
             ${{ runner.temp }}/tauri-driver.err.log
+      - name: Sign Ubuntu DEB when a publisher key is configured
+        if: runner.os == 'Linux'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.metadata.outputs.signing == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/sign-release-files.mjs src-tauri/target/release/bundle/deb
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ZhiNexus-${{ matrix.platform == 'windows' && 'windows-x64' || 'ubuntu-24.04-x64' }}
+          path: |
+            release-files/*.exe
+            release-files/*.sig
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.sig
+  android:
+    needs: frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Reserve space for the Android release build
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift /opt/hostedtoolcache/CodeQL
+          if [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME/ndk" ]; then
+            for ndk_dir in "$ANDROID_HOME"/ndk/*; do
+              if [ -d "$ndk_dir" ] && [ "${ndk_dir##*/}" != '27.2.12479018' ]; then
+                sudo rm -rf -- "$ndk_dir"
+              fi
+            done
+          fi
+          df -h /
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - name: Prepare writable NDK cache
+        run: |
+          echo "ANDROID_CACHE_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          if [ -d "$ANDROID_HOME/ndk/27.2.12479018" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME/ndk/27.2.12479018"
+          fi
+      - uses: actions/cache/restore@v4
+        id: sdk-cache
+        with:
+          path: |
+            ~/.android/cache
+            ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
+          # Avoid restoring the runner's root-owned SDK or the old full-SDK cache.
+          key: android-ndk-${{ runner.os }}-27.2.12479018-v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-all-crates: true
+          cache-on-failure: true
+          shared-key: android-aarch64
+      - name: Prepare SDK and NDK
+        run: |
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: shared-frontend
+          path: dist
+      - name: Verify and use shared frontend
+        run: node scripts/frontend-artifact.mjs use
+      - run: node scripts/versions.mjs prepare android
+      - name: Configure optional publisher signatures
+        env:
+          BUILD_PLATFORM: android
+          UPDATER_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: node scripts/release-config.mjs
+      - run: npm run tauri -- android init --ci
+      - name: Align minimum Android version and detect template SDK
+        id: project
+        run: node scripts/configure-android.mjs
+      - name: Install the SDK required by the current Tauri template
+        id: sdk-template
+        run: sdkmanager "${{ steps.project.outputs.platform_package }}" "build-tools;${{ steps.project.outputs.compile_sdk }}.0.0"
+      - run: npm run tauri -- android build --apk --target aarch64
+      - name: Sign installable APK (custom release key optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash scripts/android-sign.sh
+      - name: Sign APK update metadata when a publisher key exists
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/sign-release-files.mjs release-files
+      - uses: actions/cache/save@v4
+        if: always() && steps.sdk-template.outcome == 'success' && steps.sdk-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.android/cache
+            ${{ env.ANDROID_CACHE_ROOT }}/ndk/27.2.12479018
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ZhiNexus-Android
+          path: |
+            release-files/*.apk
+            release-files/*.sig
   publish:
-    needs: desktop
+    needs: [desktop, android]
     if: inputs.create_release
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      actions: read
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v4
         with:
           pattern: ZhiNexus-*
-          run-id: 40915600674
-          github-token: ${{ github.token }}
           merge-multiple: true
           path: release-artifacts
-      - name: Verify all three original package bytes
-        run: |
-          node --input-type=module <<'JS'
-          import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
-          const expected={'ZhiNexus_windows_x64_0.21.0_protable.exe':'dd8969a06438144462a6072bab6d2efc3ed5f03c0cdfcd00cce47819d50faa1e','ZhiNexus_0.21.0_amd64.deb':'00bfc7a4329946c3416726fc6f145d9d9aa29b11e289872821821c9ab4bdbcb4','ZhiNexus_android_arm64_0.21.0_development.apk':'e66d6c5aaaf99cc90ae38ab5155b124aa35511cb7ffa70710a05540e48a95773'};
-          const files=fs.readdirSync('release-artifacts',{recursive:true});
-          for(const[name,hash]of Object.entries(expected)){const matches=files.filter(f=>path.basename(f)===name);if(matches.length!==1)throw Error('Missing or repeated original package');const bytes=fs.readFileSync(path.join('release-artifacts',matches[0]));if(createHash('sha256').update(bytes).digest('hex')!==hash)throw Error('Original package digest mismatch');console.log('Verified original package:',name);}
-          JS
-      - name: Verify the existing application tag and draft
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node --input-type=module <<'JS'
-          import {execFileSync} from 'node:child_process';
-          const read=(p)=>JSON.parse(execFileSync('gh',['api','repos/txsdx/ZhiNexus/'+p],{encoding:'utf8'}));
-          if(read('git/ref/tags/v0.21.0').object.sha!=='d96b75926788060ddbe99275ee9106ca4d29b588')throw Error('Application tag mismatch');
-          const release=read('releases/428144187');if(release.tag_name!=='v0.21.0'||!release.draft||release.target_commitish!=='d96b75926788060ddbe99275ee9106ca4d29b588')throw Error('Original draft mismatch');
-          JS
+      - name: Preserve metadata for unchanged platforms
+        run: curl --fail --silent --show-error --location 'https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json' -o previous-latest.json || rm -f previous-latest.json
       - name: Build platform-specific update manifest
         run: node scripts/updater-manifest.mjs release-artifacts
-      - name: Upload verified packages to the existing draft
+      - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_DRAFT: ${{ inputs.draft }}

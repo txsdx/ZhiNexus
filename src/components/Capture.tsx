@@ -1,10 +1,16 @@
 /** Shared durable capture editor: paste/drop media, import documents and save raw material before AI enrichment. */
+import { formatMarkdown, type MarkdownAction } from "../core/markdown-edit";
+import { editTextarea } from "../services/textarea-edit";
 import {
   forwardRef,
   useEffect,
   useImperativeHandle,
   useRef,
   useState,
+  useCallback,
+  useId,
+  lazy,
+  Suspense,
   useSyncExternalStore,
 } from "react";
 import {
@@ -101,12 +107,16 @@ function DraftImage({
     </div>
   );
 }
+const CaptureMarkdown = lazy(() =>
+  import("./Markdown").then((module) => ({ default: module.Markdown })),
+);
 /** Keep input local and editable during asynchronous work; only explicit submit promotes staged media into knowledge. */
 export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
   function CaptureEditor(
     { client, seed, context, onClose, onOpen, onSaved },
     ref,
   ) {
+    const materialId = useId();
     const t = useT(),
       [session] = useState(() => new CaptureSession(client, seed));
     const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -114,6 +124,7 @@ export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
       [frozen, setFrozen] = useState(false),
       [saving, setSaving] = useState(false),
       [closing, setClosing] = useState(false),
+      [preview, setPreview] = useState(false),
       [importing, setImporting] = useState(0),
       [dragging, setDragging] = useState(false),
       [warnings, setWarnings] = useState<string[]>([]),
@@ -127,6 +138,42 @@ export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
       closePending = useRef(false),
       blocked = useRef(false),
       alive = useRef(true);
+    const resolvePreview = useCallback(
+      (hash: string) =>
+        client.request<string>({
+          type: "preview",
+          draftId: session.getSnapshot().draft!.id,
+          hash,
+        }),
+      [client, session],
+    );
+    const format = (action: MarkdownAction) => {
+      const field = text.current,
+        current = session.getSnapshot().draft;
+      if (
+        !field ||
+        !current ||
+        blocked.current ||
+        submitting.current ||
+        closePending.current ||
+        preview
+      )
+        return;
+      try {
+        const edit = formatMarkdown(
+          current.content,
+          field.selectionStart,
+          field.selectionEnd,
+          action,
+          t("文字", "text"),
+        );
+        editTextarea(field, current.content, edit);
+        if (session.getSnapshot().draft?.content !== edit.value)
+          session.patch({ content: edit.value });
+      } catch (error) {
+        setError(String(error instanceof Error ? error.message : error));
+      }
+    };
     const confirmation = useConfirmation(setError, {
       title: t("清空草稿", "Clear draft"),
       confirmLabel: t("清空", "Clear"),
@@ -268,6 +315,7 @@ export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
       try {
         await flush();
         const result = await session.submit();
+        if (result.created) setPreview(false);
         setWarnings([]);
         await onSaved(result);
         if (result.created) requestAnimationFrame(() => title.current?.focus());
@@ -314,6 +362,18 @@ export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
             void submit();
           }}
           onKeyDown={(event) => {
+            if (
+              event.target === text.current &&
+              !event.nativeEvent.isComposing &&
+              (event.ctrlKey || event.metaKey) &&
+              !event.altKey &&
+              ["b", "i"].includes(event.key.toLowerCase())
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              format(event.key.toLowerCase() === "b" ? "bold" : "italic");
+              return;
+            }
             if (
               event.key === "Enter" &&
               (event.nativeEvent.isComposing ||
@@ -431,28 +491,84 @@ export const CaptureEditor = forwardRef<CaptureHandle, EditorProps>(
                 disabled={disabled}
               />
             </label>
-            <label className="capture-material">
-              {t(
-                "随手记下的理解或原始材料（可选）",
-                "Your understanding or source material (optional)",
-              )}
-              <textarea
-                ref={text}
-                rows={10}
-                disabled={disabled}
-                value={draft.content}
-                onChange={(event) =>
-                  !blocked.current &&
-                  !closePending.current &&
-                  !submitting.current &&
-                  session.patch({ content: event.target.value })
-                }
-                placeholder={t(
-                  "支持 Markdown；可粘贴图片，或拖入图片、MD、DOCX 文件。",
-                  "Markdown supported. Paste images or drop images, MD and DOCX files.",
+            <div className="capture-material">
+              <label htmlFor={materialId}>
+                {t(
+                  "随手记下的理解或原始材料（可选）",
+                  "Your understanding or source material (optional)",
                 )}
-              />
-            </label>
+              </label>
+              <div
+                className="capture-markdown-tools"
+                role="toolbar"
+                aria-label={t("Markdown 格式", "Markdown formatting")}
+              >
+                {(
+                  [
+                    ["bold", t("加粗", "Bold"), "B"],
+                    ["italic", t("斜体", "Italic"), "I"],
+                    ["heading", t("二级标题", "Heading 2"), "H2"],
+                    ["list", t("无序列表", "Bullet list"), "•"],
+                    ["code", t("代码块", "Code block"), "</>"],
+                    ["link", t("链接", "Link"), "↗"],
+                  ] as const
+                ).map(([action, label, symbol]) => (
+                  <button
+                    key={action}
+                    type="button"
+                    disabled={disabled || preview}
+                    aria-label={label}
+                    title={label}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => format(action)}
+                  >
+                    {symbol}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="capture-preview-toggle"
+                  aria-pressed={preview}
+                  disabled={disabled}
+                  onClick={() => setPreview((value) => !value)}
+                >
+                  {preview ? t("编辑", "Edit") : t("预览", "Preview")}
+                </button>
+              </div>
+              {preview ? (
+                <div
+                  className="capture-markdown-preview"
+                  aria-label={t("正文预览", "Content preview")}
+                  tabIndex={0}
+                >
+                  <Suspense
+                    fallback={<p>{t("正在打开预览…", "Opening preview…")}</p>}
+                  >
+                    <CaptureMarkdown resolveAsset={resolvePreview}>
+                      {draft.content || t("（空正文）", "(Empty content)")}
+                    </CaptureMarkdown>
+                  </Suspense>
+                </div>
+              ) : (
+                <textarea
+                  ref={text}
+                  id={materialId}
+                  rows={10}
+                  disabled={disabled}
+                  value={draft.content}
+                  onChange={(event) =>
+                    !blocked.current &&
+                    !closePending.current &&
+                    !submitting.current &&
+                    session.patch({ content: event.target.value })
+                  }
+                  placeholder={t(
+                    "支持 Markdown；可粘贴图片，或拖入图片、MD、DOCX 文件。",
+                    "Markdown supported. Paste images or drop images, MD and DOCX files.",
+                  )}
+                />
+              )}
+            </div>
             {!!hashes.length && (
               <div
                 className="capture-images"

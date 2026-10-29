@@ -41,6 +41,26 @@ export function configureActivity(text) {
 ` +
       text.slice(end);
   }
+  const resumeCall =
+    "io.github.txsdx.zhinexus.ui.PageGestures.refresh(window.decorView)";
+  if (!text.includes(resumeCall)) {
+    const refresh = `    window.decorView.post { ${resumeCall} }`;
+    if (/fun\s+onResume\s*\(/.test(text)) {
+      if ((text.match(/super\.onResume\(\)/g) ?? []).length !== 1)
+        throw Error("Unsupported Android resume hook; review gesture refresh");
+      text = text.replace("super.onResume()", "super.onResume()\n" + refresh);
+    } else {
+      const end = text.lastIndexOf("}");
+      text =
+        text.slice(0, end) +
+        `  override fun onResume() {
+    super.onResume()
+${refresh}
+  }
+` +
+        text.slice(end);
+    }
+  }
   return text;
 }
 /** Replace generated template launcher resources and bind normal/round icons to the committed application artwork. */

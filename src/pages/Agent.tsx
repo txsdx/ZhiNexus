@@ -1,6 +1,18 @@
 /** Full-height conversations with durable streamed tasks, editable titles and an anchored composer. */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ArrowDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { chatDraftKey } from "../core/chat-drafts";
+import { chatDrafts } from "../services/chat-drafts";
+import { saveMarkdown } from "../services/export-text";
+import { conversationMarkdown } from "../core/conversation-export";
+import { Download } from "lucide-react";
 import { diagnostics } from "../services/diagnostics";
 import { useKnowledge, useT, Busy } from "../components/common";
 import { store } from "../core/store";
@@ -40,11 +52,7 @@ export function Agent({
     [s.topics, entryId],
   );
   const [selected, setSelected] = useState(initialTopic),
-    [text, setText] = useState(""),
-    [selectedQuote, setSelectedQuote] = useState(quote),
     [busy, setBusy] = useState(false);
-  const [model, setModel] = useState(s.ai.tasks.agent.model),
-    [effort, setEffort] = useState(s.ai.tasks.agent.effort);
   const [showTopics, setShowTopics] = useState(
     () => !embedded && window.matchMedia("(min-width: 900px)").matches,
   );
@@ -53,7 +61,6 @@ export function Agent({
   const submitting = useRef(false),
     navigation = useRef(0),
     selectedRef = useRef(topic?.id ?? ""),
-    drafts = useRef(new Map<string, { text: string; quote: string }>()),
     notifyRef = useRef(notify);
   selectedRef.current = topic?.id ?? "";
   notifyRef.current = notify;
@@ -88,30 +95,60 @@ export function Agent({
     () => topic?.messages.filter((m) => m.role === "tool") ?? [],
     [topic?.messages],
   );
+  const draftState = useSyncExternalStore(
+      chatDrafts.subscribe,
+      chatDrafts.getSnapshot,
+    ),
+    key = chatDraftKey(entryId, topic?.id ?? ""),
+    defaults = {
+      text: "",
+      quote: "",
+      model: s.ai.tasks.agent.model,
+      effort: s.ai.tasks.agent.effort,
+    },
+    draft = draftState.drafts[key] ?? defaults,
+    { text, quote: selectedQuote, model, effort } = draft;
+  const root = useRef<HTMLDivElement>(null);
+  const editDraft = (patch: Partial<typeof draft>) => {
+    try {
+      chatDrafts.patch(key, patch, defaults);
+    } catch (error) {
+      feedback(String(error));
+    }
+  };
   const choose = (id: string) => {
     if (id === topic?.id) return;
     navigation.current++;
-    drafts.current.set(topic?.id ?? "", { text, quote: selectedQuote });
-    const draft = drafts.current.get(id);
-    setText(draft?.text ?? "");
-    setSelectedQuote(draft?.quote ?? "");
     selectedRef.current = id;
     setSelected(id);
     if (!window.matchMedia("(min-width: 900px)").matches) setShowTopics(false);
   };
   useEffect(() => {
+    void chatDrafts.init().catch((error) => feedback(String(error)));
+    const flush = () => {
+      if (document.visibilityState === "hidden")
+        void chatDrafts.flush().catch((error) => feedback(String(error)));
+    };
+    document.addEventListener("visibilitychange", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      void chatDrafts.flush().catch((error) => feedback(String(error)));
+    };
+  }, []);
+  useEffect(() => {
     if (initialTopic && initialTopic !== selectedRef.current)
       choose(initialTopic);
   }, [initialTopic]);
+  const quoteApplied = useRef("");
   useEffect(() => {
-    if (quote) {
-      setSelectedQuote(quote);
-      setText(
-        (previous) =>
-          previous || t("请解释这段内容。", "Please explain this passage."),
-      );
+    if (quote && draftState.ready && quoteApplied.current !== quote) {
+      quoteApplied.current = quote;
+      editDraft({
+        quote,
+        text: text || t("请解释这段内容。", "Please explain this passage."),
+      });
     }
-  }, [quote]);
+  }, [quote, draftState.ready]);
   useEffect(() => {
     const media = window.matchMedia("(min-width: 900px)"),
       change = () => setShowTopics(media.matches);
@@ -141,7 +178,14 @@ export function Agent({
     }
   };
   const send = async () => {
-    if (!text.trim() || submitting.current || jobs.readOnly) return;
+    if (
+      !text.trim() ||
+      submitting.current ||
+      jobs.readOnly ||
+      !draftState.ready ||
+      draftState.frozen
+    )
+      return;
     submitting.current = true;
     setBusy(true);
     const input = text,
@@ -160,7 +204,7 @@ export function Agent({
           messages: [],
           updatedAt: new Date().toISOString(),
         });
-        drafts.current.set(id, { text: input, quote: passage });
+        chatDrafts.transfer(key, chatDraftKey(entryId, id));
         choose(id);
         current = store.getSnapshot().topics.find((x) => x.id === id)!;
       } else if (
@@ -188,14 +232,8 @@ export function Agent({
         },
         false,
       );
-      const saved = drafts.current.get(current.id);
-      if (saved?.text === input)
-        drafts.current.set(current.id, { text: "", quote: "" });
-      if (selectedRef.current === current.id) {
-        setText((value) => (value === input ? "" : value));
-        setSelectedQuote((value) => (value === passage ? "" : value));
-        scroll.bottom();
-      }
+      chatDrafts.clearSent(chatDraftKey(entryId, current.id), input, passage);
+      if (selectedRef.current === current.id) scroll.bottom();
     } catch (error) {
       diagnostics.error(
         "ai",
@@ -213,7 +251,10 @@ export function Agent({
     if (awaitingApproval) openAIJob(awaitingApproval.id);
   }, [awaitingApproval?.id, awaitingApproval?.state]);
   return (
-    <div className={"page chat-page" + (embedded ? " embedded-chat" : "")}>
+    <div
+      ref={root}
+      className={"page chat-page" + (embedded ? " embedded-chat" : "")}
+    >
       <div className={"chat-shell" + (showTopics ? " topics-visible" : "")}>
         {showTopics && (
           <>
@@ -225,7 +266,9 @@ export function Agent({
             <ConversationList
               topics={topics}
               selected={topic?.id}
-              busy={busy || jobs.readOnly}
+              busy={
+                busy || jobs.readOnly || !draftState.ready || draftState.frozen
+              }
               onNew={() => void create()}
               onClose={() => setShowTopics(false)}
               onSelect={choose}
@@ -237,7 +280,7 @@ export function Agent({
                     const wasActive = selectedRef.current === value.id,
                       version = navigation.current;
                     await store.patch("topic", value.id, { deleted: true });
-                    drafts.current.delete(value.id);
+                    chatDrafts.remove(chatDraftKey(entryId, value.id));
                     if (!wasActive || navigation.current !== version) return;
                     const next = store
                       .getSnapshot()
@@ -245,9 +288,6 @@ export function Agent({
                       .sort((a, b) =>
                         b.updatedAt.localeCompare(a.updatedAt),
                       )[0];
-                    const draft = drafts.current.get(next?.id ?? "");
-                    setText(draft?.text ?? "");
-                    setSelectedQuote(draft?.quote ?? "");
                     selectedRef.current = next?.id ?? "";
                     setSelected(next?.id ?? "");
                   },
@@ -277,6 +317,23 @@ export function Agent({
               )}
             </button>
             <h1>{topic?.title ?? t("新对话", "New conversation")}</h1>
+            <button
+              className="icon"
+              aria-label={t(
+                "导出对话 Markdown",
+                "Export conversation Markdown",
+              )}
+              disabled={!topic?.messages.length}
+              onClick={() => {
+                if (topic)
+                  void saveMarkdown(
+                    topic.title,
+                    conversationMarkdown(topic, relevant),
+                  ).catch((error) => feedback(String(error)));
+              }}
+            >
+              <Download size={17} />
+            </button>
             {entry &&
               (onOpenEntry ? (
                 <button
@@ -311,6 +368,16 @@ export function Agent({
                       message={message}
                       results={toolResults}
                       notify={feedback}
+                      onReuse={(value) => {
+                        editDraft({
+                          text: text ? text + "\n\n" + value : value,
+                        });
+                        root.current
+                          ?.querySelector<HTMLTextAreaElement>(
+                            ".chat-input textarea",
+                          )
+                          ?.focus();
+                      }}
                     />
                   ))}
                 {relevant
@@ -425,18 +492,32 @@ export function Agent({
               </button>
             )}
           </div>
+          {draftState.error && (
+            <p className="warning" role="alert">
+              {draftState.error}
+              <button
+                onClick={() =>
+                  void (
+                    draftState.ready ? chatDrafts.flush() : chatDrafts.init()
+                  ).catch((error) => feedback(String(error)))
+                }
+              >
+                {t("重试保存草稿", "Retry draft save")}
+              </button>
+            </p>
+          )}
           <ChatComposer
             text={text}
-            onText={setText}
+            onText={(text) => editDraft({ text })}
             quote={selectedQuote}
-            onRemoveQuote={() => setSelectedQuote("")}
+            onRemoveQuote={() => editDraft({ quote: "" })}
             model={model}
-            onModel={setModel}
+            onModel={(model) => editDraft({ model })}
             effort={effort}
-            onEffort={setEffort}
+            onEffort={(effort) => editDraft({ effort })}
             ai={s.ai}
             busy={busy}
-            readOnly={jobs.readOnly}
+            readOnly={jobs.readOnly || !draftState.ready || draftState.frozen}
             active={!!active}
             onSend={() => void send()}
             onStop={() => {

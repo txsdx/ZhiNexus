@@ -81,6 +81,16 @@ export function AITaskCenter({
   const state = useAIJobs(),
     labels = useStateLabel(),
     t = useT();
+  const [filter, setFilter] = useState("all"),
+    [query, setQuery] = useState("");
+  const matches = (job: AIJob) =>
+    (filter === "all" || job.state === filter) &&
+    [job.title, job.error, job.target.entryId]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(query.toLocaleLowerCase().trim());
+  const visible = state.jobs.filter(matches);
   const confirmation = useConfirmation(notify, {
     title: t("确认移除任务", "Confirm task removal"),
     confirmLabel: t("移除任务", "Remove task"),
@@ -120,11 +130,40 @@ export function AITaskCenter({
         {t("本设备 AI 并发上限", "AI concurrency on this device")}:{" "}
         {aiJobs.limiter.counts.limit}
       </p>
+      <div className="task-filters">
+        <input
+          type="search"
+          aria-label={t("搜索任务", "Search tasks")}
+          placeholder={t("搜索任务…", "Search tasks…")}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+          aria-label={t("任务状态", "Task status")}
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        >
+          <option value="all">
+            {t("全部", "All")} ({state.jobs.length})
+          </option>
+          {Object.entries(labels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label} ({state.jobs.filter((job) => job.state === value).length})
+            </option>
+          ))}
+        </select>
+        <span role="status">
+          {visible.length}/{state.jobs.length}
+        </span>
+      </div>
+      {state.jobs.length > 0 && !visible.length && (
+        <p>{t("没有匹配任务", "No matching tasks")}</p>
+      )}
       {!state.jobs.length && (
         <p>{t("暂无待处理任务。", "No pending tasks.")}</p>
       )}
       <div className="ai-job-list">
-        {state.jobs.map((job) => (
+        {visible.map((job) => (
           <article
             className="ai-job-card"
             data-ai-job={job.id}

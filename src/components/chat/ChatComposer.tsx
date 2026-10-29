@@ -71,6 +71,7 @@ export function ChatComposer({
       )}
       <textarea
         ref={field}
+        readOnly={readOnly}
         rows={2}
         aria-label={t("消息", "Message")}
         placeholder={t("输入消息…", "Message…")}
@@ -92,6 +93,7 @@ export function ChatComposer({
         <div className="chat-model">
           <Bot size={16} />
           <select
+            disabled={readOnly}
             aria-label="Chat model"
             value={model}
             onChange={(e) => onModel(e.target.value)}
@@ -110,6 +112,7 @@ export function ChatComposer({
             ))}
           </select>
           <select
+            disabled={readOnly}
             aria-label="Reasoning effort"
             value={effort}
             onChange={(e) => onEffort(e.target.value)}

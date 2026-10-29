@@ -69,6 +69,32 @@ export function Review({
         nextReviewAt(a, targetRetention).getTime() -
         nextReviewAt(b, targetRetention).getTime(),
     );
+  useEffect(() => {
+    const rate = (event: KeyboardEvent) => {
+      if (
+        session?.phase !== "graded" ||
+        busy ||
+        active ||
+        event.isComposing ||
+        event.repeat ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey ||
+        document.querySelector('[role="dialog"]') ||
+        (event.target as HTMLElement)?.closest(
+          'input,textarea,select,[contenteditable="true"]',
+        )
+      )
+        return;
+      if (/^[1-4]$/.test(event.key)) {
+        event.preventDefault();
+        setRatingOverride(Number(event.key) as 1 | 2 | 3 | 4);
+      }
+    };
+    document.addEventListener("keydown", rate);
+    return () => document.removeEventListener("keydown", rate);
+  }, [session?.phase, busy, active]);
   const act = async (label: string, work: () => Promise<void>) => {
     if (working.current) return;
     working.current = true;
@@ -416,6 +442,34 @@ export function Review({
                         ["忘记", "困难", "记得", "轻松"][index],
                         ["Again", "Hard", "Good", "Easy"][index],
                       )}
+                      <small className="rating-interval">
+                        {(() => {
+                          const next = schedule(
+                            entry!.card,
+                            session.grade!.score,
+                            now,
+                            targetRetention,
+                            rating,
+                          ).due;
+                          const minutes = Math.max(
+                            1,
+                            Math.round(
+                              (next.getTime() - now.getTime()) / 60000,
+                            ),
+                          );
+                          return minutes < 60
+                            ? t(`${minutes}分钟`, `${minutes} min`)
+                            : minutes < 1440
+                              ? t(
+                                  `${Math.round(minutes / 60)}小时`,
+                                  `${Math.round(minutes / 60)} h`,
+                                )
+                              : t(
+                                  `${Math.round(minutes / 1440)}天`,
+                                  `${Math.round(minutes / 1440)} d`,
+                                );
+                        })()}
+                      </small>
                       {rating === suggestedRating(session.grade!.score) && (
                         <small>{t("AI建议", "AI suggestion")}</small>
                       )}

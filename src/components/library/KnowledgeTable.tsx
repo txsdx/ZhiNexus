@@ -1,3 +1,9 @@
+import { CategoryPicker } from "../CategoryPicker";
+import { useConfirmation } from "../../hooks/useConfirmation";
+import {
+  entrySelectionSnapshot,
+  changeEntrySelection,
+} from "../../services/entry-selection";
 import { useKnowledge } from "../common";
 import { reviewTarget, nextReviewAt } from "../../core/review-policy";
 /** Dense, keyboard-accessible taxonomy table with real memory estimates and per-column sorting. */
@@ -25,6 +31,23 @@ export function KnowledgeTable({
   onOpen: (id: string) => void;
   compact?: boolean;
 }) {
+  const [selecting, setSelecting] = useState(false),
+    [selectedIds, setSelectedIds] = useState<string[]>([]),
+    [selectionError, setSelectionError] = useState(""),
+    [changing, setChanging] = useState(false);
+  const deletion = useConfirmation(setSelectionError);
+  const selected = selectedIds.filter((id) =>
+    entries.some((entry) => entry.id === id),
+  );
+  const moveBaseline = useMemo(
+    () => entrySelectionSnapshot(selected),
+    [selected.join("\0")],
+  );
+  useEffect(() => {
+    setSelectedIds((ids) =>
+      ids.filter((id) => entries.some((entry) => entry.id === id)),
+    );
+  }, [entries]);
   const targetRetention = reviewTarget(useKnowledge().docs);
   const scroller = useRef<HTMLDivElement>(null),
     [horizontalOverflow, setHorizontalOverflow] = useState(false);
@@ -100,7 +123,12 @@ export function KnowledgeTable({
         tabIndex={0}
         onClick={() => onOpen(e.id)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") {
+          if (
+            event.key === "Enter" &&
+            event.target === event.currentTarget &&
+            !event.nativeEvent.isComposing &&
+            !event.repeat
+          ) {
             event.preventDefault();
             onOpen(e.id);
           }
@@ -110,14 +138,32 @@ export function KnowledgeTable({
           className="entry-title-cell"
           style={{ paddingInlineStart: 16 + depth * 18 }}
         >
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpen(e.id);
-            }}
-          >
-            {e.title}
-          </button>
+          <div className="entry-select-title">
+            {!compact && selecting && (
+              <input
+                type="checkbox"
+                aria-label={t("选择 ", "Select ") + e.title}
+                checked={selected.includes(e.id)}
+                disabled={changing}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) =>
+                  setSelectedIds((ids) =>
+                    event.target.checked
+                      ? [...ids, e.id]
+                      : ids.filter((id) => id !== e.id),
+                  )
+                }
+              />
+            )}
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen(e.id);
+              }}
+            >
+              {e.title}
+            </button>
+          </div>
         </td>
         <td className="entry-summary-cell" title={entrySummary(e)}>
           {entrySummary(e) || (
@@ -208,6 +254,19 @@ export function KnowledgeTable({
         </span>
         {!compact && (
           <>
+            <button
+              disabled={changing}
+              aria-pressed={selecting}
+              onClick={() => {
+                setSelecting((value) => !value);
+                setSelectedIds([]);
+              }}
+            >
+              {t(
+                selecting ? "退出选择" : "选择词条",
+                selecting ? "Exit selection" : "Select entries",
+              )}
+            </button>
             <button onClick={() => setCollapsed(new Set())}>
               {t("展开全部", "Expand all")}
             </button>
@@ -230,6 +289,77 @@ export function KnowledgeTable({
           {t("遗忘程度：黑 → 黄 → 红", "Forgetting: black → yellow → red")}
         </label>
       </div>
+      {!compact && selecting && (
+        <div className="knowledge-selection-bar">
+          <label className="toggle">
+            <input
+              type="checkbox"
+              disabled={changing || !entries.length}
+              checked={entries.length > 0 && selected.length === entries.length}
+              onChange={(event) =>
+                setSelectedIds(
+                  event.target.checked ? entries.map((entry) => entry.id) : [],
+                )
+              }
+            />
+            {t("全选当前结果", "Select all results")} ({selected.length}/
+            {entries.length})
+          </label>
+          {selected.length > 0 && (
+            <>
+              <span>{t("批量移动到", "Move selected to")}</span>
+              <CategoryPicker
+                value=""
+                disabled={changing}
+                onChange={async (category) => {
+                  const ids = [...selected],
+                    before = moveBaseline;
+                  setChanging(true);
+                  try {
+                    await changeEntrySelection(ids, before, { category });
+                    setSelectedIds([]);
+                  } finally {
+                    setChanging(false);
+                  }
+                }}
+              />
+              <button
+                className="danger"
+                disabled={changing}
+                onClick={() => {
+                  const ids = [...selected],
+                    before = entrySelectionSnapshot(ids);
+                  void deletion.request(
+                    t(
+                      `删除选中的 ${ids.length} 个词条？可从回收站恢复。`,
+                      `Delete ${ids.length} selected entries? They can be restored from Trash.`,
+                    ),
+                    async () => {
+                      setChanging(true);
+                      try {
+                        await changeEntrySelection(ids, before, {
+                          deleted: true,
+                        });
+                        setSelectedIds([]);
+                      } finally {
+                        setChanging(false);
+                      }
+                    },
+                  );
+                }}
+              >
+                {t("删除所选", "Delete selected")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {selectionError && (
+        <p role="alert" className="warning">
+          {selectionError}
+        </p>
+      )}
+      {deletion.dialog}
       <div
         ref={scroller}
         className={

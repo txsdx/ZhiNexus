@@ -65,7 +65,9 @@ export function Modal({
             ...(section.current?.querySelectorAll<HTMLElement>(
               'button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]',
             ) ?? []),
-          ].filter((node) => node.getClientRects().length);
+          ].filter(
+            (node) => node.tabIndex >= 0 && node.getClientRects().length,
+          );
           const index = nodes.indexOf(document.activeElement as HTMLElement);
           if (e.shiftKey && index <= 0) {
             e.preventDefault();

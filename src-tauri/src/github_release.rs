@@ -1,30 +1,14 @@
-//! Repository-pinned public Release reads with optional build-time credentials for private repositories.
+//! Anonymous, repository-pinned public Release downloads without GitHub API or updater credentials.
 use futures_util::StreamExt;
 use reqwest::{header, Client, Response, Url};
-use serde::Deserialize;
 use std::time::Duration;
 
-const REPOSITORY: &str = "/repos/txsdx/ZhiNexus/";
 const RELEASE_PATH: &str = "/txsdx/ZhiNexus/releases/download/";
-const EMBEDDED_TOKEN: Option<&str> = option_env!("ZHINEXUS_GITHUB_UPDATE_TOKEN");
+const LATEST_MANIFEST_URL: &str =
+    "https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json";
 const JSON_LIMIT: usize = 2 * 1024 * 1024;
 
-/// Minimal GitHub metadata; asset IDs are used to construct pinned API URLs ourselves.
-#[derive(Deserialize)]
-struct Release {
-    assets: Vec<Asset>,
-}
-
-/// Published asset identity, never a URL that can choose where to send the credential.
-#[derive(Deserialize)]
-struct Asset {
-    id: u64,
-    name: String,
-    size: u64,
-    browser_download_url: String,
-}
-
-/// Keep every authenticated hop inside the project API; signed CDN URLs receive no credential.
+/// Accept exactly the public manifest, project release files and their HTTPS CDN redirects.
 fn validate_request_url(url: &Url) -> Result<(), String> {
     if url.scheme() != "https"
         || !url.username().is_empty()
@@ -35,39 +19,21 @@ fn validate_request_url(url: &Url) -> Result<(), String> {
         return Err("Untrusted GitHub update destination".into());
     }
     match url.host_str() {
-        Some("api.github.com") if url.path().starts_with(REPOSITORY) && url.query().is_none() => {
-            Ok(())
-        }
+        Some("github.com") if url.as_str() == LATEST_MANIFEST_URL => Ok(()),
+        Some("github.com") => asset_path(url.as_str()).map(|_| ()),
         Some("release-assets.githubusercontent.com" | "objects.githubusercontent.com") => Ok(()),
         _ => Err("Untrusted GitHub update destination".into()),
     }
 }
 
-/// Mark the bearer sensitive and attach it only to the exact project's GitHub API requests.
-fn request_headers(
-    url: &Url,
-    token: Option<&str>,
-    accept: &str,
-) -> Result<header::HeaderMap, String> {
+/// Public downloads carry no authorization, token or API version header, including on every redirect.
+fn request_headers(url: &Url, accept: &str) -> Result<header::HeaderMap, String> {
     validate_request_url(url)?;
     let mut headers = header::HeaderMap::new();
     headers.insert(
         header::ACCEPT,
         header::HeaderValue::from_str(accept).map_err(|_| "Invalid update media type")?,
     );
-    if url.host_str() == Some("api.github.com") {
-        if let Some(token) = token.filter(|value| !value.trim().is_empty()) {
-            let mut authorization =
-                header::HeaderValue::from_str(&format!("Bearer {}", token.trim()))
-                    .map_err(|_| "Invalid embedded updater credential")?;
-            authorization.set_sensitive(true);
-            headers.insert(header::AUTHORIZATION, authorization);
-        }
-        headers.insert(
-            "X-GitHub-Api-Version",
-            header::HeaderValue::from_static("2022-11-28"),
-        );
-    }
     headers.insert(
         header::CACHE_CONTROL,
         header::HeaderValue::from_static("no-cache"),
@@ -75,14 +41,7 @@ fn request_headers(
     Ok(headers)
 }
 
-/// Only a failed API read may retry once with a configured credential; public downloads and CDN redirects remain anonymous.
-fn retry_authenticated(url: &Url, status: reqwest::StatusCode, token: Option<&str>) -> bool {
-    url.host_str() == Some("api.github.com")
-        && matches!(status.as_u16(), 401 | 403 | 404)
-        && token.is_some_and(|value| !value.trim().is_empty())
-}
-
-/// Read only this repository's canonical browser-download namespace, decoding path segments once.
+/// Decode only this repository's canonical release tag/file segments and reject path traversal or credentials.
 fn asset_path(input: &str) -> Result<(String, String), String> {
     let url = Url::parse(input).map_err(|_| "Invalid update asset URL")?;
     if url.scheme() != "https"
@@ -112,33 +71,13 @@ fn asset_path(input: &str) -> Result<(String, String), String> {
     Ok((decode(parts[0])?, decode(parts[1])?))
 }
 
-/// Resolve one exact published asset; metadata cannot replace its name or browser-download URL.
-fn find_asset<'a>(
-    release: &'a Release,
-    name: &str,
-    expected_url: Option<&str>,
-) -> Result<&'a Asset, String> {
-    let matches: Vec<_> = release.assets.iter().filter(|a| a.name == name).collect();
-    if matches.len() != 1 {
-        return Err("Release 缺少或重复安装文件 / Release asset missing or ambiguous".into());
-    }
-    let asset = matches[0];
-    if asset.id == 0
-        || asset.size > 512 * 1024 * 1024
-        || expected_url.is_some_and(|u| u != asset.browser_download_url)
-    {
-        return Err("Release asset metadata mismatch".into());
-    }
-    Ok(asset)
-}
-
-/// One native client follows the configured device proxy and retains system TLS validation.
+/// One native public-download client retains the device proxy, system TLS validation and bounded redirects.
 pub struct ReleaseClient {
     client: Client,
 }
 
 impl ReleaseClient {
-    /// Optional build-time credentials stay native; public Release reads require no credential or device setting.
+    /// Use no updater credential or GitHub API, so public updates are independent of anonymous API quotas.
     pub fn new(app: &tauri::AppHandle, timeout: Duration) -> Result<Self, String> {
         Ok(Self {
             client: crate::network::client(app, timeout)?
@@ -149,27 +88,16 @@ impl ReleaseClient {
         })
     }
 
-    /// Follow bounded validated redirects, rebuilding headers to prevent bearer forwarding to signed CDNs.
+    /// Revalidate each redirect before sending its anonymous GET; error strings never expose signed CDN query values.
     async fn get(&self, mut url: Url, accept: &str) -> Result<Response, String> {
         for hop in 0..=8 {
-            let headers = request_headers(&url, None, accept)?;
             let response = self
                 .client
                 .get(url.clone())
-                .headers(headers)
+                .headers(request_headers(&url, accept)?)
                 .send()
                 .await
                 .map_err(|e| e.without_url().to_string())?;
-            let response = if retry_authenticated(&url, response.status(), EMBEDDED_TOKEN) {
-                self.client
-                    .get(url.clone())
-                    .headers(request_headers(&url, EMBEDDED_TOKEN, accept)?)
-                    .send()
-                    .await
-                    .map_err(|e| e.without_url().to_string())?
-            } else {
-                response
-            };
             if response.status().is_redirection() {
                 if hop == 8 {
                     return Err("Too many GitHub update redirects".into());
@@ -177,7 +105,7 @@ impl ReleaseClient {
                 let location = response
                     .headers()
                     .get(header::LOCATION)
-                    .and_then(|v| v.to_str().ok())
+                    .and_then(|value| value.to_str().ok())
                     .ok_or("GitHub update redirect missing location")?;
                 url = url
                     .join(location)
@@ -186,10 +114,9 @@ impl ReleaseClient {
             }
             if !response.status().is_success() {
                 return Err(match response.status().as_u16() {
-                    401 => "GitHub 更新凭证已失效 / Updater credential expired".into(),
-                    403 => "GitHub 更新访问被拒绝或达到限额 / Update access denied or rate limited".into(),
-                    404 => "GitHub Release 或文件不存在，或凭证无权读取 / Release unavailable or credential lacks access".into(),
-                    status => format!("GitHub update HTTP {status}"),
+                    401 | 403 => "公开更新文件访问被拒绝 / Public update access denied".into(),
+                    404 => "公开Release或文件不存在 / Public release or file unavailable".into(),
+                    status => format!("GitHub public download HTTP {status}"),
                 });
             }
             return Ok(response);
@@ -197,8 +124,11 @@ impl ReleaseClient {
         Err("Too many GitHub update redirects".into())
     }
 
-    /// Bound both release metadata and latest.json before deserializing provider data.
-    async fn json<T: serde::de::DeserializeOwned>(&self, response: Response) -> Result<T, String> {
+    /// Bound the public manifest before decoding it; payload checksum and platform validation remain in the update pipeline.
+    pub async fn latest_manifest(&self) -> Result<serde_json::Value, String> {
+        let response = self
+            .get(Url::parse(LATEST_MANIFEST_URL).unwrap(), "application/json")
+            .await?;
         if response.content_length().unwrap_or(0) > JSON_LIMIT as u64 {
             return Err("Update metadata exceeds size limit".into());
         }
@@ -211,189 +141,78 @@ impl ReleaseClient {
             }
             bytes.extend_from_slice(&chunk);
         }
-        serde_json::from_slice(&bytes).map_err(|_| "Invalid GitHub update metadata".into())
+        serde_json::from_slice(&bytes).map_err(|_| "Invalid public update manifest".into())
     }
 
-    /// Resolve the latest Release anonymously when public, or with an optional native credential when private.
-    pub async fn latest_manifest(&self) -> Result<serde_json::Value, String> {
-        let url =
-            Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
-        let release: Release = self
-            .json(self.get(url, "application/vnd.github+json").await?)
-            .await?;
-        let asset = find_asset(&release, "latest.json", None)?;
-        self.json(self.asset_response(asset.id).await?).await
-    }
-
-    /// Resolve an installer's pinned tag/name to its private asset ID before returning a streaming download.
+    /// Download only the exact public project release URL; the caller enforces size, digest and publisher signatures.
     pub async fn download(&self, browser_url: &str) -> Result<Response, String> {
-        let (tag, name) = asset_path(browser_url)?;
-        let mut url = Url::parse("https://api.github.com").unwrap();
-        url.path_segments_mut()
-            .map_err(|_| "Invalid GitHub API base")?
-            .extend(["repos", "txsdx", "ZhiNexus", "releases", "tags", &tag]);
-        let release: Release = self
-            .json(self.get(url, "application/vnd.github+json").await?)
-            .await?;
-        let asset = find_asset(&release, &name, Some(browser_url))?;
-        self.asset_response(asset.id).await
-    }
-
-    /// Construct the exact repository asset endpoint rather than trusting a URL returned by metadata.
-    async fn asset_response(&self, id: u64) -> Result<Response, String> {
-        let url = Url::parse(&format!(
-            "https://api.github.com/repos/txsdx/ZhiNexus/releases/assets/{id}"
-        ))
-        .unwrap();
-        self.get(url, "application/octet-stream").await
+        asset_path(browser_url)?;
+        self.get(
+            Url::parse(browser_url).map_err(|_| "Invalid update URL")?,
+            "application/octet-stream",
+        )
+        .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn bearer_is_sensitive_and_not_forwarded_to_asset_hosts() {
-        let api =
-            Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
-        let headers =
-            request_headers(&api, Some("fixture-github-token"), "application/json").unwrap();
-        assert_eq!(
-            headers[header::AUTHORIZATION],
-            "Bearer fixture-github-token"
-        );
-        assert!(headers[header::AUTHORIZATION].is_sensitive());
-        assert!(!format!("{headers:?}").contains("fixture-github-token"));
-        for url in [
+    fn public_manifest_and_files_and_cdn_never_have_authentication_headers() {
+        for input in [
+            LATEST_MANIFEST_URL,
+            "https://github.com/txsdx/ZhiNexus/releases/download/v0.22.0/app%20file.exe",
             "https://release-assets.githubusercontent.com/file?sig=fixture",
             "https://objects.githubusercontent.com/file",
         ] {
-            let headers = request_headers(
-                &Url::parse(url).unwrap(),
-                Some("fixture-github-token"),
-                "application/octet-stream",
-            )
-            .unwrap();
+            let headers =
+                request_headers(&Url::parse(input).unwrap(), "application/octet-stream").unwrap();
             assert!(!headers.contains_key(header::AUTHORIZATION));
+            assert!(!headers.contains_key("X-GitHub-Api-Version"));
+            assert_eq!(headers.len(), 2);
         }
     }
-
     #[test]
-    fn public_reads_do_not_send_an_embedded_or_expired_credential() {
-        let api =
-            Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
-        let headers = request_headers(&api, None, "application/json").unwrap();
-        assert!(!headers.contains_key(header::AUTHORIZATION));
-        assert_eq!(headers["X-GitHub-Api-Version"], "2022-11-28");
-        assert!(!retry_authenticated(
-            &api,
-            reqwest::StatusCode::OK,
-            Some("expired-fixture")
-        ));
-        assert!(!retry_authenticated(
-            &api,
-            reqwest::StatusCode::FOUND,
-            Some("expired-fixture")
-        ));
-    }
-
-    #[test]
-    fn private_or_rate_limited_api_reads_retry_only_with_a_configured_credential() {
-        let api =
-            Url::parse("https://api.github.com/repos/txsdx/ZhiNexus/releases/latest").unwrap();
-        for status in [401, 403, 404] {
-            let status = reqwest::StatusCode::from_u16(status).unwrap();
-            assert!(retry_authenticated(&api, status, Some("fixture")));
-            assert!(!retry_authenticated(&api, status, None));
-            assert!(!retry_authenticated(&api, status, Some("  ")));
-        }
-        assert!(!retry_authenticated(
-            &api,
-            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
-            Some("fixture")
-        ));
-        let cdn =
-            Url::parse("https://release-assets.githubusercontent.com/file?sig=fixture").unwrap();
-        assert!(!retry_authenticated(
-            &cdn,
-            reqwest::StatusCode::FORBIDDEN,
-            Some("fixture")
-        ));
-    }
-
-    #[test]
-    fn redirects_cannot_move_authenticated_requests_outside_the_repository() {
-        for url in [
-            "http://api.github.com/repos/txsdx/ZhiNexus/releases/latest",
-            "https://api.github.com/repos/other/project/releases/latest",
-            "https://api.github.com/user",
-            "https://api.github.com/repos/txsdx/ZhiNexus/releases/latest?token=bad",
-            "https://api.github.com.attacker.example/repos/txsdx/ZhiNexus/releases/latest",
-            "https://name:password@api.github.com/repos/txsdx/ZhiNexus/releases/latest",
+    fn api_and_other_namespaces_and_untrusted_redirects_are_rejected() {
+        for input in [
+            "https://api.github.com/repos/txsdx/ZhiNexus/releases/latest",
+            "http://github.com/txsdx/ZhiNexus/releases/download/v1/app.exe",
+            "https://github.com/other/project/releases/latest/download/latest.json",
+            "https://github.com/txsdx/ZhiNexus/releases/latest/download/other.json",
+            "https://github.com/txsdx/ZhiNexus/login",
+            "https://github.com/txsdx/ZhiNexus/releases/latest/download/latest.json?token=bad",
+            "https://github.com/txsdx/ZhiNexus/releases/download/v1/app.exe?token=bad",
+            "https://github.com.attacker.example/txsdx/ZhiNexus/releases/download/v1/app.exe",
+            "https://name:password@github.com/txsdx/ZhiNexus/releases/download/v1/app.exe",
             "https://release-assets.githubusercontent.com:444/file",
             "https://attacker.example/file",
         ] {
             assert!(
-                request_headers(
-                    &Url::parse(url).unwrap(),
-                    Some("fixture"),
-                    "application/json"
-                )
-                .is_err(),
-                "{url}"
+                request_headers(&Url::parse(input).unwrap(), "application/json").is_err(),
+                "{input}"
             );
         }
     }
-
     #[test]
-    fn release_paths_decode_names_once_and_reject_traversal_or_other_repositories() {
+    fn release_paths_decode_once_and_reject_traversal_and_extra_segments() {
         assert_eq!(
             asset_path(
-                "https://github.com/txsdx/ZhiNexus/releases/download/v0.14.0/app%20setup.exe"
+                "https://github.com/txsdx/ZhiNexus/releases/download/v0.22.0/app%20file.exe"
             )
             .unwrap(),
-            ("v0.14.0".into(), "app setup.exe".into())
+            ("v0.22.0".into(), "app file.exe".into())
         );
-        for url in [
+        for input in [
             "https://github.com/other/project/releases/download/v1/app.exe",
             "https://github.com/txsdx/ZhiNexus/releases/download/v1/a/b.exe",
             "https://github.com/txsdx/ZhiNexus/releases/download/v1/a%2Fb.exe",
-            "https://github.com/txsdx/ZhiNexus/releases/download/v1/app.exe?token=bad",
+            "https://github.com/txsdx/ZhiNexus/releases/download/v1/a%5Cb.exe",
+            "https://github.com/txsdx/ZhiNexus/releases/download/v1/%00.exe",
+            "https://github.com/txsdx/ZhiNexus/releases/download/v1/%2E%2E",
+            "https://github.com/txsdx/ZhiNexus/releases/download/v1/",
         ] {
-            assert!(asset_path(url).is_err());
+            assert!(asset_path(input).is_err(), "{input}");
         }
-    }
-
-    #[test]
-    fn asset_identity_must_match_and_be_unique() {
-        let input = serde_json::json!({"assets":[{"id":7,"name":"app.exe","size":1024,"browser_download_url":"https://github.com/txsdx/ZhiNexus/releases/download/v1/app.exe"}]});
-        let mut release: Release = serde_json::from_value(input).unwrap();
-        assert_eq!(
-            find_asset(
-                &release,
-                "app.exe",
-                Some(&release.assets[0].browser_download_url)
-            )
-            .unwrap()
-            .id,
-            7
-        );
-        assert!(find_asset(&release, "latest.json", None).is_err());
-        assert!(find_asset(
-            &release,
-            "app.exe",
-            Some("https://github.com/txsdx/ZhiNexus/releases/download/v2/app.exe")
-        )
-        .is_err());
-        release.assets[0].id = 0;
-        assert!(find_asset(&release, "app.exe", None).is_err());
-        release.assets.push(Asset {
-            id: 8,
-            name: "app.exe".into(),
-            size: 1,
-            browser_download_url: "other".into(),
-        });
-        assert!(find_asset(&release, "app.exe", None).is_err());
     }
 }

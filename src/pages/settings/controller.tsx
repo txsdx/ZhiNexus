@@ -41,6 +41,9 @@ export function useSettingsState(
     } | null>(null),
     [password, setPassword] = useState(""),
     [size, setSize] = useState(0);
+  useEffect(() => {
+    setTab(initialTab === "sync" ? "database" : initialTab);
+  }, [initialTab]);
   const editor = settingsEditor();
   const saved = useSyncExternalStore(editor.subscribe, editor.getSnapshot);
   const { ai, device } = saved.value;

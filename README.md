@@ -6,7 +6,7 @@
 
 ## 下载
 
-当前正式版为 [v0.19.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.19.0)；主分支 0.22.0 的交互增强与无 Token 更新尚待发布验收。
+当前正式版：[v0.22.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.22.0)。Windows、Ubuntu、Android 均为 0.22.0。
 
 在 [最新 Release](https://github.com/txsdx/ZhiNexus/releases/latest) 下载对应文件：
 
@@ -41,7 +41,7 @@ Windows 需要 WebView2 运行时（Windows 10/11 通常已安装），默认将
 4. 在“数据库与云同步”配置 WebDAV。自定义同步密钥可留空使用默认方案；多设备使用自定义值时保持一致。所有设备请使用同一发布版本。
 5. 在复习设置中调整目标保留率，默认 90%。按实际回忆选择“忘记、困难、记得、轻松”，曲线和后续计划随之更新。
 
-按 `Ctrl+Shift+P`（macOS 键位为 `⌘+Shift+P`）打开命令面板，快速跳转页面、设置或查看快捷键。对话草稿在本机保存，可导出 Markdown；知识库支持批量移动和确认删除。
+按 `Ctrl+Shift+P`打开命令面板，快速跳转页面、设置或查看快捷键。对话草稿在本机保存，可导出 Markdown；知识库支持批量移动和确认删除。
 
 公开仓库更新直接下载 Release 文件，不需要 GitHub Token。设置会自动保存。AI 请求的提示词、拼接完整输出和错误可在“日志”页查看。
 

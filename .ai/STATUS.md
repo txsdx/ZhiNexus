@@ -1,6 +1,6 @@
 # 需求完成情况
 
-当前正式版本：**Windows/Ubuntu/Android 0.19.0**；开发中：**三平台0.22.0**，累计新增107–114项布局、捕获、无Token更新、开源交互与Android缩放回归。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
+当前正式版本：**Windows/Ubuntu/Android 0.22.0**，累计新增107–114项布局、捕获、无Token更新、开源交互与Android缩放回归。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
 
 | 需求 | 当前实现 |
 |---|---|
@@ -26,9 +26,9 @@
 | 预留 | 对象存储/专属服务端 SyncTransport，按要求尚不完整实现 |
 | 大库 | 有界压缩日志块、已知批次跳过下载；仍有批次/附件全名字发现和全日志投影，增量 Merkle 子树与超大库验证待完成 |
 
-## 0.22 当前迭代（尚未发布）
+## 0.22 最终验收（已正式发布）
 
-逐项以[ACCEPTANCE_022](ACCEPTANCE_022.md)为准。完全匿名公开Release直链、移除所有更新Token/构建注入；Android viewport与生命周期重复禁用整页缩放；命令面板与快捷键帮助、捕获Markdown工具/预览、持久逐话题聊天草稿/导出/再次提问、任务筛选、知识批量移动/原子删除、星图查找和复习间隔已接入。开源参考见OSS_UX_RESEARCH。本地227单元/39脚本/生产构建/locked Rust check/3匿名更新边界通过；浏览器与截图证据见ACCEPTANCE_022。正式交付待三平台构建、Windows完整实包及Release资产读回。0.21以下记录为历史，不再作为当前设计（可选私有认证已删除）。
+逐项以[ACCEPTANCE_022](ACCEPTANCE_022.md)为准。完全匿名公开Release直链、移除所有更新Token/构建注入；Android viewport与生命周期重复禁用整页缩放；命令面板与快捷键帮助、捕获Markdown工具/预览、持久逐话题聊天草稿/导出/再次提问、任务筛选、知识批量移动/原子删除、星图查找和复习间隔已接入。开源参考见OSS_UX_RESEARCH。本地227单元/39脚本/生产构建/locked Rust check/3匿名更新边界通过；浏览器与截图证据见ACCEPTANCE_022。[Build40928699151](https://github.com/txsdx/ZhiNexus/actions/runs/40928699151)全绿，CI227/39/102、Windows11/Ubuntu12边界、Windows完整真实实包与三平台四资产读回全部通过；正式v0.22.0已发布，匿名latest.json指向本版。完整证据见[ITERATION_022](ITERATION_022.md)。0.20/0.21两个空草稿已清理。0.21以下记录为历史，不再作为当前设计（可选私有认证已删除）。
 
 ## 0.21本轮进度（待Windows关闭/恢复完整复验及发布）
 

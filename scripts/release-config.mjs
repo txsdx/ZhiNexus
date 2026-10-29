@@ -27,7 +27,8 @@ export function prepareRelease({
         ],
       }
     : { pubkey: "", endpoints: [] };
-  next.bundle.createUpdaterArtifacts = signing;
+  // Publisher signatures are emitted for direct files, never installer-specific archives.
+  next.bundle.createUpdaterArtifacts = false;
   return { config: next, tag: releaseTag, signing };
 }
 /** Write CI outputs without exposing private keys or requiring any manually configured GitHub token. */
@@ -44,8 +45,8 @@ export function run() {
     publicKey: process.env.UPDATER_PUBLIC_KEY,
     hasPrivateKey: Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY),
   });
-  result.config.bundle.createUpdaterArtifacts =
-    result.signing && (process.env.BUILD_PLATFORM ?? "windows") === "windows";
+  // Direct release files are signed explicitly; Tauri must never create Windows installer archives.
+  result.config.bundle.createUpdaterArtifacts = false;
   fs.writeFileSync(path, JSON.stringify(result.config, null, 2) + "\n");
   if (process.env.GITHUB_OUTPUT)
     fs.appendFileSync(

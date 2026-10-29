@@ -30,6 +30,7 @@ test("complete signing configuration enables verified updater artifacts", () => 
   });
   assert.equal(r.signing, true);
   assert.equal(r.config.plugins.updater.pubkey, "test-public");
+  assert.equal(r.config.bundle.createUpdaterArtifacts, false);
   assert.deepEqual(original, { plugins: {}, bundle: {} });
 });
 test("tag mismatch is rejected only for publication", () => {

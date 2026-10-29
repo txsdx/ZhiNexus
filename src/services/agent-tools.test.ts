@@ -55,6 +55,136 @@ vi.mock("../core/workspace", () => ({
 }));
 import { executeKnowledgeTool, knowledgeTools } from "./agent-tools";
 import { rememberedCard } from "../core/review";
+it("batch graph moves preserve unrelated positions and reject duplicate or stale node edits", async () => {
+  const approve = vi.fn(async () => true);
+  fixture.state.docs.push({
+    collection: "setting",
+    id: "graph",
+    fields: { other: { x: 12, y: 34 } },
+  });
+  await executeKnowledgeTool(
+    "move_graph_nodes",
+    { positions: [{ id: "entry", x: 100, y: 200 }] },
+    "tool-move-nodes",
+    approve,
+  );
+  const positions = fixture.state.docs.find(
+    (d: any) => d.collection === "setting" && d.id === "graph",
+  ).fields;
+  expect(positions).toMatchObject({
+    entry: { x: 100, y: 200 },
+    other: { x: 12, y: 34 },
+  });
+  await expect(
+    executeKnowledgeTool(
+      "move_graph_nodes",
+      {
+        positions: [
+          { id: "entry", x: 1, y: 2 },
+          { id: "entry", x: 3, y: 4 },
+        ],
+      },
+      "tool-duplicate",
+      approve,
+    ),
+  ).rejects.toThrow(/重复/);
+  await expect(
+    executeKnowledgeTool(
+      "move_graph_nodes",
+      { positions: [{ id: "entry", x: 5, y: 6 }] },
+      "tool-stale-layout",
+      async () => {
+        positions.entry = { x: 900, y: 900 };
+        return true;
+      },
+    ),
+  ).rejects.toThrow(/已改变/);
+  expect(positions.entry).toEqual({ x: 900, y: 900 });
+});
+it("graph queries are readonly; create/edit/delete relations share review, receipts and cancellation guards", async () => {
+  const other = { ...fixture.state.entries[0], id: "other", title: "进阶概念" };
+  fixture.state.entries.push(other);
+  fixture.state.docs.push({
+    collection: "entry",
+    id: "other",
+    fields: { ...other },
+  });
+  const approve = vi.fn(async () => true),
+    deny = vi.fn(async () => false);
+  const view = (await executeKnowledgeTool(
+    "get_knowledge_graph",
+    {},
+    "query",
+    approve,
+  )) as any;
+  expect(view.totalNodes).toBe(2);
+  expect(approve).not.toHaveBeenCalled();
+  const args = {
+    source: "entry",
+    target: "other",
+    type: "prerequisite",
+    reason: "理解进阶前需要基础",
+  };
+  const created = (await executeKnowledgeTool(
+    "create_graph_relation",
+    args,
+    "tool-graph-create",
+    approve,
+  )) as { id: string };
+  expect(approve).toHaveBeenCalledOnce();
+  expect(
+    fixture.state.docs.find((d: any) => d.id === created.id).fields.label,
+  ).toBe("prerequisite");
+  await executeKnowledgeTool(
+    "create_graph_relation",
+    args,
+    "tool-graph-create",
+    approve,
+  );
+  expect(approve).toHaveBeenCalledOnce();
+  await executeKnowledgeTool(
+    "update_graph_relation",
+    { id: created.id, type: "progression" },
+    "tool-graph-update",
+    approve,
+  );
+  expect(
+    fixture.state.docs.find((d: any) => d.id === created.id).fields.label,
+  ).toBe("progression");
+  await executeKnowledgeTool(
+    "delete_graph_relation",
+    { id: created.id },
+    "tool-graph-deny",
+    deny,
+  );
+  expect(
+    fixture.state.docs.find((d: any) => d.id === created.id).fields.deleted,
+  ).not.toBe(true);
+  await expect(
+    executeKnowledgeTool(
+      "delete_graph_relation",
+      { id: created.id },
+      "tool-graph-stale",
+      async () => {
+        fixture.state.docs.find((d: any) => d.id === created.id).fields.reason =
+          "concurrent edit";
+        return true;
+      },
+    ),
+  ).rejects.toThrow(/已改变/);
+  expect(
+    fixture.state.docs.find((d: any) => d.id === created.id).fields.deleted,
+  ).not.toBe(true);
+  await executeKnowledgeTool(
+    "delete_graph_relation",
+    { id: created.id },
+    "tool-graph-delete",
+    approve,
+  );
+  expect(
+    fixture.state.docs.find((d: any) => d.id === created.id).fields.deleted,
+  ).toBe(true);
+});
 beforeEach(() => {
   vi.clearAllMocks();
   fixture.fail = false;

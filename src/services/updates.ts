@@ -1,4 +1,4 @@
-/** Platform-aware update discovery: one Release JSON, independent patch versions and verified installation requests. */
+/** Platform-aware discovery: Windows replaces the same single executable in both data-storage modes. */
 import { z } from "zod";
 import { native } from "../core/database";
 import { boundedText } from "./network";
@@ -12,10 +12,11 @@ const artifact = z.object({
 const platform = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   notes: z.string(),
-  artifacts: z.partialRecord(
-    z.enum(["setup", "portable", "apk", "deb"]),
-    artifact,
-  ),
+  artifacts: z.object({
+    portable: artifact.optional(),
+    apk: artifact.optional(),
+    deb: artifact.optional(),
+  }),
 });
 export const updateManifestSchema = z.object({
   schema: z.literal(2),
@@ -32,7 +33,7 @@ export interface UpdateInfo {
   current: string;
   version: string;
   notes: string;
-  kind: "setup" | "portable" | "apk" | "deb";
+  kind: "portable" | "apk" | "deb";
   url: string;
   sha256: string;
   signature?: string;
@@ -63,7 +64,7 @@ export function validateReleaseAsset(url: string) {
     throw Error("非法更新下载地址 / Untrusted update asset");
   return url;
 }
-/** Resolve a central manifest using the running executable's own platform version and installation mode. */
+/** Resolve a central manifest using the running executable's own platform version; Windows always replaces the single executable. */
 export function selectUpdate(
   input: unknown,
   identity: { platform: string; version: string; portable: boolean },
@@ -75,9 +76,7 @@ export function selectUpdate(
     throw Error("更新版本线不一致 / Inconsistent release line");
   const kind =
       identity.platform === "windows-x86_64"
-        ? identity.portable
-          ? "portable"
-          : "setup"
+        ? "portable"
         : identity.platform === "android-arm64"
           ? "apk"
           : "deb",
@@ -148,10 +147,10 @@ function updateRequest(info: UpdateInfo) {
     version: info.version,
   };
 }
-/** Reverify staged bytes and launch the installer; downloads are reused rather than repeated. */
+/** Reverify staged bytes and apply the platform update; Windows replaces its file without an installer. */
 export async function applyUpdate(
   info: UpdateInfo,
-  options: { silent?: boolean; restart?: boolean } = {},
+  options: { restart?: boolean } = {},
 ) {
   if (!native) throw Error("请在原生应用中更新 / Native app required");
   if (!info.available) throw Error("没有更新 / Already current");
@@ -160,7 +159,6 @@ export async function applyUpdate(
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("install_platform_update", {
     update: updateRequest(info),
-    silent: options.silent ?? false,
     restart: options.restart ?? true,
   });
 }

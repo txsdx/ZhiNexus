@@ -1,7 +1,7 @@
 import { reviewTarget, nextReviewAt } from "../core/review-policy";
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
 import { CategoryPicker } from "../components/CategoryPicker";
-import { moveEntry } from "../services/categories";
+import { moveEntry, categoryPath } from "../services/categories";
 import { diagnostics } from "../services/diagnostics";
 import { useEntryDocument } from "../hooks/useEntryDocument";
 import { useConfirmation } from "../hooks/useConfirmation";
@@ -176,7 +176,7 @@ export function EntryPage({
       <div className="entry-heading">
         <div className="entry-heading-top">
           <span className="category-dot">
-            {s.categories.find((c) => c.id === entry.category)?.name ||
+            {categoryPath(s.categories, entry.category).join(" / ") ||
               t("未分类", "Uncategorized")}
           </span>
           <div className="actions">

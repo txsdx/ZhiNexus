@@ -1,7 +1,14 @@
 /** Shared searchable category-tree dialog for capture and entry property editing. */
 import { useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  FolderOpen,
+  Pencil,
+} from "lucide-react";
 import { Modal, useKnowledge, useT } from "./common";
+import { categoryPath } from "../services/categories";
 /** Selecting a node commits exactly one choice; cancel, Escape and failed persistence retain the previous value. */
 export function CategoryPicker({
   value,
@@ -18,6 +25,10 @@ export function CategoryPicker({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     choosing = useRef(false);
+  const path = categoryPath(s.categories, value);
+  const pathLabel = path.length
+    ? path.join(" / ")
+    : t("未分类", "Uncategorized");
   const choose = async (id: string) => {
     if (choosing.current) return;
     choosing.current = true;
@@ -116,22 +127,30 @@ export function CategoryPicker({
   const tree = render("");
   return (
     <>
-      <button
-        type="button"
-        className="category-picker-trigger"
-        aria-label={t("选择所属分类", "Choose category")}
-        aria-haspopup="dialog"
-        onClick={() => {
-          setQuery("");
-          setError("");
-          setOpen(true);
-        }}
-      >
-        <Folder size={16} />
-        {s.categories.find((c) => c.id === value)?.name ??
-          t("未分类", "Uncategorized")}
-        <ChevronDown size={14} />
-      </button>
+      <div className="category-path-control">
+        <span
+          className="category-path"
+          aria-label={t("完整分类路径", "Full category path")}
+          title={pathLabel}
+        >
+          <Folder size={16} aria-hidden="true" />
+          <span>{pathLabel}</span>
+        </span>
+        <button
+          type="button"
+          className="category-picker-trigger"
+          aria-label={t("选择所属分类", "Choose category")}
+          aria-haspopup="dialog"
+          onClick={() => {
+            setQuery("");
+            setError("");
+            setOpen(true);
+          }}
+        >
+          <Pencil size={14} aria-hidden="true" />
+          {t("修改分类", "Change category")}
+        </button>
+      </div>
       {open && (
         <Modal
           title={t("选择分类", "Choose category")}

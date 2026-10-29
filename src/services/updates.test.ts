@@ -40,19 +40,37 @@ describe("platform update selection", () => {
         portable: false,
       })?.available,
     ).toBe(false));
-  it("selects the portable artifact and that platform’s changelog", () => {
-    const info = selectUpdate(manifest, {
-      platform: "windows-x86_64",
-      version: "0.2.1",
-      portable: true,
-    });
-    expect(info).toMatchObject({
-      available: true,
-      kind: "portable",
-      version: "0.2.3",
-      notes: "Windows fixes",
-    });
-    expect(info?.url).toContain("_protable.exe");
+  it.each([false, true])(
+    "selects the single executable with portable storage=%s",
+    (portable) => {
+      const info = selectUpdate(manifest, {
+        platform: "windows-x86_64",
+        version: "0.2.1",
+        portable,
+      });
+      expect(info).toMatchObject({
+        available: true,
+        kind: "portable",
+        version: "0.2.3",
+        notes: "Windows fixes",
+      });
+      expect(info?.url).toContain("_protable.exe");
+    },
+  );
+  it("never falls back to an installer when the single-file artifact is missing", () => {
+    const onlyInstaller = structuredClone(manifest);
+    delete (
+      onlyInstaller.platforms["windows-x86_64"].artifacts as {
+        portable?: unknown;
+      }
+    ).portable;
+    expect(
+      selectUpdate(onlyInstaller, {
+        platform: "windows-x86_64",
+        version: "0.2.1",
+        portable: false,
+      }),
+    ).toBeNull();
   });
   it("compares numeric patch versions and rejects unsafe URLs or inconsistent lines", () => {
     expect(isNewer("0.2.10", "0.2.9")).toBe(true);

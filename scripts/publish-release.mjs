@@ -17,6 +17,10 @@ export function publicationPlan({ tag, sha, draft, existing, artifacts }) {
   )
     throw Error("Release artifacts and latest.json are required");
   const names = artifacts.map((file) => path.basename(file));
+  if (names.some((name) => /_setup\.exe(?:\.sig)?$|\.msi$/i.test(name)))
+    throw Error(
+      "Windows installer publication is disabled; publish the single executable only",
+    );
   if (new Set(names).size !== names.length)
     throw Error("Release artifact basenames must be unique");
   const kinds = new Set(
@@ -27,11 +31,18 @@ export function publicationPlan({ tag, sha, draft, existing, artifacts }) {
   );
   for (const kind of [
     "windows-x86_64/portable",
-    "windows-x86_64/setup",
     "android-arm64/apk",
     "linux-x86_64/deb",
   ])
     if (!kinds.has(kind)) throw Error("Missing platform artifact: " + kind);
+  const windowsExecutables = names.filter((name) =>
+    name.toLowerCase().endsWith(".exe"),
+  );
+  if (
+    windowsExecutables.length !== 1 ||
+    !windowsExecutables[0].endsWith("_protable.exe")
+  )
+    throw Error("Windows publishes exactly one standalone executable");
   const commands = [];
   if (!existing)
     commands.push([

@@ -2,7 +2,7 @@
 import type { Json, Task, ToolCall } from "./types";
 /** Queue destinations are application routes, never arbitrary URLs or executable model output. */
 export interface AITarget {
-  page: "entry" | "agent" | "review" | "settings" | "tasks";
+  page: "entry" | "agent" | "review" | "settings" | "tasks" | "graph";
   entryId?: string;
   topicId?: string;
   sessionId?: string;
@@ -24,6 +24,7 @@ export interface AIStage {
 export type AIJobKind =
   | "explain"
   | "relations"
+  | "graph"
   | "classification"
   | "enrichment"
   | "image"

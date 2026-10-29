@@ -11,12 +11,82 @@ import { entryColors } from "../core/entry-colors";
 import { categoryRemovalPlan, validateCategoryMove } from "./categories";
 import type { Json } from "../core/types";
 import type { ToolSpec } from "./ai";
+import {
+  graphEdges,
+  graphLayoutPatches,
+  relationPatches,
+  relationTypes,
+} from "./knowledge-graph";
 const id = z.string().min(1).max(200),
   title = z.string().trim().min(1).max(200),
   content = z.string().max(8 * 1024 * 1024),
   parent = z.string().max(200),
   color = z.enum(entryColors);
 const definitions = {
+  move_graph_nodes: {
+    description:
+      "按给定坐标批量移动星图节点，保留其他节点位置；需确认，拒绝未知/重复节点和过时布局",
+    schema: z
+      .object({
+        positions: z
+          .array(
+            z
+              .object({
+                id,
+                x: z.number().finite().min(-1000000).max(1000000),
+                y: z.number().finite().min(-1000000).max(1000000),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(100),
+      })
+      .strict(),
+  },
+  get_knowledge_graph: {
+    description:
+      "分页读取星图节点、关系与位置。prerequisite A→B表示理解B先需要A；progression A→B表示基础到进阶；related为普通关联。",
+    schema: z
+      .object({
+        offset: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+      })
+      .strict(),
+  },
+  create_graph_relation: {
+    description:
+      "新增星图关系，需要具体依据；禁止自连、重复和学习依赖环；已有关系保留；需确认",
+    schema: z
+      .object({
+        source: id,
+        target: id,
+        type: z.enum(relationTypes),
+        reason: z.string().trim().min(1).max(1000),
+      })
+      .strict(),
+  },
+  update_graph_relation: {
+    description:
+      "修改已有关系的端点、依赖/递进/关联类型或依据，保留未传字段；需确认",
+    schema: z
+      .object({
+        id,
+        source: id.optional(),
+        target: id.optional(),
+        type: z.enum(relationTypes).optional(),
+        reason: z.string().max(1000).optional(),
+      })
+      .strict(),
+  },
+  delete_graph_relation: {
+    description: "删除指定星图关系，保留不可变历史；需确认",
+    schema: z.object({ id }).strict(),
+  },
+  arrange_knowledge_graph: {
+    description:
+      "根据当前关系将整个知识星图从左到右自动排列；预览节点数量，确认后保存布局",
+    schema: z.object({}).strict(),
+  },
   search_knowledge: {
     description: "模糊搜索知识词条",
     schema: z.object({ query: z.string() }).strict(),
@@ -135,6 +205,11 @@ export const knowledgeTools: ToolSpec[] = Object.entries(definitions).map(
   }),
 );
 interface Arguments {
+  positions?: { id: string; x: number; y: number }[];
+  source?: string;
+  target?: string;
+  type?: (typeof relationTypes)[number];
+  reason?: string;
   selected?: string;
   replacement?: string;
   query?: string;
@@ -151,12 +226,17 @@ interface Arguments {
   offset?: number;
   limit?: number;
 }
-const catalogSignature = () =>
+const catalogSignature = (graph = false) =>
   canonical(
     store
       .getSnapshot()
       .docs.filter(
-        (d) => d.collection === "entry" || d.collection === "category",
+        (d) =>
+          d.collection === "entry" ||
+          d.collection === "category" ||
+          (graph &&
+            (d.collection === "edge" ||
+              (d.collection === "setting" && d.id === "graph"))),
       )
       .map((d) => [d.collection, d.id, d.fields]),
   );
@@ -178,6 +258,27 @@ export async function executeKnowledgeTool(
   const a = def.schema.parse(args) as Arguments,
     s = store.getSnapshot();
   switch (name) {
+    case "get_knowledge_graph": {
+      const offset = a.offset ?? 0,
+        limit = a.limit ?? 50,
+        edges = graphEdges(),
+        positions =
+          s.docs.find((d) => d.collection === "setting" && d.id === "graph")
+            ?.fields ?? {};
+      return {
+        totalNodes: s.entries.length,
+        totalRelations: edges.length,
+        nodes: s.entries.slice(offset, offset + limit).map((e, index) => ({
+          id: e.id,
+          title: e.title,
+          position: positions[e.id] ?? {
+            x: ((offset + index) % 3) * 260,
+            y: Math.floor((offset + index) / 3) * 140,
+          },
+        })),
+        relations: edges.slice(offset, offset + limit),
+      };
+    }
     case "search_knowledge":
       return new Fuse(s.entries, {
         keys: ["title", "content", "tags"],
@@ -303,7 +404,14 @@ export async function executeKnowledgeTool(
     );
     return { id: entry.id, draft: true, requiresSave: true };
   }
-  const before = catalogSignature(),
+  const graphTool = [
+    "create_graph_relation",
+    "update_graph_relation",
+    "delete_graph_relation",
+    "arrange_knowledge_graph",
+    "move_graph_nodes",
+  ].includes(name);
+  const before = catalogSignature(graphTool),
     patches: StorePatch[] = [],
     now = new Date().toISOString();
   let result: unknown = { ok: true };
@@ -314,7 +422,75 @@ export async function executeKnowledgeTool(
     if (id && !s.categories.some((c) => c.id === id))
       throw Error("分类不存在 / Category missing");
   };
-  if (name === "create_entry") {
+  if (name === "move_graph_nodes") {
+    if (new Set(a.positions!.map((n) => n.id)).size !== a.positions!.length)
+      throw Error("移动列表存在重复节点 / Duplicate graph node");
+    if (a.positions!.some((n) => !s.entries.some((e) => e.id === n.id)))
+      throw Error("移动列表包含未知条目 / Unknown graph node");
+    patches.push({
+      collection: "setting",
+      id: "graph",
+      patch: Object.fromEntries(
+        a.positions!.map((n) => [n.id, json({ x: n.x, y: n.y })]),
+      ),
+    });
+    result = { moved: a.positions!.length };
+    description = `移动星图节点：\n${a.positions!.map((n) => `${s.entries.find((e) => e.id === n.id)?.title} → (${n.x}, ${n.y})`).join("\n")}\n其他节点位置保留。`;
+  } else if (name === "arrange_knowledge_graph") {
+    patches.push(...(await graphLayoutPatches()));
+    result = { nodes: s.entries.length };
+    description = `自动排列星图：${s.entries.length} 个节点，${graphEdges().length} 条关系。根据关系从左到右排列并保存，覆盖当前节点位置。`;
+  } else if (
+    name === "create_graph_relation" ||
+    name === "update_graph_relation"
+  ) {
+    const existing =
+      name === "update_graph_relation"
+        ? graphEdges().find((e) => e.id === a.id)
+        : undefined;
+    if (name === "update_graph_relation" && !existing)
+      throw Error("关系不存在 / Graph relationship missing");
+    if (
+      existing &&
+      a.source === undefined &&
+      a.target === undefined &&
+      a.type === undefined &&
+      a.reason === undefined
+    )
+      throw Error("未提供修改字段 / No changes supplied");
+    const proposal = {
+      source: a.source ?? existing!.source,
+      target: a.target ?? existing!.target,
+      type: a.type ?? existing!.type,
+      reason: a.reason ?? existing?.reason ?? "",
+    };
+    const changed = relationPatches([proposal], existing?.id);
+    if (existing && !changed.length)
+      throw Error(
+        "这两个条目已有其他关系 / Another relationship already connects this pair",
+      );
+    patches.push(...changed);
+    const reused =
+      !existing && !changed.length
+        ? graphEdges().find(
+            (e) =>
+              (e.source === proposal.source && e.target === proposal.target) ||
+              (e.target === proposal.source && e.source === proposal.target),
+          )
+        : undefined;
+    result = {
+      id: existing?.id ?? changed[0]?.id ?? reused?.id,
+      reused: !!reused,
+    };
+    const displayed = reused ?? proposal;
+    description = `${existing ? "修改" : reused ? "保留已有" : "新增"}知识关系：${s.entries.find((e) => e.id === displayed.source)?.title} → ${s.entries.find((e) => e.id === displayed.target)?.title}\n${existing ? `原类型：${existing.type}\n` : ""}类型：${displayed.type}\n依据：${displayed.reason}`;
+  } else if (name === "delete_graph_relation") {
+    const edge = graphEdges().find((e) => e.id === a.id);
+    if (!edge) throw Error("关系不存在 / Graph relationship missing");
+    patches.push({ collection: "edge", id: edge.id, patch: { deleted: true } });
+    description = `删除知识关系：${s.entries.find((e) => e.id === edge.source)?.title} → ${s.entries.find((e) => e.id === edge.target)?.title}\n类型：${edge.type}\n依据：${edge.reason}`;
+    result = { id: edge.id, deleted: true };
+  } else if (name === "create_entry") {
     assertCategory(a.category ?? "");
     const existing = s.entries.find(
         (e) => e.title.toLocaleLowerCase() === a.title!.toLocaleLowerCase(),
@@ -437,7 +613,7 @@ export async function executeKnowledgeTool(
     () =>
       active() &&
       prior()?.fields.status !== "done" &&
-      before === catalogSignature(),
+      before === catalogSignature(graphTool),
   );
   if (!committed) {
     if (prior()?.fields.status === "done") return prior()!.fields.result;

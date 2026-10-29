@@ -14,14 +14,22 @@ export function AboutPanel() {
     autoUpdates.getSnapshot,
   );
   const [current, setCurrent] = useState(versions.platforms.windows);
+  const [replacementError, setReplacementError] = useState("");
   const working = ["checking", "downloading", "installing"].includes(
     state.phase,
   );
   useEffect(() => {
     if (native)
       void import("@tauri-apps/api/core")
-        .then(({ invoke }) => invoke<{ version: string }>("update_identity"))
-        .then((r) => setCurrent(r.version))
+        .then(({ invoke }) =>
+          invoke<{ version: string; replacementError?: string }>(
+            "update_identity",
+          ),
+        )
+        .then((r) => {
+          setCurrent(r.version);
+          setReplacementError(r.replacementError ?? "");
+        })
         .catch((error) => notify(String(error)));
   }, []);
   const labels = {
@@ -32,16 +40,16 @@ export function AboutPanel() {
       "Downloading and verifying in the background…",
     ),
     ready:
-      state.update?.kind === "setup" || state.update?.kind === "portable"
+      state.update?.kind === "portable"
         ? t(
-            "更新已就绪，正常退出时自动安装",
-            "Update ready; installs on normal exit",
+            "更新已就绪，正常退出时自动替换程序文件",
+            "Update ready; replaces the executable on normal exit",
           )
         : t(
             "更新已就绪，等待系统安装授权",
             "Update ready; OS installation approval required",
           ),
-    installing: t("正在启动安装…", "Starting installation…"),
+    installing: t("正在应用更新…", "Applying update…"),
     current: t(
       "此平台已是最新版本，或尚无可用产物",
       "Already current, or no artifact is published",
@@ -68,10 +76,7 @@ export function AboutPanel() {
       </label>
       <p role="status" data-update-phase={state.phase}>
         {state.phase === "ready" && device.autoUpdate === false
-          ? t(
-              "更新已就绪，可手动安装",
-              "Update ready; manual installation available",
-            )
+          ? t("更新已就绪，可手动更新", "Update ready; manual update available")
           : labels[state.phase]}
       </p>
       <div className="actions">
@@ -90,16 +95,23 @@ export function AboutPanel() {
           className="primary"
           disabled={!native || state.phase !== "ready"}
           onClick={() =>
-            void act(t("安装更新…", "Installing update…"), installReadyUpdate)
+            void act(t("应用更新…", "Applying update…"), installReadyUpdate)
           }
         >
           <Download size={16} />
-          {t("立即安装更新", "Install update now")}
+          {state.update?.kind === "portable"
+            ? t("立即更新并重启", "Update and restart")
+            : t("立即安装更新", "Install update now")}
         </button>
       </div>
       {state.error && (
         <p role="alert" className="warning">
           {state.error}
+        </p>
+      )}
+      {replacementError && (
+        <p role="alert" className="warning">
+          {replacementError}
         </p>
       )}
       {state.update && (
@@ -112,8 +124,8 @@ export function AboutPanel() {
       )}
       <p className="muted">
         {t(
-          "启动后自动检查，联网后重试；后台下载经过摘要和已配置的发布者签名校验。Windows 正常退出时安装，不打断编辑；Android 和 Ubuntu 安装仍需系统授权。",
-          "Checks after startup and retries when online. Background downloads require digest and configured publisher-signature verification. Windows installs on normal exit without interrupting editing; Android and Ubuntu require OS installation approval.",
+          "启动后自动检查，联网后重试；后台下载经过摘要和已配置的发布者签名校验。Windows 正常退出后替换 exe，数据目录和 portable 标记保持不变；Android 和 Ubuntu 安装仍需系统授权。",
+          "Checks after startup and retries when online. Downloads require digest and configured publisher-signature verification. Windows replaces its exe on normal exit while retaining data and the portable marker; Android and Ubuntu require OS installation approval.",
         )}
       </p>
       <a

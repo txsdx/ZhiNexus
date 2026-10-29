@@ -5,6 +5,8 @@ mod android_updates;
 mod capture;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod desktop;
+#[cfg(any(target_os = "windows", test))]
+mod executable_update;
 mod github_release;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod mcp;
@@ -43,7 +45,6 @@ pub fn run() {
                 desktop::show(app);
             }
         }))
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()

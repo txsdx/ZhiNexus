@@ -2,6 +2,18 @@
 import type { Category } from "../core/types";
 import { canonical } from "../core/crypto";
 import { store, type StorePatch } from "../core/store";
+/** Resolve the complete root-to-leaf category path without looping on malformed remote hierarchies. */
+export function categoryPath(categories: Category[], id: string): string[] {
+  const names: string[] = [],
+    seen = new Set<string>();
+  let node = categories.find((c) => c.id === id);
+  while (node && !seen.has(node.id)) {
+    seen.add(node.id);
+    names.unshift(node.name);
+    node = categories.find((c) => c.id === node!.parent);
+  }
+  return names;
+}
 /** Move one existing entry only while its category and destination remain valid at commit time. */
 export async function moveEntry(id: string, category: string) {
   const before = store.getSnapshot().entries.find((e) => e.id === id);

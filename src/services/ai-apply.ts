@@ -11,11 +11,17 @@ import { entryDocument } from "../components/editor/document";
 import { aiJobs } from "./ai-jobs";
 import { capturedEntry } from "./ai-workflows";
 import { validateClassification } from "./classification";
+import {
+  graphSignature,
+  graphProposalSchema,
+  relationPatches,
+} from "./knowledge-graph";
 const applying = new Set<string>();
 /** Compare generation context with the current knowledge rather than overwriting later edits silently. */
 export function aiJobIsStale(job: AIJob): boolean {
   if (job.kind === "chat" || job.kind === "title") return false;
   const s = store.getSnapshot();
+  if (job.kind === "graph") return job.base.graph !== graphSignature();
   if (job.kind === "classification")
     return (
       JSON.stringify(job.input.categories) !== JSON.stringify(s.categories) ||
@@ -160,7 +166,16 @@ export async function applyAIJob(id: string, force = false): Promise<AITarget> {
       patch: Record<string, Json>;
     }[] = [];
     let target: AITarget = job.target;
-    if (job.kind === "classification") {
+    if (job.kind === "graph") {
+      if (aiJobIsStale(job))
+        throw Error(
+          "词条或星图已改变，请重新分析 / Entries or graph changed; regenerate the proposal",
+        );
+      const proposal = graphProposalSchema.parse({
+        relations: (result as Record<string, Json>).relations,
+      });
+      patches.push(...relationPatches(proposal.relations, undefined, true));
+    } else if (job.kind === "classification") {
       const proposal = validateClassification(result);
       patches.push(
         ...proposal.categories.map((c) => ({

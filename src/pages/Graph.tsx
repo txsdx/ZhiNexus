@@ -1,5 +1,4 @@
 /** Editable knowledge graph using React Flow; relationships and node positions are replicated documents. */
-import dagre from "@dagrejs/dagre";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { copyText } from "../services/clipboard";
 import { openContextMenu } from "../services/context-menu";
@@ -9,6 +8,8 @@ import {
   ReactFlow,
   Background,
   MiniMap,
+  MarkerType,
+  SelectionMode,
   type ReactFlowInstance,
   useNodesState,
   useEdgesState,
@@ -18,7 +19,20 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useKnowledge, useT } from "../components/common";
-import { store, json } from "../core/store";
+import { store } from "../core/store";
+import {
+  graphEdges,
+  graphSignature,
+  graphLayoutPatches,
+  saveGraphPositions,
+  relationPatches,
+  graphBatches,
+  graphBatchCount,
+  graphCatalog,
+  graphPositionSignature,
+} from "../services/knowledge-graph";
+import { submitAIJob } from "../services/ai-jobs";
+import { resolveModel } from "../core/ai-config";
 /** Build stable graph projections; connect handles to create links and delete selected links to remove them. */
 export function Graph({
   onOpen,
@@ -32,7 +46,12 @@ export function Graph({
   const [error, setError] = useState("");
   const [minimap, setMinimap] = useState(false),
     flow = useRef<ReactFlowInstance | null>(null);
+  const dragBaseline = useRef<string | undefined>(undefined);
   const confirmation = useConfirmation(setError);
+  const analysisConfirmation = useConfirmation(setError, {
+    title: t("自动关联全部条目", "Connect all entries"),
+    confirmLabel: t("开始分析", "Start analysis"),
+  });
   const positions =
     s.docs.find((d) => d.collection === "setting" && d.id === "graph")
       ?.fields ?? {};
@@ -59,21 +78,31 @@ export function Graph({
       })),
     [s.entries, positions],
   );
-  const projectedEdges: Edge[] = s.docs
-    .filter(
-      (d) =>
-        d.collection === "edge" &&
-        !d.fields.deleted &&
-        s.entries.some((e) => e.id === d.fields.source) &&
-        s.entries.some((e) => e.id === d.fields.target),
-    )
-    .map((d) => ({
-      id: d.id,
-      source: String(d.fields.source),
-      target: String(d.fields.target),
-      label: String(d.fields.label ?? ""),
-      animated: false,
-    }));
+  const projectedEdges: Edge[] = graphEdges().map((d) => ({
+    id: d.id,
+    source: d.source,
+    target: d.target,
+    label:
+      d.type === "prerequisite"
+        ? t("依赖", "Prerequisite")
+        : d.type === "progression"
+          ? t("递进", "Progression")
+          : d.label === "related"
+            ? t("关联", "Related")
+            : d.label,
+    markerEnd:
+      d.type !== "related" ? { type: MarkerType.ArrowClosed } : undefined,
+    style: {
+      stroke:
+        d.type === "prerequisite"
+          ? "#8266cc"
+          : d.type === "progression"
+            ? "#319b88"
+            : "#a4a7bb",
+    },
+    data: { reason: d.reason, type: d.type },
+    animated: false,
+  }));
   const [nodes, setNodes, onNodesChange] = useNodesState(projectedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(projectedEdges);
   useEffect(() => {
@@ -81,32 +110,66 @@ export function Graph({
     setEdges(projectedEdges);
   }, [s.revision]);
   const connect = (c: Connection) => {
-    if (c.source !== c.target)
-      void store.patch("edge", crypto.randomUUID(), {
-        source: c.source,
-        target: c.target,
-        label: "related",
-      });
+    void (async () => {
+      try {
+        const patches = relationPatches([
+          { source: c.source, target: c.target, type: "related" },
+        ]);
+        if (patches.length) {
+          const before = graphSignature();
+          if (
+            !(await store.batchWhen(
+              patches,
+              "graph-connect",
+              () => graphSignature() === before,
+            ))
+          )
+            throw Error(t("星图已改变，请重试", "Graph changed; retry"));
+        }
+      } catch (error) {
+        setError(String(error instanceof Error ? error.message : error));
+      }
+    })();
   };
   const arrange = async () => {
-    const graph = new dagre.graphlib.Graph()
-      .setGraph({ rankdir: "LR", nodesep: 70, ranksep: 110 })
-      .setDefaultEdgeLabel(() => ({}));
-    for (const n of nodes) graph.setNode(n.id, { width: 190, height: 65 });
-    for (const e of edges) graph.setEdge(e.source, e.target);
-    dagre.layout(graph);
-    await store.patch(
-      "setting",
-      "graph",
-      Object.fromEntries(
-        nodes.map((n) => {
-          const p = graph.node(n.id);
-          return [n.id, json({ x: p.x - 95, y: p.y - 32.5 })];
-        }),
-      ),
-      "graph-auto-layout",
-    );
+    const before = graphSignature(true),
+      patches = await graphLayoutPatches();
+    if (
+      !(await store.batchWhen(
+        patches,
+        "graph-auto-layout",
+        () => graphSignature(true) === before,
+      ))
+    )
+      throw Error(t("布局已改变，请重试", "Layout changed; retry"));
     await flow.current?.fitView({ duration: 0, padding: 0.15 });
+  };
+  const connectAll = () => {
+    const before = graphSignature();
+    const model = s.ai.models.find((m) => m.id === resolveModel(s.ai, "graph"));
+    const groups = graphBatches(
+      graphCatalog(),
+      Math.max(
+        4096,
+        Math.min(24000, Math.floor((model?.context ?? 96000) / 4)),
+      ),
+    );
+    return analysisConfirmation.request(
+      t(
+        `分析全部 ${s.entries.length} 个词条，预计最多 ${graphBatchCount(groups)} 次分析请求。根据摘要与解释摘录提出依赖、递进和关联；审阅确认前不修改星图。`,
+        `Analyze all ${s.entries.length} entries in up to ${graphBatchCount(groups)} requests using summaries and explanation excerpts. Review proposed prerequisites, progressions and associations before applying.`,
+      ),
+      async () => {
+        if (graphSignature() !== before)
+          throw Error(
+            t(
+              "词条或星图已改变，请重新开始",
+              "Entries or graph changed; start again",
+            ),
+          );
+        await submitAIJob("graph", { page: "graph" });
+      },
+    );
   };
   return (
     <div className="page graph-page">
@@ -123,6 +186,11 @@ export function Graph({
                 {
                   label: t("自动整理布局", "Arrange automatically"),
                   run: arrange,
+                },
+                {
+                  label: t("自动关联全部条目", "Connect all entries with AI"),
+                  disabled: s.entries.length < 2,
+                  run: connectAll,
                 },
                 {
                   label: t("适应窗口", "Fit view"),
@@ -273,14 +341,32 @@ export function Graph({
           }
           nodes={nodes}
           edges={edges}
+          selectionOnDrag
+          selectionMode={SelectionMode.Partial}
+          panOnDrag={[1]}
+          panActivationKeyCode="Space"
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={connect}
           deleteKeyCode={["Backspace", "Delete"]}
           onNodeDoubleClick={(_, n) => onOpen(n.id)}
-          onNodeDragStop={(_, n) =>
-            void store.patch("setting", "graph", { [n.id]: json(n.position) })
+          onNodeDragStop={(_, n, dragged) =>
+            void saveGraphPositions(
+              dragged?.length ? dragged : [n],
+              dragBaseline.current,
+            ).catch((e) => setError(String(e.message ?? e)))
           }
+          onSelectionDragStop={(_, selected) =>
+            void saveGraphPositions(selected, dragBaseline.current).catch((e) =>
+              setError(String(e.message ?? e)),
+            )
+          }
+          onNodeDragStart={() => {
+            dragBaseline.current = graphPositionSignature();
+          }}
+          onSelectionDragStart={() => {
+            dragBaseline.current = graphPositionSignature();
+          }}
           onBeforeDelete={async ({ edges: selectedEdges }) => {
             if (!selectedEdges.length) return false;
             await confirmation.request(
@@ -307,6 +393,7 @@ export function Graph({
         </ReactFlow>
       </div>
       {confirmation.dialog}
+      {analysisConfirmation.dialog}
     </div>
   );
 }

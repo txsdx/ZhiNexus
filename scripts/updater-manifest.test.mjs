@@ -5,9 +5,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { artifactIdentity, createManifest } from "./updater-manifest.mjs";
-test("recognizes the required protable/setup/APK/DEB output names", () => {
+test("recognizes single-exe/APK/DEB outputs and never treats a Windows installer as an update", () => {
   assert.equal(artifactIdentity("app_protable.exe").kind, "portable");
-  assert.equal(artifactIdentity("app_setup.exe").kind, "setup");
+  assert.equal(artifactIdentity("app_setup.exe"), null);
   assert.equal(artifactIdentity("a.deb").platform, "linux-x86_64");
   assert.equal(artifactIdentity("a.apk").platform, "android-arm64");
   assert.equal(artifactIdentity("a.msi"), null);
@@ -15,7 +15,7 @@ test("recognizes the required protable/setup/APK/DEB output names", () => {
 test("keeps untouched platform versions and hashes only supported artifacts", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zhinexus-manifest-"));
   try {
-    const file = path.join(dir, "app_setup.exe");
+    const file = path.join(dir, "app_protable.exe");
     fs.writeFileSync(file, "fixture");
     const previous = {
       schema: 2,
@@ -33,7 +33,7 @@ test("keeps untouched platform versions and hashes only supported artifacts", ()
     assert.equal(result.platforms["android-arm64"].version, "0.2.0");
     assert.equal(result.platforms["windows-x86_64"].version, "0.2.3");
     assert.match(
-      result.platforms["windows-x86_64"].artifacts.setup.sha256,
+      result.platforms["windows-x86_64"].artifacts.portable.sha256,
       /^[a-f0-9]{64}$/,
     );
   } finally {

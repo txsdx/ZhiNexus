@@ -17,7 +17,7 @@ fn main() {
         Ok(true) => return,
         Err(error) => {
             eprintln!("Portable update failed: {error}");
-            return;
+            std::process::exit(1);
         }
         Ok(false) => {}
     }

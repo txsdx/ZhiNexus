@@ -158,3 +158,13 @@ GTK overlay horizontal scrollbars can intercept the final table row. KnowledgeTa
 Android整页缩放策略由mobile/android/PageGestures.kt负责，通过configure-android注入Tauri公开onWebViewCreate回调，在每次WebView创建时关闭supportZoom/builtInZoomControls/displayZoomControls；不使用touchmove阻断或全局touch-action:none，避免影响滚动、选区和ReactFlow内部缩放。
 
 构建触发：移除独立push/PR Validate，Build frontend在生产编译前运行一次单元/发布脚本/浏览器回归，失败阻止三平台打包；Ubuntu release profile先运行原生更新边界测试。Android工程生成后configureLauncherIcons覆盖已提交各密度与adaptive normal/round引用，不依赖Tauri模板图标。
+
+## 0.19单文件更新与知识星图
+
+Windows构建以release-windows profile（opt-level=s、thin LTO、符号裁剪）输出一个_protable.exe，tauri.windows.conf.json禁用bundle，CI--no-bundle；Android/Ubuntu仍APK/DEB。旧安装器分支、缓存类型与未使用的updater插件依赖/权限删除；手工Minisign验证保持。原生update_identity如实返回数据模式；更新选择总是portable产物，不按存储位置选择安装器。executable_update模块在退出前同目录stage/fsync并缓存旧文件，helper在旧进程释放文件后校验/原子替换；无法启动时回退，失败持久反馈，一个previous.bin放在数据缓存，旧hash下载缓存有界回收。数据目录/portable标记不参与文件替换。0.18单文件helper协议保留一次升级交接，旧安装版需先完全退出后手动启动单文件一次。
+
+knowledge-graph服务统一语义边、去重/引用/学习DAG校验、批量位置保存及布局。graph独立AI任务按模型上下文预算分组、比较全部组对，不静默漏掉跨组候选；每条使用摘要、解释摘录和显式截断标记。预览逐条选择后才原子提交，有幂等回执，源知识/星图改变即要求重新分析，保留已有关系。prerequisite A→B是理解B先需要A；progression是基础到进阶；related无向。6个图工具与原17个工具合用审阅/回执/取消/并发保护。节点左键框选后拖动，保存所有坐标；拖动开始的布局签名避免覆盖期间远端移动。
+
+categoryPath统一完整层级；CategoryPicker保留共用树弹窗，但改为完整路径与独立修改按钮。色块指示使用独立高饱和调色，实际数据背景token/深色映射不变。AI结果预览关闭同步完成，持久化异步失败可见，旧关闭回调不会关掉新打开的预览。
+
+0.19补充：普通关联可经全库分析提出有依据的有向升级，审阅标明并沿用edge ID；已有明确有向关系不被批量分析覆盖，仍经DAG检验。单节点内部批次不发无效请求，预计次数与实际批次一致。

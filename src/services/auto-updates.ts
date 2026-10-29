@@ -17,13 +17,13 @@ const cachedInfo = z.object({
   current: z.string(),
   version: z.string(),
   notes: z.string(),
-  kind: z.enum(["setup", "portable", "apk", "deb"]),
+  kind: z.enum(["portable", "apk", "deb"]),
   url: z.string(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   signature: z.string().optional(),
   available: z.boolean(),
 });
-/** Restore only a newer update for this binary's exact platform and installation mode. Native bytes are reverified next. */
+/** Restore only a newer update for this binary's exact platform and supported artifact format. Native bytes are reverified next. */
 async function restoreUpdate(): Promise<UpdateInfo | null> {
   if (!native) return null;
   const saved = cachedInfo.safeParse(
@@ -38,9 +38,7 @@ async function restoreUpdate(): Promise<UpdateInfo | null> {
   }>("update_identity");
   const expected =
     identity.platform === "windows-x86_64"
-      ? identity.portable
-        ? "portable"
-        : "setup"
+      ? "portable"
       : identity.platform === "android-arm64"
         ? "apk"
         : "deb";
@@ -118,7 +116,7 @@ export function startAutomaticUpdates() {
 export async function installReadyUpdate() {
   const info = autoUpdates.getSnapshot().update;
   if (!info || autoUpdates.getSnapshot().phase !== "ready") return;
-  if (info.kind === "setup" || info.kind === "portable") {
+  if (info.kind === "portable") {
     await (await import("./desktop")).quitDesktop(info);
   } else {
     await autoUpdates.install(async (update) => {

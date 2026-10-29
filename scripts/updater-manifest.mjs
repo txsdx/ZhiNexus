@@ -12,8 +12,6 @@ export function artifactIdentity(name) {
       kind: "portable",
       versionKey: "windows",
     };
-  if (name.endsWith("_setup.exe"))
-    return { platform: "windows-x86_64", kind: "setup", versionKey: "windows" };
   if (name.endsWith(".apk") && !name.includes("unsigned"))
     return { platform: "android-arm64", kind: "apk", versionKey: "android" };
   if (name.endsWith(".deb"))
@@ -35,7 +33,9 @@ export function createManifest(
   if (previous?.schema === 2)
     for (const [key, value] of Object.entries(previous.platforms ?? {}))
       if (value.version?.startsWith(versions.shared + "."))
-        platforms[key] = value;
+        platforms[key] = structuredClone(value);
+  if (platforms["windows-x86_64"]?.artifacts)
+    delete platforms["windows-x86_64"].artifacts.setup;
   for (const file of files) {
     const name = path.basename(file),
       identity = artifactIdentity(name);
@@ -44,6 +44,8 @@ export function createManifest(
       version = versions.platforms[versionKey];
     if (!platforms[platform] || platforms[platform].version !== version)
       platforms[platform] = { version, notes, artifacts: {} };
+    if (platform === "windows-x86_64")
+      delete platforms[platform].artifacts.setup;
     const data = fs.readFileSync(file),
       artifact = {
         url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`,

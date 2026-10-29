@@ -548,6 +548,8 @@ function Shell() {
       navigate("review");
     } else if (target.page === "tasks") {
       navigate("tasks");
+    } else if (target.page === "graph") {
+      navigate("graph");
     } else {
       setSettingsTab(target.tab ?? "appearance");
       navigate("settings");

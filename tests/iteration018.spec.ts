@@ -41,6 +41,10 @@ test("capture uses a roomy shared tree picker; nested cancellation keeps the dra
   expect(record).toEqual({ category: "child", reviews: 0, future: true });
   await expect(page.getByRole("region", { name: "词条信息" })).toHaveCount(0);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.getByLabel("完整分类路径")).toHaveText("大类 / 子类");
+  await expect(
+    page.getByRole("region", { name: "词条信息" }).locator("select"),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "选择所属分类" }).click();
   await picker.getByRole("treeitem", { name: "大类", exact: true }).click();
   await expect

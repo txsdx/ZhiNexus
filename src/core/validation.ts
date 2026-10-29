@@ -60,6 +60,7 @@ const schemas = {
     source: text,
     target: text,
     label: text.optional(),
+    reason: text.optional(),
     deleted: z.boolean().optional(),
   }),
   topic: z.object({
@@ -106,6 +107,7 @@ const ai = z.object({
     grade: task,
     classify: task,
     relations: task,
+    graph: task.optional(),
     agent: task,
     ocr: task.optional(),
     image: task,

@@ -10,6 +10,13 @@ import { complete, runTask, generateImage, parseJson } from "./ai";
 import { validateClassification } from "./classification";
 import { chat } from "./agent";
 import { generateTopicTitle } from "./topic-titles";
+import {
+  graphBatches,
+  graphBatchCount,
+  graphProposalSchema,
+  relationPatches,
+  type GraphRelation,
+} from "./knowledge-graph";
 /** Strict, reusable relationship proposals; only known entry IDs are eligible for application. */
 export const relationsSchema = z.object({
   prerequisites: z.array(z.string()).max(8),
@@ -50,6 +57,87 @@ export async function executeAIJob(
     ? { title: e.title, content: e.content }
     : {};
   switch (job.kind) {
+    case "graph": {
+      const entries = z
+        .array(
+          z.object({
+            id: z.string(),
+            title: z.string(),
+            summary: z.string(),
+            content: z.string(),
+            hasMoreContent: z.boolean(),
+            prerequisites: z.array(z.string()),
+          }),
+        )
+        .parse(job.input.entries);
+      const budget = z
+        .number()
+        .int()
+        .min(4096)
+        .max(24000)
+        .parse(job.input.budget);
+      const groups = graphBatches(entries, budget),
+        relations: GraphRelation[] = [];
+      const seen = new Set<string>(),
+        ids = new Set(entries.map((e) => e.id));
+      for (let i = 0; i < groups.length; i++)
+        for (let j = i; j < groups.length; j++) {
+          context.check();
+          const members = i === j ? groups[i] : [...groups[i], ...groups[j]];
+          if (members.length < 2) continue;
+          const part = graphProposalSchema.parse(
+            parseJson(
+              await generate(context, "graph", {
+                entries: JSON.stringify(members),
+                existingEdges: JSON.stringify(
+                  (
+                    job.input.existingEdges as {
+                      source: string;
+                      target: string;
+                    }[]
+                  ).filter(
+                    (e) =>
+                      members.some((n) => n.id === e.source) &&
+                      members.some((n) => n.id === e.target),
+                  ),
+                ),
+              }),
+            ),
+          );
+          const batchIds = new Set(members.map((e) => e.id));
+          for (const r of part.relations) {
+            if (
+              !ids.has(r.source) ||
+              !ids.has(r.target) ||
+              !batchIds.has(r.source) ||
+              !batchIds.has(r.target)
+            )
+              throw Error(
+                "AI返回未知或当前分析批次外的词条 / Graph response references an unknown or out-of-batch entry",
+              );
+            const key = JSON.stringify([r.source, r.target].sort());
+            if (seen.has(key)) continue;
+            seen.add(key);
+            relations.push(r);
+          }
+          if (relations.length > 10000)
+            throw Error(
+              "星图建议超过10000条，请缩小知识库范围 / Too many graph proposals",
+            );
+        }
+      context.check();
+      const patches = relationPatches(relations, undefined, true);
+      return json({
+        relations: patches.map((p) => ({
+          source: String(p.patch.source),
+          target: String(p.patch.target),
+          type: String(p.patch.label),
+          reason: String(p.patch.reason ?? ""),
+        })),
+        entryCount: entries.length,
+        batchCount: graphBatchCount(groups),
+      });
+    }
     case "title":
       return generateTopicTitle(job, context);
     case "explain":

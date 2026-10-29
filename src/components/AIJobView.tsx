@@ -11,6 +11,7 @@ import { useConfirmation } from "../hooks/useConfirmation";
 import type { Json } from "../core/types";
 import { entryWorkspace } from "../core/workspace";
 import { useAIJobs } from "../hooks/useAIJobs";
+import { graphEdges, type GraphRelation } from "../services/knowledge-graph";
 export { useAIJobs } from "../hooks/useAIJobs";
 /** Human states are separate from raw model IDs and provider protocol details. */
 function useStateLabel() {
@@ -30,6 +31,7 @@ export function AIJobStream({ job }: { job: AIJob }) {
   const tasks = {
     explain: t("生成详解", "Explanation"),
     relations: t("分析关联", "Relationships"),
+    graph: t("分析星图关系", "Graph relationships"),
     classify: t("整理分类", "Classification"),
     agent: t("AI 对话", "AI chat"),
     question: t("生成题目", "Question"),
@@ -242,12 +244,17 @@ export function AIJobReview({
     }
   };
   const close = () => {
-    if (state.readOnly) onClose();
-    else
-      void run(async () => {
-        await aiJobs.flush();
-        onClose();
-      });
+    // Close this view synchronously: an older save must never close a newly reopened review.
+    onClose();
+    if (!state.readOnly)
+      void aiJobs
+        .flush()
+        .catch((error) =>
+          notify(
+            t("AI 任务保存失败：", "AI task save failed: ") +
+              String(error instanceof Error ? error.message : error),
+          ),
+        );
   };
   const edit = (key: string, value: Json) =>
     aiJobs.editReview(id, {
@@ -262,6 +269,15 @@ export function AIJobReview({
         })
       : undefined;
   const current = s.entries.find((e) => e.id === job.target.entryId);
+  const graphRows =
+    job.kind === "graph"
+      ? ((job.result as { relations?: GraphRelation[] })?.relations ?? [])
+      : [];
+  const selectedRelations = new Set(
+    ((value?.relations ?? []) as GraphRelation[]).map((r) =>
+      JSON.stringify([r.source, r.target, r.type]),
+    ),
+  );
   const reviewDestination = job.kind === "question" || job.kind === "grade";
   return (
     <Modal
@@ -382,6 +398,88 @@ export function AIJobReview({
                 ))}
               </details>
             </>
+          ) : job.kind === "graph" ? (
+            <section className="graph-proposal-review">
+              <h3>
+                {t("知识关系预览", "Relationship preview")} ·{" "}
+                {selectedRelations.size}/{graphRows.length}
+              </h3>
+              <p>
+                {t(
+                  "依赖：起点是终点的前置知识；递进：基础到进阶。普通关联升级会单独标明，原有有向关系保留。",
+                  "Prerequisite: source comes before target. Progression: basic to advanced. Upgrades of ordinary associations are marked; existing directed relationships are retained.",
+                )}
+              </p>
+              {!graphRows.length && (
+                <p>
+                  {t(
+                    "未发现需要新增或升级的关系。",
+                    "No new relationships or upgrades were found.",
+                  )}
+                </p>
+              )}
+              {graphRows.map((r, index) => {
+                const key = JSON.stringify([r.source, r.target, r.type]);
+                const upgrade =
+                  r.type !== "related" &&
+                  graphEdges().some(
+                    (e) =>
+                      e.type === "related" &&
+                      ((e.source === r.source && e.target === r.target) ||
+                        (e.source === r.target && e.target === r.source)),
+                  );
+                return (
+                  <label className="graph-proposal-item" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={selectedRelations.has(key)}
+                      onChange={(e) => {
+                        const next = new Set(selectedRelations);
+                        if (e.target.checked) next.add(key);
+                        else next.delete(key);
+                        void run(async () =>
+                          edit(
+                            "relations",
+                            graphRows.filter((row) =>
+                              next.has(
+                                JSON.stringify([
+                                  row.source,
+                                  row.target,
+                                  row.type,
+                                ]),
+                              ),
+                            ) as unknown as Json,
+                          ),
+                        );
+                      }}
+                      aria-label={
+                        t("应用关系 ", "Apply relationship ") + (index + 1)
+                      }
+                    />
+                    <span>
+                      <strong>
+                        {s.entries.find((e) => e.id === r.source)?.title ??
+                          r.source}{" "}
+                        {r.type === "related" ? "↔" : "→"}{" "}
+                        {s.entries.find((e) => e.id === r.target)?.title ??
+                          r.target}
+                      </strong>
+                      <small>
+                        {upgrade
+                          ? t("普通关联升级 → ", "Upgrade association → ")
+                          : ""}
+                        {r.type === "prerequisite"
+                          ? t("依赖", "Prerequisite")
+                          : r.type === "progression"
+                            ? t("递进", "Progression")
+                            : t("关联", "Related")}
+                        {r.reason ? " · " + r.reason : ""}
+                      </small>
+                    </span>
+                  </label>
+                );
+              })}
+            </section>
           ) : job.kind === "ocr" ? (
             <>
               <AssetImage src={"asset:" + String(value?.imageHash)} />
@@ -481,23 +579,32 @@ export function AIJobReview({
                   <Markdown>{current.content}</Markdown>
                 </details>
               )}
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={force}
-                  onChange={(e) => setForce(e.target.checked)}
-                />
-                {t(
-                  "我已比较当前内容，确认应用该结果",
-                  "I compared the current content and accept this result",
-                )}
-              </label>
+              {job.kind === "graph" ? (
+                <p>
+                  {t(
+                    "请重新生成分析，避免应用过时的星图建议。",
+                    "Regenerate the graph analysis before applying it.",
+                  )}
+                </p>
+              ) : (
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={force}
+                    onChange={(e) => setForce(e.target.checked)}
+                  />
+                  {t(
+                    "我已比较当前内容，确认应用该结果",
+                    "I compared the current content and accept this result",
+                  )}
+                </label>
+              )}
             </div>
           )}
           <div className="actions">
             <button
               className="primary"
-              disabled={busy || (stale && !force)}
+              disabled={busy || (stale && (job.kind === "graph" || !force))}
               onClick={() =>
                 void run(async () => {
                   const target = await applyAIJob(id, force);

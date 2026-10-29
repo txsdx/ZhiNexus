@@ -3,7 +3,10 @@ import fs from "node:fs";
 import { testNativeShortcuts } from "./native-shortcuts.mjs";
 import { testNativeNetwork } from "./native-network.mjs";
 import { testNativeOcr } from "./native-ocr.mjs";
-import { testNativeUpdates } from "./native-updates.mjs";
+import {
+  testNativeUpdates,
+  testExecutableReplacement,
+} from "./native-updates.mjs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
@@ -481,6 +484,7 @@ try {
     Buffer.from(await command("GET", "/screenshot"), "base64"),
   );
   await stop();
+  testExecutableReplacement(application);
   console.log(
     "PASS: native shortcut recording, screenshot/OCR, custom-port proxy/model networking and real SSE chat, MCP stdio SDK, SQLite editing, system/portable isolation, cleanup surviving restart and recovery after primary/WAL/newest-checkpoint corruption",
   );

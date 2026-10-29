@@ -50,9 +50,12 @@ test("reading keeps a full-width long title and aligned facts; property editing 
       .boundingBox();
   expect(Math.abs(edit!.y - chat!.y)).toBeLessThan(1);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "选择所属分类" }),
-  ).toContainText("机器人安全与控制");
+  await expect(page.getByLabel("完整分类路径")).toContainText(
+    "机器人安全与控制",
+  );
+  await expect(page.getByRole("button", { name: "选择所属分类" })).toHaveText(
+    "修改分类",
+  );
   await expect(
     page.locator(".entry-meta").getByLabel("标签（逗号分隔）"),
   ).toHaveValue("控制, 安全");

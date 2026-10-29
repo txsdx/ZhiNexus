@@ -82,7 +82,6 @@ it("sends only verified artifact metadata to the native installer", async () => 
       signature: null,
       version: "0.14.0",
     },
-    silent: false,
     restart: true,
   });
 });

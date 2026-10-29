@@ -108,6 +108,20 @@ test("the frontend is compiled once and all native jobs verify its artifact", ()
     assert.equal(job.steps.filter((s) => s.run === "npm run build").length, 0);
   }
 });
+test("Windows never builds installers and uses a size-optimized profile without a runtime packer", () => {
+  const build = workflow.jobs.desktop.steps.find(
+    (s) => s.uses === "tauri-apps/tauri-action@v0",
+  );
+  assert.ok(build.with.args.includes("--profile release-windows --no-bundle"));
+  const windows = JSON.parse(
+    fs.readFileSync("src-tauri/tauri.windows.conf.json", "utf8"),
+  );
+  assert.equal(windows.bundle.active, false);
+  const packaging = fs.readFileSync("scripts/package-portable.ps1", "utf8");
+  assert.ok(!/nsis|_setup\.exe|\.msi/i.test(packaging));
+  assert.match(packaging, /release-windows\/zhinexus\.exe/);
+  assert.ok(!/upx|lzma/i.test(JSON.stringify(workflow)));
+});
 test("only a complete successful native build can publish using automatic repository credentials", () => {
   assert.deepEqual(workflow.jobs.publish.needs, ["desktop", "android"]);
   assert.equal(workflow.jobs.publish.if, "inputs.create_release");

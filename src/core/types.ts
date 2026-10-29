@@ -95,6 +95,7 @@ export type Task =
   | "grade"
   | "classify"
   | "relations"
+  | "graph"
   | "agent"
   | "ocr"
   | "image";

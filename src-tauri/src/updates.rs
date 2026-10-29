@@ -1,4 +1,4 @@
-//! HTTPS, SHA-256 and optional Minisign verification before platform installers or portable replacement are launched.
+//! Verified updates: Windows atomically replaces its executable; Android/Ubuntu retain OS installation flows.
 use base64::Engine;
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
@@ -11,11 +11,10 @@ use tauri::Manager;
 #[cfg(not(target_os = "android"))]
 use tauri_plugin_opener::OpenerExt;
 
-/// Only the four release artifact kinds are accepted; arbitrary shell commands and destination paths are forbidden.
+/// Windows has one executable artifact regardless of its data-storage mode.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
-    Setup,
     Portable,
     Apk,
     Deb,
@@ -34,11 +33,12 @@ pub struct PlatformUpdate {
 pub fn update_identity(app: tauri::AppHandle) -> serde_json::Value {
     let location = app.state::<crate::paths::StorageLocation>();
     let executable = std::env::current_exe().unwrap_or_default();
-    let portable = location.portable
-        || executable
-            .file_stem()
-            .is_some_and(|s| s.to_string_lossy().ends_with("_protable"));
-    serde_json::json!({"platform":if cfg!(target_os="windows"){"windows-x86_64"}else if cfg!(target_os="android"){"android-arm64"}else{"linux-x86_64"},"version":app.package_info().version.to_string(),"portable":portable})
+    let replacement_error = fs::read(location.root.join("updates/last-error.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .filter(|record| record["target"].as_str() == executable.to_str())
+        .and_then(|record| record["message"].as_str().map(str::to_owned));
+    serde_json::json!({"platform":if cfg!(target_os="windows"){"windows-x86_64"}else if cfg!(target_os="android"){"android-arm64"}else{"linux-x86_64"},"version":app.package_info().version.to_string(),"portable":location.portable,"replacementError":replacement_error})
 }
 /// Read the private repository manifest without exposing the embedded credential to the webview.
 #[tauri::command]
@@ -64,7 +64,9 @@ fn validate(update: &PlatformUpdate) -> Result<&'static str, String> {
         return Err("Untrusted update metadata".into());
     }
     let extension = match update.kind {
-        Kind::Setup | Kind::Portable if cfg!(target_os = "windows") => "exe",
+        Kind::Portable if cfg!(target_os = "windows") && url.path().ends_with("_protable.exe") => {
+            "exe"
+        }
         Kind::Apk if cfg!(target_os = "android") => "apk",
         Kind::Deb if cfg!(target_os = "linux") => "deb",
         _ => return Err("Artifact does not match this platform".into()),
@@ -152,6 +154,32 @@ fn verify_digest(path: &Path, expected: &str) -> Result<(), String> {
     }
     Ok(())
 }
+/// Keep only the staged executable; never remove the rollback copy, current process or unrelated app data.
+#[cfg(any(target_os = "windows", test))]
+fn prune_executable_cache(root: &Path, keep: &Path) {
+    if root.join("pending.json").exists() {
+        return;
+    }
+    let running = std::env::current_exe().ok();
+    if let Ok(files) = fs::read_dir(root) {
+        for file in files.flatten() {
+            let path = file.path();
+            let owned = path.file_stem().is_some_and(|s| {
+                let text = s.to_string_lossy();
+                text.len() == 64 && text.bytes().all(|c| c.is_ascii_hexdigit())
+            }) && path
+                .extension()
+                .is_some_and(|s| s == "exe" || s == "partial");
+            if owned
+                && path != keep
+                && running.as_ref() != Some(&path)
+                && file.file_type().is_ok_and(|t| t.is_file())
+            {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+}
 /// Stage bytes without UI or process termination; verified caches work offline and avoid duplicate downloads.
 async fn prepare_file(app: &tauri::AppHandle, update: &PlatformUpdate) -> Result<PathBuf, String> {
     let extension = validate(update)?;
@@ -170,6 +198,8 @@ async fn prepare_file(app: &tauri::AppHandle, update: &PlatformUpdate) -> Result
         && verify_digest(&file, &update.sha256).is_ok()
         && verify_publisher(app, &file, update).is_ok()
     {
+        #[cfg(target_os = "windows")]
+        prune_executable_cache(&root, &file);
         return Ok(file);
     }
     let pending = file.with_extension("partial");
@@ -207,6 +237,8 @@ async fn prepare_file(app: &tauri::AppHandle, update: &PlatformUpdate) -> Result
         let _ = fs::remove_file(&pending);
     }
     transfer?;
+    #[cfg(target_os = "windows")]
+    prune_executable_cache(&root, &file);
     Ok(file)
 }
 /// Background staging never opens an installer; the webview receives no executable path or credential.
@@ -219,12 +251,11 @@ pub async fn prepare_platform_update(
     let _guard = state.0.lock().await;
     prepare_file(&app, &update).await.map(|_| ())
 }
-/// Launch only verified bytes; automatic Windows exits can install silently without restarting the app.
+/// Replace Windows files only after staging/backup succeeds; normal exits do not force a restart.
 #[tauri::command]
 pub async fn install_platform_update(
     app: tauri::AppHandle,
     update: PlatformUpdate,
-    silent: Option<bool>,
     restart: Option<bool>,
 ) -> Result<(), String> {
     let state = app.state::<UpdateState>();
@@ -233,37 +264,42 @@ pub async fn install_platform_update(
     #[cfg(target_os = "windows")]
     let root = file.parent().ok_or("Missing update directory")?;
     #[cfg(not(target_os = "windows"))]
-    let _ = (silent, restart);
+    let _ = restart;
     #[cfg(target_os = "windows")]
     if matches!(update.kind, Kind::Portable) {
         let target = std::env::current_exe().map_err(|e| e.to_string())?;
-        fs::write(
+        let plan = match crate::executable_update::prepare(&file, &target, root, &update.sha256) {
+            Ok(plan) => plan,
+            Err(error) => {
+                let _ = fs::write(
+                    root.join("last-error.json"),
+                    serde_json::json!({"target":target,"message":error}).to_string(),
+                );
+                return Err(error);
+            }
+        };
+        if let Err(error) = fs::write(
             root.join("pending.json"),
-            serde_json::to_vec(&serde_json::json!({"target":target,"sha256":update.sha256}))
-                .map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
+            serde_json::to_vec(
+                &serde_json::json!({"target":target,"sha256":update.sha256,"plan":plan}),
+            )
+            .map_err(|e| e.to_string())?,
+        ) {
+            crate::executable_update::discard(&plan);
+            return Err(error.to_string());
+        }
         let mut helper = std::process::Command::new(&file);
         helper.arg("--finish-portable-update").arg(&target);
         if !restart.unwrap_or(true) {
             helper.arg("--no-restart");
         }
-        helper.spawn().map_err(|e| e.to_string())?;
+        if let Err(error) = helper.spawn() {
+            crate::executable_update::discard(&plan);
+            let _ = fs::remove_file(root.join("pending.json"));
+            return Err(error.to_string());
+        }
         crate::desktop::mark_exiting(&app);
         app.exit(0);
-        return Ok(());
-    }
-    #[cfg(target_os = "windows")]
-    if matches!(update.kind, Kind::Setup) {
-        let mut installer = std::process::Command::new(&file);
-        installer.arg("/UPDATE");
-        if silent.unwrap_or(false) {
-            installer.arg("/S");
-        }
-        if restart.unwrap_or(true) {
-            installer.arg("/R");
-        }
-        installer.spawn().map_err(|e| e.to_string())?;
         return Ok(());
     }
     #[cfg(target_os = "android")]
@@ -279,7 +315,7 @@ pub async fn install_platform_update(
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-/// A verified new portable binary completes replacement only after the old process releases its executable.
+/// A verified new single-file binary replaces either storage mode after the old process releases its file.
 #[cfg(target_os = "windows")]
 pub fn finish_portable_update() -> Result<bool, String> {
     let args: Vec<_> = std::env::args_os().collect();
@@ -297,32 +333,90 @@ pub fn finish_portable_update() -> Result<bool, String> {
     {
         return Err("Invalid portable replacement request".into());
     }
-    let bytes = fs::read(&current).map_err(|e| e.to_string())?;
-    if Some(format!("{:x}", Sha256::digest(&bytes)).as_str()) != record["sha256"].as_str() {
-        return Err("Portable helper hash mismatch".into());
-    }
-    let staged = target.with_extension("updating");
-    fs::write(&staged, bytes).map_err(|e| e.to_string())?;
-    for _ in 0..120 {
-        if fs::copy(&target, target.with_extension("previous.exe")).is_ok()
-            && fs::rename(&staged, &target).is_ok()
-        {
-            if !args.iter().any(|arg| arg == "--no-restart") {
-                std::process::Command::new(&target)
-                    .spawn()
-                    .map_err(|e| e.to_string())?;
-            }
-            let _ = fs::remove_file(root.join("pending.json"));
-            return Ok(true);
+    let result: Result<bool, String> = (|| {
+        use crate::executable_update as replacement;
+        let expected = record["sha256"].as_str().ok_or("Missing helper SHA-256")?;
+        if replacement::digest(&current)? != expected {
+            return Err("Executable helper SHA-256 mismatch".into());
         }
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // Preserve the existing handoff flag/record so the last single-file version can update directly.
+        let plan: replacement::Replacement = if record.get("plan").is_some() {
+            serde_json::from_value(record["plan"].clone()).map_err(|e| e.to_string())?
+        } else {
+            replacement::prepare(&current, &target, root, expected)?
+        };
+        replacement::validate(&plan, &target, root, expected)?;
+        let started = std::time::Instant::now();
+        loop {
+            match replacement::commit(&plan) {
+                Ok(()) => break,
+                Err(error) => {
+                    if matches!(&error, replacement::CommitError::Invalid(_))
+                        || started.elapsed() >= std::time::Duration::from_secs(60)
+                    {
+                        replacement::discard(&plan);
+                        return Err(format!(
+                            "Executable replacement failed; target retained: {error}"
+                        ));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+            }
+        }
+        if !args.iter().any(|arg| arg == "--no-restart") {
+            if let Err(error) = std::process::Command::new(&target).spawn() {
+                replacement::rollback(&plan)?;
+                return Err(format!(
+                    "New process could not start; previous executable restored: {error}"
+                ));
+            }
+        }
+        // Keep one recovery copy in the data cache, never a second program beside the released exe.
+        let _ = fs::rename(&plan.backup, root.join("previous.bin"));
+        let _ = fs::remove_file(root.join("pending.json"));
+        let _ = fs::remove_file(root.join("last-error.json"));
+        Ok(true)
+    })();
+    if let Err(error) = &result {
+        let _ = fs::write(
+            root.join("last-error.json"),
+            serde_json::json!({"target":target,"message":error}).to_string(),
+        );
     }
-    Err("Portable executable remained locked; previous executable was retained".into())
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn obsolete_windows_cache_is_bounded_without_touching_data_or_rollback() {
+        let root = std::env::temp_dir().join(format!("zhinexus-cache-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let keep = root.join(format!("{}.exe", "a".repeat(64)));
+        let old = root.join(format!("{}.exe", "b".repeat(64)));
+        for file in [
+            &keep,
+            &old,
+            &root.join("previous.bin"),
+            &root.join("knowledge.db"),
+        ] {
+            fs::write(file, b"bytes").unwrap();
+        }
+        prune_executable_cache(&root, &keep);
+        assert!(keep.exists());
+        assert!(!old.exists());
+        assert!(root.join("previous.bin").exists());
+        assert!(root.join("knowledge.db").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn windows_installer_kind_is_never_accepted() {
+        assert!(serde_json::from_value::<PlatformUpdate>(serde_json::json!({
+            "kind":"setup", "url":"https://github.com/txsdx/ZhiNexus/releases/download/v0.19.0/app_setup.exe",
+            "sha256":"a".repeat(64),"version":"0.19.0"
+        })).is_err());
+    }
     #[test]
     fn cached_artifacts_require_matching_bytes_not_just_a_filename() {
         let directory =

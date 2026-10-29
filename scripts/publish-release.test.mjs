@@ -17,7 +17,6 @@ const input = {
     "release-artifacts/app.apk",
     "release-artifacts/app.deb",
     "release-artifacts/app_protable.exe",
-    "release-artifacts/app_setup.exe",
   ],
   existing: null,
 };
@@ -119,7 +118,6 @@ test("recursive artifact discovery includes the nested Windows/Deb paths created
   try {
     const names = [
       "release-files/app_protable.exe",
-      "release-files/app_setup.exe",
       "src-tauri/target/release/bundle/deb/app.deb",
       "app.apk",
       "latest.json",
@@ -130,10 +128,10 @@ test("recursive artifact discovery includes the nested Windows/Deb paths created
       fs.writeFileSync(file, "fixture");
     }
     const artifacts = releaseArtifacts(root);
-    assert.equal(artifacts.length, 5);
+    assert.equal(artifacts.length, 4);
     assert.equal(
       publicationPlan({ ...input, draft: true, artifacts })[1].length,
-      9,
+      8,
     );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -154,4 +152,16 @@ test("metadata alone or missing platforms cannot produce a public update with ab
       }),
     /unique/,
   );
+});
+test("Windows installers and extra executable files are refused even with all platform artifacts present", () => {
+  for (const name of ["app_setup.exe", "app.msi", "second.exe"])
+    assert.throws(
+      () =>
+        publicationPlan({
+          ...input,
+          draft: true,
+          artifacts: [...input.artifacts, name],
+        }),
+      /Windows/,
+    );
 });

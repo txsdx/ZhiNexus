@@ -1,7 +1,7 @@
 # Native runtime and platform plugins; domain workflows live in the TypeScript layer.
 [package]
 name = "zhinexus"
-version = "0.18.0"
+version = "0.19.0"
 description = "Local-first learning workspace"
 authors = ["ZhiNexus contributors"]
 edition = "2021"
@@ -37,8 +37,6 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-# Only direct installer updates are supported; do not compile the optional ZIP extractor.
-tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-plugin-process = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
@@ -74,3 +72,11 @@ features = ["Foundation", "Globalization", "Graphics_Imaging", "Media_Ocr", "Sto
 # Match the HTTP plugin parser in scope regression tests.
 urlpattern = "0.6"
 regex = "1"
+
+# Windows ships one native executable. Optimize its code size without a runtime unpacker.
+[profile.release-windows]
+inherits = "release"
+opt-level = "s"
+lto = "thin"
+codegen-units = 16
+strip = "symbols"

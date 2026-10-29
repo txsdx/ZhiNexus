@@ -83,7 +83,8 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("zhinexus-portable-test-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
-        let exe = root.join("ZhiNexus.exe");
+        // Distribution names ending in protable must still default to the system data folder.
+        let exe = root.join("ZhiNexus_protable.exe");
         let system = root.join("user-data");
         assert!(!select_root(&exe, &system, true).portable);
         fs::write(root.join("portable"), b"").unwrap();

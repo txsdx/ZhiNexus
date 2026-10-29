@@ -87,11 +87,11 @@ export async function quitDesktop(update?: UpdateInfo) {
       ready.phase === "ready" &&
       ready.update &&
       (update || automatic) &&
-      ["setup", "portable"].includes(ready.update.kind)
+      ready.update.kind === "portable"
     ) {
       try {
         await autoUpdates.install((info) =>
-          applyUpdate(info, { silent: true, restart: !!update }),
+          applyUpdate(info, { restart: !!update }),
         );
       } catch (error) {
         if (update) throw error;

@@ -10,6 +10,7 @@ import { diagnosticText } from "../core/diagnostics";
 import { diagnostics } from "./diagnostics";
 import { notifyCompletion } from "./notifications";
 import { topicTitleSeed } from "./topic-titles";
+import { graphCatalog, graphEdges, graphSignature } from "./knowledge-graph";
 let queueChannel: BroadcastChannel | undefined;
 let workflows: Promise<typeof import("./ai-workflows")> | undefined;
 /** Validate the local queue boundary before interpreting saved work or offering retry. */
@@ -20,6 +21,7 @@ const records = z
       kind: z.enum([
         "explain",
         "relations",
+        "graph",
         "classification",
         "enrichment",
         "image",
@@ -31,7 +33,14 @@ const records = z
       ]),
       title: z.string(),
       target: z.object({
-        page: z.enum(["entry", "agent", "review", "settings", "tasks"]),
+        page: z.enum([
+          "entry",
+          "agent",
+          "review",
+          "settings",
+          "tasks",
+          "graph",
+        ]),
         entryId: z.string().optional(),
         topicId: z.string().optional(),
         sessionId: z.string().optional(),
@@ -56,6 +65,7 @@ const records = z
             "grade",
             "classify",
             "relations",
+            "graph",
             "agent",
             "ocr",
             "image",
@@ -290,6 +300,20 @@ export async function submitAIJob(
       ? s.entries.find((e) => e.id === target.entryId)
       : undefined;
   const base: Record<string, Json> = {};
+  if (kind === "graph") {
+    if (s.entries.length < 2)
+      throw Error("至少需要两个词条 / At least two entries are required");
+    const model = s.ai.models.find((m) => m.id === resolveModel(s.ai, "graph"));
+    base.graph = graphSignature();
+    input = {
+      entries: json(graphCatalog()),
+      existingEdges: json(graphEdges()),
+      budget: Math.max(
+        4096,
+        Math.min(24000, Math.floor((model?.context ?? 96000) / 4)),
+      ),
+    };
+  }
   if (entry)
     base.entry = json({
       id: entry.id,
@@ -335,6 +359,7 @@ export async function submitAIJob(
   const names: Record<AIJobKind, string> = {
     explain: "AI 解释 / Explanation",
     relations: "知识关联 / Connections",
+    graph: "星图自动关联 / Graph connections",
     classification: "智能分类 / Classification",
     enrichment: "整理新知识 / Enrichment",
     image: "教学配图 / Illustration",

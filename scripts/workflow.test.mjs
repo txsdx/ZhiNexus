@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { parse } from "yaml";
 const workflow = parse(fs.readFileSync(".github/workflows/build.yml", "utf8"));
 test("one manual entry builds every target with only publication and draft options", () => {
@@ -112,7 +113,9 @@ test("Windows never builds installers and uses a size-optimized profile without 
   const build = workflow.jobs.desktop.steps.find(
     (s) => s.uses === "tauri-apps/tauri-action@v0",
   );
-  assert.ok(build.with.args.includes("--profile release-windows --no-bundle"));
+  assert.ok(
+    build.with.args.includes("--no-bundle -- --profile release-windows"),
+  );
   const windows = JSON.parse(
     fs.readFileSync("src-tauri/tauri.windows.conf.json", "utf8"),
   );
@@ -121,6 +124,22 @@ test("Windows never builds installers and uses a size-optimized profile without 
   assert.ok(!/nsis|_setup\.exe|\.msi/i.test(packaging));
   assert.match(packaging, /release-windows\/zhinexus\.exe/);
   assert.ok(!/upx|lzma/i.test(JSON.stringify(workflow)));
+});
+test("the installed Tauri CLI accepts the Windows command with the custom profile forwarded to Cargo", () => {
+  const build = workflow.jobs.desktop.steps.find(
+    (s) => s.uses === "tauri-apps/tauri-action@v0",
+  );
+  const configured = build.with.args
+    .match(/'([^']*--no-bundle[^']*)'/)[1]
+    .split(/\s+/);
+  const separator = configured.indexOf("--");
+  configured.splice(separator < 0 ? configured.length : separator, 0, "--help");
+  const help = execFileSync(
+    process.execPath,
+    ["node_modules/@tauri-apps/cli/tauri.js", "build", ...configured],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  assert.match(help, /--no-bundle/);
 });
 test("only a complete successful native build can publish using automatic repository credentials", () => {
   assert.deepEqual(workflow.jobs.publish.needs, ["desktop", "android"]);

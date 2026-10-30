@@ -23,3 +23,10 @@ node scripts/setup-android-signing.mjs /private/path/signing-secrets.json txsdx/
 4. 配置就绪后按标准Build门禁编译验证。APK名称为`ZhiNexus_android_arm64_<version>.apk`，不再带development后缀。签名/包/摘要验证与系统安装授权仍保留。
 
 平台依据：[Android官方签名说明](https://developer.android.com/studio/publish/app-signing)。官方明确更新需匹配证书，未使用Play托管时丢失签名私钥会失去原应用身份的更新能力；新密钥不能补回旧身份。
+
+
+## 0.23 CI签名续验（2026-10-30）
+
+[Build41014436551](https://github.com/txsdx/ZhiNexus/actions/runs/41014436551)实际通过固定私钥预检、237单元/44脚本/109浏览器与生产构建、Ubuntu12原生/DEB、Windows11原生和完整真实实包（匿名更新、独立捕获、系统/portable存储、替换与损坏恢复）。Android arm64/Kotlin编译成功，实际APK已签名并上传为诊断产物；SDK35和37的apksigner独立验证成功，证书为固定指纹。原脚本却只识别旧版Signer #1显示文字，SDK37输出V3.0 Signer，导致签名后校验误报，发布按门禁被阻止。
+
+修复为apksigner先验证签名并输出标准PEM，再由Node X509Certificate解析DER计算SHA-256与固定指纹比对；不再依赖报告标签，也不放宽证书身份检查。新增缺失/重复/损坏/错误指纹回归，待新CI执行。应用源码/平台版本/私钥未变。执行工作区在本次修复时断开，改用仓库接口提交；现有连接不提供workflow_dispatch，待恢复工作区或维护者从main手动运行标准Build。不能重跑旧提交来冒充修复已验证，当前未正式发布0.23。

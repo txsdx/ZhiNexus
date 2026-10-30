@@ -26,7 +26,5 @@ mkdir -p release-files
 output_path="release-files/ZhiNexus_android_arm64_$(node -p 'require("./package.json").version').apk"
 "$build_tools/zipalign" -f 4 "$apk_path" "$RUNNER_TEMP/aligned.apk"
 "$build_tools/apksigner" sign --ks "$keystore_path" --ks-key-alias "$KEY_ALIAS" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD --out "$output_path" "$RUNNER_TEMP/aligned.apk"
-"$build_tools/apksigner" verify --verbose --print-certs "$output_path" > "$RUNNER_TEMP/android-certificate-report.txt"
-signed_certificate=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/android-certificate-report.txt" | tr '[:upper:]' '[:lower:]')
-if [ "$signed_certificate" != "$expected_certificate" ]; then echo 'The APK signer differs from the pinned certificate' >&2; exit 1; fi
-echo "Verified fixed Android APK certificate: $signed_certificate"
+"$build_tools/apksigner" verify --verbose --print-certs-pem "$output_path" > "$RUNNER_TEMP/android-certificate-report.txt"
+node scripts/verify-android-certificate.mjs "$RUNNER_TEMP/android-certificate-report.txt" src-tauri/mobile/android/release-certificate.sha256

@@ -27,3 +27,7 @@
 当前GitHub连接可推送和操作Release，但Actions Secrets列表/写入所需public-key均HTTP403。没有成功代写ANDROID_KEYSTORE_BASE64、ANDROID_KEY_ALIAS、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_PASSWORD。备份包提供离线configure-secrets.html、README与stdin导入脚本；管理员按[ANDROID_SIGNING](ANDROID_SIGNING.md)配置后才能继续。不要重新生成密钥或将备份放入公开仓库。
 
 配置确认后沿用标准Build一次前端门禁、三平台编译、Windows真实实包、Android固定签名/包、资产/清单读回和草稿验收，再正式发布。当前没有运行这一原生Build，也没有声称Kotlin/Android新版本安装通过；默认不启动模拟器。旧开发密钥无法从APK恢复，首次切换固定身份需用户先导出知识并保留本机草稿，再迁移；不得自动卸载/清数据。未来同证书覆盖升级仍需实际验收。
+
+## 配置恢复后的继续验收
+
+维护者已确认添加四个Secrets；此前管理API403不再作为构建阻塞。源码和本地门禁无变化，复用已通过结果，标准Build最先验证固定证书，之后执行完整CI和三平台实包/资产验收。此节在实际结果就绪后更新，不提前声称发布。

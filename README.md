@@ -6,7 +6,7 @@
 
 ## 下载
 
-当前正式版：[v0.23.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.23.0)。Windows、Ubuntu、Android 均为 0.23.0。
+当前正式版：[v0.24.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.24.0)。Windows、Ubuntu、Android 均为 0.24.0。
 
 在 [最新 Release](https://github.com/txsdx/ZhiNexus/releases/latest) 下载对应文件：
 
@@ -68,7 +68,7 @@ npm run tauri dev  # 原生桌面开发
 ## 仓库说明
 
 - [完整复现规格](.ai/初始提示词.txt)：全部编号需求与 AI 工作规则。
-- [本版验收](.ai/ACCEPTANCE_023.md)、[本版交付记录](.ai/ITERATION_023.md)、[当前状态](.ai/STATUS.md)、[验证边界](.ai/KNOWN_ISSUES.md)。
+- [本版验收](.ai/ACCEPTANCE_024.md)、[本版交付记录](.ai/ITERATION_024.md)、[当前状态](.ai/STATUS.md)、[验证边界](.ai/KNOWN_ISSUES.md)。
 - [架构](.ai/ARCHITECTURE.md)、[复习设计依据](.ai/LEARNING_DESIGN.md)、[更新日志](.ai/CHANGELOG.md)。
 
 本机未保存草稿不参与知识同步。备份与恢复入口位于数据库设置；迁移或覆盖安装前先备份。

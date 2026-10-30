@@ -30,3 +30,7 @@ node scripts/setup-android-signing.mjs /private/path/signing-secrets.json txsdx/
 最终[Build41017924868](https://github.com/txsdx/ZhiNexus/actions/runs/41017924868)全部成功：237单元/47脚本/109浏览器与生产构建，Windows11项、Ubuntu12项原生边界，Windows完整真实实包和Android arm64/Kotlin编译、固定签名验证。三平台四资产已下载读回，版本/URL/SHA-256、Windows单文件、Android图标/包名/递增versionCode及证书、匿名latest.json和发布标签均已独立验证。详细证据见[ITERATION_023](ITERATION_023.md)。
 
 签名后的校验不再解析Signer #1等显示标签：先由apksigner verify --print-certs-pem验证签名，再用Node crypto.X509Certificate解析唯一证书的DER并计算SHA-256。实际发布APK分别经SDK35/37复验同一指纹；缺失、重复、损坏、错误指纹回归均通过。当前执行工作区已恢复，维护者配置的四个Secrets已生效，不再重复请求配置或回读秘密原值。
+
+## 0.24延续验证
+
+Build41102913797与实际0.24 APK通过；与0.23证书相同，SDK35/37标准PEM/DER核验，包名不变、versionCode递增。Release下载文件与已独立验证CI包字节完全相同。没有生成新密钥，未做实体安装验证。

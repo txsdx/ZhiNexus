@@ -1,11 +1,15 @@
 # 需求完成情况
 
-当前正式版本：**Windows/Ubuntu/Android 0.23.0**，本版新增115–123项检索、引用、离线练习、活动记录及固定Android签名。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
+当前正式版本：**Windows/Ubuntu/Android 0.24.0**，本版新增124–128项重要等级、免复习与七日计划；0.23的检索、引用、离线练习、活动记录和固定Android签名保持。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
 
 
-## 0.24 本轮（本地完整通过，待三平台构建）
+## 0.24 最终验收（已正式发布）
 
-新增124–128：高/普通/低重要等级、手动锁定/自动评估、免复习全路径、等级检索/批量/AI工具与七日负荷预览。正式下载暂仍为0.23，0.24不得称已发布。最终253单元（43文件）、47脚本、生产构建、117浏览器全量及代码格式通过。首轮夹具/标题定位和旧提示回归已分别修正复验；8项新浏览器场景包含单独评估、锁定/恢复自动、真实流式、失败/暂停与同步。三平台与正式发布待标准门禁，证据见ACCEPTANCE_024/ITERATION_024。
+正式[v0.24.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.24.0)于北京时间2026-10-31 02:18:26发布，源码`2fe56543584ba8c5f6dd1af0a8ecd1f3cee29aa3`。新增124–128全部接入、对应验收及正式发布完成。
+
+[Build41102913797](https://github.com/txsdx/ZhiNexus/actions/runs/41102913797)全组成功：253单元（43文件）、47脚本、117浏览器（5.5分钟）及生产构建16.19秒；Windows11项/Ubuntu12项原生边界、Windows完整真实实包和Android arm64/Kotlin/固定签名验证通过。四资产实际下载、版本/URL/字节/SHA-256、公开tag与匿名latest.json、Android包名/递增versionCode/图标及SDK35/37相同证书均已核对。详见[ITERATION_024](ITERATION_024.md)。
+
+实现：三等重要性、人工锁定/恢复自动与独立AI建议、全路径免复习与迟到保护、等级筛选/组合检索/批量/AI工具、七日当前计划预览。保留所有FSRS卡片/次数/历史，参见[IMPORTANCE_DESIGN](IMPORTANCE_DESIGN.md)。模拟WebDAV/本地HTTP SSE不等于用户真实提供商或自建服务；未做实体Android安装/通知验收。
 
 ## 0.23最终验收（已正式发布）
 

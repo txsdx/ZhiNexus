@@ -40,3 +40,5 @@ Windows实际命令：`tauri build --no-bundle -- --profile release-windows`；p
 
 
 0.24：按124–128处理知识重要性。importance={level:high|normal|low,mode:auto|manual,reason?:string}是一个CRDT寄存器，未设默认normal，不修改FSRS卡片。手动等级不被后续解释覆盖；独立importance AI任务使用可编辑模板/模型，解释与评估各是真实流式阶段，评估失败保留已生成解释。低等从统一review-policy和reminderPlan排除；自主/AI复习的开始、揭示、迟到回执和完成事务再次核对当前资格。学习负荷只数当前每项的下一次计划，不模拟未来会完成的次数。维护IMPORTANCE_DESIGN/ACCEPTANCE_024，沿用固定Android身份，不因前端特性生成新密钥。
+
+0.24已正式交付：Build41102913797全绿，253/47/117、三平台/Windows实包与四资产/匿名清单读回；应用源码2fe5654。后续保持重要性和FSRS独立、人工锁定优先与免复习资格的写入时检查，不将模拟提供商/协议测试冒充真实账号或实体手机验收。

@@ -198,3 +198,14 @@ Android release identity is pinned by `mobile/android/release-certificate.der` a
 AIJobReview closes only after durable queue flush, keeps edited fields/error visible on failure, and invalidates asynchronous close callbacks when its identity/unmount generation changes. Field edits merge the queue's current reviewData rather than a stale rendered snapshot. Controlled delayed/failed storage coverage verifies this ordering before reload, not a timing sleep.
 
 Android签名后身份校验使用apksigner verify --print-certs-pem的标准PEM块，经Node crypto.X509Certificate解析DER后计算SHA-256。SDK显示标签（Signer #1/V3.0 Signer等）不是稳定接口；缺失/重复/损坏或不同证书一律拒绝，只有签名验证成功才执行身份检查。
+
+
+## 0.24 Importance and bounded workload
+
+`core/importance` defines high/normal/low separately from taxonomy, bookmarks and FSRS state. One optional `importance` register includes level, auto/manual mode and bounded AI rationale, so concurrent merges never pair a level with another source. Missing means normal, requiring no migration writes. Validation checks every concurrent candidate. Edits use the existing guarded selection batch; card, history and actual counts are untouched.
+
+Explanation/enrichment adds one `importance` provider stage with its own editable prompt/model. A bounded JSON suggestion remains in the same durable proposal as the explanation. Assessment errors are diagnosed and leave a reviewable successful explanation with its existing priority intact; cancellation still aborts the whole job. Applying explains never overwrites a current manual choice, even when force-accepting content. A standalone assessment requires unchanged captured metadata; a user-reviewed edit can lock the proposed level. Content/priority/receipt share one transaction and cleanup retry cannot apply twice.
+
+`needsReview` excludes low importance for badges, search, device notices and overview. `reviewQueue` orders remaining due entries high first, then their existing deadline. `reminderPlan` excludes low before generating native alarms; App's signature includes priority so OS schedules reconcile. Self/AI review guards recheck eligibility at actual writes. Exempt sessions remain paused/recoverable without card resets. Curves default to eligible entries, with an explicit inspection toggle for retained exempt models.
+
+`review-forecast` buckets only each eligible entry’s current next-review time into seven local-calendar days, overdue entries today; DST uses calendar dates. No future self-ratings/completions are invented. The compact overview opens live day details and reuses entry navigation. Importance filters/aliases share knowledge-search with the quick picker and AI search; table still has four columns. Tools expose priority and can propose a confirmed locked update through existing receipts.

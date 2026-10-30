@@ -121,3 +121,27 @@ it("a cancelled, queued stale, or failed save cannot partially update a session 
   await expect(finishSelfReview(id, 1)).rejects.toThrow("changed");
   expect(JSON.stringify(state.entries[0])).toBe(original);
 });
+
+it("lowering importance pauses start, reveal and commit, while raising it restores the untouched session", async () => {
+  const id = await startSelfReview("entry", "priority");
+  const card = JSON.stringify(state.entries[0].card);
+  state.entries[0].importance = { level: "low", mode: "manual" };
+  await expect(startSelfReview("entry", "duplicate-low")).rejects.toThrow(
+    "excluded",
+  );
+  await expect(revealSelfReview(id)).rejects.toThrow("changed");
+  state.entries[0].importance = { level: "high", mode: "manual" };
+  expect(await startSelfReview("entry")).toBe(id);
+  await revealSelfReview(id);
+  beforeCommit = () => {
+    state.entries[0].importance = { level: "low", mode: "manual" };
+  };
+  await expect(finishSelfReview(id, 3)).rejects.toThrow("changed");
+  expect(JSON.stringify(state.entries[0].card)).toBe(card);
+  expect(state.entries[0].reviewCount).toBe(0);
+  expect(state.reviews[0].phase).toBe("graded");
+  beforeCommit = () => {};
+  state.entries[0].importance = { level: "normal", mode: "manual" };
+  await finishSelfReview(id, 3);
+  expect(state.entries[0].reviewCount).toBe(1);
+});

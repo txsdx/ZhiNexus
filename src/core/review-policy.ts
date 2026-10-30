@@ -2,6 +2,7 @@
 import { fsrs } from "ts-fsrs";
 import type { Doc, Entry } from "./types";
 import { memoryEstimate } from "./knowledge-view";
+import { reviewEnabled, importanceRank } from "./importance";
 const schedulers = new Map<number, ReturnType<typeof fsrs>>();
 /** Default to the documented FSRS/Anki 90% target; invalid remote values never reach the scheduler. */
 export function reviewTarget(docs: Doc[] = []): number {
@@ -37,7 +38,23 @@ export function needsReview(
   now = new Date(),
 ): boolean {
   return (
-    nextReviewAt(entry, target) <= now ||
-    (memoryEstimate(entry, now) ?? 1) < target
+    reviewEnabled(entry) &&
+    (nextReviewAt(entry, target) <= now ||
+      (memoryEstimate(entry, now) ?? 1) < target)
   );
+}
+/** Order due work by importance, then the existing deadline; never promote future work into the queue. */
+export function reviewQueue(
+  entries: Entry[],
+  target = 0.9,
+  now = new Date(),
+): Entry[] {
+  return entries
+    .filter((entry) => needsReview(entry, target, now))
+    .sort(
+      (a, b) =>
+        importanceRank(a) - importanceRank(b) ||
+        nextReviewAt(a, target).getTime() - nextReviewAt(b, target).getTime() ||
+        a.id.localeCompare(b.id),
+    );
 }

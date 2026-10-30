@@ -23,6 +23,7 @@ export interface AIStage {
 /** Workflows with explicit, serializable input and a recoverable application destination. */
 export type AIJobKind =
   | "explain"
+  | "importance"
   | "relations"
   | "graph"
   | "classification"

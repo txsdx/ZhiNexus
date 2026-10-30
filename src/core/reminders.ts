@@ -1,5 +1,6 @@
 /** Deterministic mobile OS alarm planning with bounded, deduplicated due-time groups. */
 import type { Entry } from "./types";
+import { reviewEnabled } from "./importance";
 /** One OS-owned alarm groups concepts due in the same minute and survives a closed webview. */
 export interface ReminderAlarm {
   id: number;
@@ -9,7 +10,7 @@ export interface ReminderAlarm {
 }
 /** Plan at most 48 alarms; already overdue concepts receive a next-morning reminder after the immediate in-app notice. */
 export function reminderPlan(
-  entries: Pick<Entry, "title" | "card">[],
+  entries: Pick<Entry, "title" | "card" | "importance">[],
   now = new Date(),
 ): ReminderAlarm[] {
   const groups = new Map<number, string[]>(),
@@ -17,6 +18,7 @@ export function reminderPlan(
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(9, 0, 0, 0);
   for (const e of entries) {
+    if (!reviewEnabled(e)) continue;
     const due = new Date(e.card.due).getTime();
     if (!Number.isFinite(due)) continue;
     const at =

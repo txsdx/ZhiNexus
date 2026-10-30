@@ -436,3 +436,49 @@ it("AI bookmark changes require review and atomically reuse the existing receipt
     true,
   );
 });
+
+it("priority writes require consent and are atomic/receipted, while reads expose effective priority without approval", async () => {
+  const confirm = vi.fn(async () => false);
+  const before = fixture.state.docs.find(
+    (doc: any) => doc.collection === "entry",
+  ).fields.card;
+  expect(
+    await executeKnowledgeTool(
+      "update_entry",
+      { id: "entry", importance: "low" },
+      "priority-denied",
+      confirm,
+    ),
+  ).toEqual({ cancelled: true });
+  expect(fixture.commits).toHaveLength(0);
+  confirm.mockResolvedValue(true);
+  await executeKnowledgeTool(
+    "update_entry",
+    { id: "entry", importance: "low" },
+    "priority-confirmed",
+    confirm,
+  );
+  await executeKnowledgeTool(
+    "update_entry",
+    { id: "entry", importance: "low" },
+    "priority-confirmed",
+    confirm,
+  );
+  const fields = fixture.state.docs.find(
+    (doc: any) => doc.collection === "entry",
+  ).fields;
+  expect(fields.importance).toEqual({ level: "low", mode: "manual" });
+  expect(fields.card).toEqual(before);
+  expect(fixture.commits).toHaveLength(1);
+  const count = confirm.mock.calls.length;
+  await executeKnowledgeTool("list_entries", {}, "priority-read", confirm);
+  expect(confirm).toHaveBeenCalledTimes(count);
+  await expect(
+    executeKnowledgeTool(
+      "update_entry",
+      { id: "entry", importance: "urgent" },
+      "priority-invalid",
+      confirm,
+    ),
+  ).rejects.toThrow();
+});

@@ -6,6 +6,13 @@ import {
 } from "../../services/entry-selection";
 import { useKnowledge } from "../common";
 import { reviewTarget, nextReviewAt } from "../../core/review-policy";
+import { ImportanceBadge } from "../EntryImportance";
+import {
+  reviewEnabled,
+  importanceLevels,
+  importanceLabels,
+  manualImportance,
+} from "../../core/importance";
 /** Dense, keyboard-accessible taxonomy table with real memory estimates and per-column sorting. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
@@ -160,6 +167,7 @@ export function KnowledgeTable({
                 }
               />
             )}
+            <ImportanceBadge entry={e} />
             <button
               onClick={(event) => {
                 event.stopPropagation();
@@ -178,20 +186,31 @@ export function KnowledgeTable({
         <td className="entry-created-cell">{date(e.createdAt)}</td>
         <td
           className="next-review-cell"
-          style={{ color: memoryColor(r) }}
-          title={nextReviewAt(e, targetRetention).toLocaleString()}
+          style={{ color: reviewEnabled(e) ? memoryColor(r) : undefined }}
+          title={
+            reviewEnabled(e)
+              ? nextReviewAt(e, targetRetention).toLocaleString()
+              : t(
+                  "低重要等级，不参加复习",
+                  "Low importance; excluded from review",
+                )
+          }
           data-retention={r ?? "unknown"}
         >
-          <strong>
-            {(() => {
-              const difference =
-                (nextReviewAt(e, targetRetention).getTime() - now.getTime()) /
-                86400000;
-              const value = Math.round(difference * 100) / 100;
-              return difference < 0 && value === 0 ? -0.01 : value;
-            })()}{" "}
-            {t("天", "days")}
-          </strong>
+          {!reviewEnabled(e) ? (
+            <span className="review-excluded">{t("免复习", "No review")}</span>
+          ) : (
+            <strong>
+              {(() => {
+                const difference =
+                  (nextReviewAt(e, targetRetention).getTime() - now.getTime()) /
+                  86400000;
+                const value = Math.round(difference * 100) / 100;
+                return difference < 0 && value === 0 ? -0.01 : value;
+              })()}{" "}
+              {t("天", "days")}
+            </strong>
+          )}
         </td>
       </tr>
     );
@@ -328,6 +347,43 @@ export function KnowledgeTable({
                   }
                 }}
               />
+              <label className="bulk-importance">
+                {t("重要等级", "Importance")}
+                <select
+                  aria-label={t("批量设置重要等级", "Set selected importance")}
+                  disabled={changing}
+                  value=""
+                  onChange={(event) => {
+                    const level = event.target
+                        .value as (typeof importanceLevels)[number],
+                      ids = [...selected],
+                      before = entrySelectionSnapshot(selected);
+                    if (!importanceLevels.includes(level)) return;
+                    setChanging(true);
+                    setSelectionError("");
+                    void changeEntrySelection(ids, before, {
+                      importance: manualImportance(level),
+                    })
+                      .then(
+                        () => setSelectedIds([]),
+                        (error) =>
+                          setSelectionError(
+                            String(
+                              error instanceof Error ? error.message : error,
+                            ),
+                          ),
+                      )
+                      .finally(() => setChanging(false));
+                  }}
+                >
+                  <option value="">{t("设置所选…", "Set selected…")}</option>
+                  {importanceLevels.map((level) => (
+                    <option key={level} value={level}>
+                      {t(...importanceLabels[level])}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 className="danger"
                 disabled={changing}

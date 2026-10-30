@@ -1765,7 +1765,7 @@ test("knowledge uses a dense category tree with summaries, review dates and FSRS
   ).toContainText("可显示的一句话。");
   const color = await page.locator(".entry-row").evaluateAll((rows) =>
     rows.map((row) => ({
-      title: row.querySelector(".entry-title-cell")?.textContent,
+      title: row.querySelector(".entry-title-cell button")?.textContent,
       r: row.querySelector(".next-review-cell")?.getAttribute("data-retention"),
     })),
   );

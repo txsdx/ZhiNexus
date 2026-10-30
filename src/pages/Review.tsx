@@ -15,7 +15,9 @@ import { aiJobs, submitAIJob } from "../services/ai-jobs";
 import { diagnostics } from "../services/diagnostics";
 import { store, json } from "../core/store";
 import type { Collection, Json } from "../core/types";
-import { reviewTarget, needsReview, nextReviewAt } from "../core/review-policy";
+import { reviewTarget, reviewQueue } from "../core/review-policy";
+import { reviewEnabled, importanceRank } from "../core/importance";
+import { ImportanceBadge } from "../components/EntryImportance";
 import { useReviewClock } from "../hooks/useReviewClock";
 import { startSelfReview } from "../services/self-review";
 import { SelfReview } from "../components/SelfReview";
@@ -53,7 +55,9 @@ export function Review({
     if (initialSession) setSelected(initialSession);
   }, [initialSession]);
   const unfinished = s.reviews.filter(
-    (r) => !["done", "cancelled"].includes(r.phase),
+    (r) =>
+      !["done", "cancelled"].includes(r.phase) &&
+      s.entries.some((entry) => entry.id === r.entryId && reviewEnabled(entry)),
   );
   const session = unfinished.find((r) => r.id === selected) ?? unfinished[0];
   useEffect(
@@ -69,12 +73,16 @@ export function Review({
   const active =
     activeJobs.find((j) => j.target.sessionId === (session?.id ?? selected)) ??
     (!session ? activeJobs[0] : undefined);
-  const due = s.entries
-    .filter((e) => needsReview(e, targetRetention, now))
-    .sort(
-      (a, b) =>
-        nextReviewAt(a, targetRetention).getTime() -
-        nextReviewAt(b, targetRetention).getTime(),
+  const due = reviewQueue(s.entries, targetRetention, now),
+    eligible = s.entries
+      .filter(reviewEnabled)
+      .sort((a, b) => importanceRank(a) - importanceRank(b)),
+    paused = s.reviews.filter(
+      (r) =>
+        !["done", "cancelled"].includes(r.phase) &&
+        s.entries.some(
+          (entry) => entry.id === r.entryId && !reviewEnabled(entry),
+        ),
     );
   useEffect(() => {
     const rate = (event: KeyboardEvent) => {
@@ -266,6 +274,8 @@ export function Review({
         JSON.stringify(r.grade) === JSON.stringify(session.grade) &&
         JSON.stringify(r.question) === JSON.stringify(session.question) &&
         JSON.stringify(e?.card) === JSON.stringify(entry.card) &&
+        !!e &&
+        reviewEnabled(e) &&
         e?.content === entry.content
       );
     });
@@ -327,6 +337,14 @@ export function Review({
             {t("包含未到期条目", "Include entries not due")}
           </label>
         </div>
+      )}
+      {!session && paused.length > 0 && (
+        <p className="notice">
+          {t(
+            `${paused.length} 个低等级词条的会话已暂停；提高重要等级后可继续。`,
+            `${paused.length} sessions are paused for low-priority knowledge. Raise its importance to resume.`,
+          )}
+        </p>
       )}
       {busy && (
         <div className="notice">
@@ -572,9 +590,9 @@ export function Review({
             )
           )}
         </section>
-      ) : (practiceAll ? s.entries.length : due.length) ? (
+      ) : (practiceAll ? eligible.length : due.length) ? (
         <div className="queue">
-          {(practiceAll ? s.entries : due).map((e, index) => (
+          {(practiceAll ? eligible : due).map((e, index) => (
             <button
               key={e.id}
               disabled={
@@ -590,12 +608,14 @@ export function Review({
                 {String(index + 1).padStart(2, "0")}
               </span>
               <div>
-                <h3>{e.title}</h3>
+                <h3>
+                  <ImportanceBadge entry={e} /> {e.title}
+                </h3>
                 <p>
-                  {e.card.reps
+                  {(e.reviewCount ?? e.card.reps)
                     ? t(
-                        `已复习 ${e.card.reps} 次 · 稳定性 ${e.card.stability.toFixed(1)} 天`,
-                        `${e.card.reps} reviews · stability ${e.card.stability.toFixed(1)} days`,
+                        `已复习 ${e.reviewCount ?? e.card.reps} 次 · 稳定性 ${e.card.stability.toFixed(1)} 天`,
+                        `${e.reviewCount ?? e.card.reps} reviews · stability ${e.card.stability.toFixed(1)} days`,
                       )
                     : t(
                         "第一次复习 · 建立记忆的起点",

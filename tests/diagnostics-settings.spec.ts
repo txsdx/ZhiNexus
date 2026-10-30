@@ -44,7 +44,9 @@ test("null tool_calls no longer breaks enrichment; logs retain prompts, assemble
             message: {
               content: prompt.includes("前置知识和相关概念")
                 ? JSON.stringify({ prerequisites: [], relatedIds: [] })
-                : "## 一句话解释\n自动整理已经成功。",
+                : prompt.includes("建议重要等级")
+                  ? JSON.stringify({ level: "normal", reason: "一般知识" })
+                  : "## 一句话解释\n自动整理已经成功。",
               tool_calls: null,
             },
           },

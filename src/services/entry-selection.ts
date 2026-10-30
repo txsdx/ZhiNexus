@@ -1,5 +1,6 @@
 /** Shared guarded bulk changes keep confirmed selections atomic and refuse stale knowledge. */
 import { store } from "../core/store";
+import { importanceSchema, type EntryImportance } from "../core/importance";
 /** Capture the exact entry revisions displayed in a bulk selection. */
 export function entrySelectionSnapshot(ids: string[]) {
   const entries = store.getSnapshot().entries;
@@ -13,8 +14,10 @@ export function entrySelectionSnapshot(ids: string[]) {
 export async function changeEntrySelection(
   ids: string[],
   before: string,
-  change: { category: string } | { deleted: true },
+  change:
+    { category: string } | { deleted: true } | { importance: EntryImportance },
 ) {
+  if ("importance" in change) importanceSchema.parse(change.importance);
   const unique = [...new Set(ids)];
   if (!unique.length) return;
   const valid = () =>

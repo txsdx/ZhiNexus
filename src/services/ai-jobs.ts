@@ -20,6 +20,7 @@ const records = z
       id: z.string(),
       kind: z.enum([
         "explain",
+        "importance",
         "relations",
         "graph",
         "classification",
@@ -61,6 +62,7 @@ const records = z
           responseId: z.string().optional(),
           task: z.enum([
             "explain",
+            "importance",
             "question",
             "grade",
             "classify",
@@ -321,6 +323,7 @@ export async function submitAIJob(
       content: entry.content,
       category: entry.category,
       prerequisites: entry.prerequisites,
+      importance: entry.importance ?? null,
     });
   if (["question", "grade"].includes(kind) && target.sessionId) {
     const review = s.reviews.find((r) => r.id === target.sessionId);
@@ -358,6 +361,7 @@ export async function submitAIJob(
     };
   const names: Record<AIJobKind, string> = {
     explain: "AI 解释 / Explanation",
+    importance: "重要等级建议 / Importance suggestion",
     relations: "知识关联 / Connections",
     graph: "星图自动关联 / Graph connections",
     classification: "智能分类 / Classification",

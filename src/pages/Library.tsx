@@ -4,6 +4,13 @@ import { useReviewClock } from "../hooks/useReviewClock";
 import { useMemo } from "react";
 import { searchKnowledge } from "../core/knowledge-search";
 import { StudyActivity } from "../components/StudyActivity";
+import { ReviewForecast } from "../components/ReviewForecast";
+import {
+  importanceLevel,
+  importanceLevels,
+  importanceLabels,
+  type ImportanceLevel,
+} from "../core/importance";
 import { useState } from "react";
 import {
   ArrowUpRight,
@@ -38,17 +45,33 @@ export function Library({
     needsReview(e, reviewTarget(s.docs), now),
   );
   const [starredOnly, setStarredOnly] = useState(false),
+    [levelFilter, setLevelFilter] = useState<ImportanceLevel | "all">("all"),
     [searchHelp, setSearchHelp] = useState(false);
   const results = useMemo(
     () =>
       searchKnowledge(
-        starredOnly ? s.entries.filter((entry) => entry.starred) : s.entries,
+        s.entries.filter(
+          (entry) =>
+            (!starredOnly || entry.starred) &&
+            (dashboard ||
+              levelFilter === "all" ||
+              importanceLevel(entry) === levelFilter),
+        ),
         s.categories,
         query,
         reviewTarget(s.docs),
         now,
       ),
-    [s.entries, s.categories, query, starredOnly, now, s.docs],
+    [
+      s.entries,
+      s.categories,
+      query,
+      starredOnly,
+      levelFilter,
+      dashboard,
+      now,
+      s.docs,
+    ],
   );
   return (
     <div className="page">
@@ -136,6 +159,29 @@ export function Library({
       )}
       {!dashboard && (
         <div className="library-filters">
+          <label className="library-level-filter">
+            {t("重要等级", "Importance")}
+            <select
+              aria-label={t("筛选重要等级", "Filter by importance")}
+              value={levelFilter}
+              onChange={(event) =>
+                setLevelFilter(event.target.value as typeof levelFilter)
+              }
+            >
+              <option value="all">{t("全部等级", "All levels")}</option>
+              {importanceLevels.map((level) => (
+                <option key={level} value={level}>
+                  {t(...importanceLabels[level])} (
+                  {
+                    s.entries.filter(
+                      (entry) => importanceLevel(entry) === level,
+                    ).length
+                  }
+                  )
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             aria-pressed={starredOnly}
             onClick={() => setStarredOnly((value) => !value)}
@@ -153,12 +199,17 @@ export function Library({
       {searchHelp && !dashboard && (
         <p className="notice">
           {t(
-            "支持 tag:标签、category:分类、title:标题、body:正文、is:due、is:starred、has:image、has:link；双引号精确短语，-词语排除。",
-            "Filters: tag:, category:, title:, body:, is:due, is:starred, has:image, has:link. Quotes match phrases; -term excludes.",
+            "支持 tag:标签、category:分类、title:标题、body:正文、importance:high/normal/low、is:due、is:starred、has:image、has:link；双引号精确短语，-词语排除。",
+            "Filters: tag:, category:, title:, body:, importance:high/normal/low, is:due, is:starred, has:image, has:link. Quotes match phrases; -term excludes.",
           )}
         </p>
       )}
-      {dashboard && <StudyActivity onOpen={onOpen} />}
+      {dashboard && (
+        <>
+          <ReviewForecast onOpen={onOpen} />
+          <StudyActivity onOpen={onOpen} />
+        </>
+      )}
       <div className="section-heading">
         <div>
           <h2>

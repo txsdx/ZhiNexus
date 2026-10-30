@@ -1,4 +1,5 @@
 import { reviewTarget } from "../core/review-policy";
+import { importanceSuggestionSchema } from "../core/importance";
 /** Explicit, idempotent application of reviewed AI results; failures retain the pending task. */
 import { z } from "zod";
 import type { AIJob, AITarget } from "../core/ai-jobs";
@@ -38,6 +39,12 @@ export function aiJobIsStale(job: AIJob): boolean {
   const current = s.entries.find((e) => e.id === job.target.entryId);
   if (!current) return true;
   const base = capturedEntry(job);
+  if (
+    job.kind === "importance" &&
+    JSON.stringify(base.importance ?? null) !==
+      JSON.stringify(current.importance ?? null)
+  )
+    return true;
   return ["title", "content", "category", "prerequisites"].some(
     (key) =>
       JSON.stringify(base[key as keyof typeof base]) !==
@@ -55,6 +62,7 @@ function fingerprint() {
       e.content,
       e.category,
       e.prerequisites,
+      e.importance ?? null,
     ]),
     s.docs.filter((d) => d.collection === "edge").map((d) => [d.id, d.fields]),
   ]);
@@ -241,6 +249,8 @@ export async function applyAIJob(id: string, force = false): Promise<AITarget> {
           prerequisites: z.array(z.string()).max(8).optional(),
           relatedIds: z.array(z.string()).optional(),
           category: z.string().optional(),
+          importance: importanceSuggestionSchema.optional(),
+          importanceManual: z.boolean().optional(),
         })
         .parse(result);
       const patch: Record<string, Json> = {
@@ -252,6 +262,25 @@ export async function applyAIJob(id: string, force = false): Promise<AITarget> {
         patch.content = value.content;
       }
       if (value.prerequisites) patch.prerequisites = value.prerequisites;
+      if (value.importance) {
+        if (
+          job.kind === "importance" &&
+          JSON.stringify(capturedEntry(job).importance ?? null) !==
+            JSON.stringify(entry.importance ?? null)
+        )
+          throw Error(
+            "重要等级在评估后已改变，请重新评估 / Importance changed; request a new assessment",
+          );
+        // Normal explanation regeneration must never unlock a user's later or earlier manual choice.
+        if (job.kind === "importance" || entry.importance?.mode !== "manual")
+          patch.importance = json({
+            level: value.importance.level,
+            mode: value.importanceManual ? "manual" : "auto",
+            ...(!value.importanceManual
+              ? { reason: value.importance.reason }
+              : {}),
+          });
+      }
       if (value.category !== undefined) {
         if (!s.categories.some((c) => c.id === value.category))
           throw Error("分类已改变，请重新生成 / Category changed");

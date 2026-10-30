@@ -152,7 +152,14 @@ function Shell() {
   const reviewNow = useReviewClock(),
     targetRetention = reviewTarget(s.docs);
   const reminderSignature = s.entries
-    .map((e) => e.id + ":" + nextReviewAt(e, targetRetention).toISOString())
+    .map(
+      (e) =>
+        e.id +
+        ":" +
+        nextReviewAt(e, targetRetention).toISOString() +
+        ":" +
+        (e.importance?.level ?? "normal"),
+    )
     .sort()
     .join("|");
   useEffect(() => {

@@ -57,3 +57,27 @@ it("rejects changed entries, disappeared categories and persistence failure with
   ).rejects.toThrow("disk full");
   expect(state.entries[0].title).toBe("edited");
 });
+
+it("bulk priority changes preserve cards and submit one whole manual register for each reviewed entry", async () => {
+  const state = {
+    ...store.getSnapshot(),
+    entries: [
+      { id: "a", title: "a", card: { reps: 4 } },
+      { id: "b", title: "b", card: { reps: 3 } },
+    ] as any,
+    categories: [],
+  };
+  vi.spyOn(store, "getSnapshot").mockReturnValue(state);
+  const commit = vi
+    .spyOn(store, "batchWhen")
+    .mockImplementation(async (_patches, _source, guard) => guard());
+  await changeEntrySelection(["a", "b"], entrySelectionSnapshot(["a", "b"]), {
+    importance: { level: "low", mode: "manual" },
+  });
+  expect(commit.mock.calls[0][0]).toHaveLength(2);
+  for (const patch of commit.mock.calls[0][0]) {
+    expect(patch.patch.importance).toEqual({ level: "low", mode: "manual" });
+    expect(patch.patch).not.toHaveProperty("card");
+  }
+  expect(state.entries[0].card.reps).toBe(4);
+});

@@ -1,4 +1,9 @@
-import { reviewTarget, needsReview, nextReviewAt } from "../core/review-policy";
+import { reviewTarget, reviewQueue, nextReviewAt } from "../core/review-policy";
+import {
+  importanceLevels,
+  importanceLevel,
+  manualImportance,
+} from "../core/importance";
 /** Structured knowledge-control tools with atomic receipts, explicit write previews and stale-state rejection. */
 import { searchKnowledge } from "../core/knowledge-search";
 import { z } from "zod";
@@ -89,7 +94,7 @@ const definitions = {
   },
   search_knowledge: {
     description:
-      "搜索知识，支持title:/body:/tag:/category:、is:due、is:starred、has:image/has:link，双引号短语与-排除词",
+      "搜索知识，支持title:/body:/tag:/category:、importance:high/normal/low、is:due、is:starred、has:image/has:link，双引号短语与-排除词",
     schema: z.object({ query: z.string().max(500) }).strict(),
   },
   list_entries: {
@@ -132,6 +137,7 @@ const definitions = {
         category: parent.optional(),
         tags: z.array(z.string()).max(100).optional(),
         color: color.optional(),
+        importance: z.enum(importanceLevels).optional(),
       })
       .strict(),
   },
@@ -149,7 +155,7 @@ const definitions = {
   },
   update_entry: {
     description:
-      "修改词条标题、正文、摘要、分类、标签、背景色或starred收藏；未传字段保留；需确认",
+      "修改词条标题、正文、摘要、分类、标签、背景色、starred收藏或importance重要等级(high/normal/low)；low免复习，明确设置锁定等级；未传字段保留；需确认",
     schema: z
       .object({
         id,
@@ -160,6 +166,7 @@ const definitions = {
         tags: z.array(z.string()).max(100).optional(),
         color: color.optional(),
         starred: z.boolean().optional(),
+        importance: z.enum(importanceLevels).optional(),
       })
       .strict(),
   },
@@ -207,6 +214,7 @@ export const knowledgeTools: ToolSpec[] = Object.entries(definitions).map(
   }),
 );
 interface Arguments {
+  importance?: (typeof importanceLevels)[number];
   starred?: boolean;
   positions?: { id: string; x: number; y: number }[];
   source?: string;
@@ -295,6 +303,7 @@ export async function executeKnowledgeTool(
           title: entry.title,
           category: entry.category,
           starred: !!entry.starred,
+          importance: importanceLevel(entry),
           excerpt: entry.content.slice(0, 400),
         }));
     case "list_entries": {
@@ -311,6 +320,7 @@ export async function executeKnowledgeTool(
             category: e.category,
             tags: e.tags,
             color: e.color ?? "none",
+            importance: importanceLevel(e),
           })),
       };
     }
@@ -330,13 +340,12 @@ export async function executeKnowledgeTool(
           .map((e) => ({ id: e.id, title: e.title })),
       };
     case "review_queue":
-      return s.entries
-        .filter((e) => needsReview(e, reviewTarget(s.docs)))
-        .map((e) => ({
-          id: e.id,
-          title: e.title,
-          due: nextReviewAt(e, reviewTarget(s.docs)),
-        }));
+      return reviewQueue(s.entries, reviewTarget(s.docs)).map((e) => ({
+        id: e.id,
+        title: e.title,
+        due: nextReviewAt(e, reviewTarget(s.docs)),
+        importance: importanceLevel(e),
+      }));
     case "get_app_state":
       return {
         entries: s.entries.length,
@@ -520,9 +529,12 @@ export async function executeKnowledgeTool(
             reviewTarget(store.getSnapshot().docs),
           ),
           reviewCount: 0,
+          ...(a.importance
+            ? { importance: manualImportance(a.importance) }
+            : {}),
         }) as Record<string, Json>,
       });
-    description = `创建词条：${a.title}\n分类：${categoryName(a.category ?? "")}\n${a.content ?? entryTemplate}`;
+    description = `创建词条：${a.title}\n分类：${categoryName(a.category ?? "")}\n重要等级：${a.importance ?? "normal"}${a.importance === "low" ? "（免复习）" : ""}\n${a.content ?? entryTemplate}`;
   } else if (
     ["update_entry", "move_entry", "delete_entry", "restore_entry"].includes(
       name,
@@ -566,6 +578,8 @@ export async function executeKnowledgeTool(
         ] as const)
           if (a[key] !== undefined) patch[key] = a[key]!;
         if (a.category !== undefined) assertCategory(a.category);
+        if (a.importance !== undefined)
+          patch.importance = json(manualImportance(a.importance));
         if (Object.keys(patch).length === 1)
           throw Error("未提供修改字段 / No changes supplied");
       }

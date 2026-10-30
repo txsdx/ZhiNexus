@@ -12,6 +12,12 @@ import type { Json } from "../core/types";
 import { entryWorkspace } from "../core/workspace";
 import { useAIJobs } from "../hooks/useAIJobs";
 import { graphEdges, type GraphRelation } from "../services/knowledge-graph";
+import {
+  importanceSuggestionSchema,
+  importanceLevels,
+  importanceLabels,
+  importanceLevel,
+} from "../core/importance";
 export { useAIJobs } from "../hooks/useAIJobs";
 /** Human states are separate from raw model IDs and provider protocol details. */
 function useStateLabel() {
@@ -30,6 +36,7 @@ export function AIJobStream({ job }: { job: AIJob }) {
   const t = useT();
   const tasks = {
     explain: t("生成详解", "Explanation"),
+    importance: t("评估重要等级", "Importance assessment"),
     relations: t("分析关联", "Relationships"),
     graph: t("分析星图关系", "Graph relationships"),
     classify: t("整理分类", "Classification"),
@@ -347,6 +354,12 @@ export function AIJobReview({
     ),
   );
   const reviewDestination = job.kind === "question" || job.kind === "grade";
+  const suggestion = importanceSuggestionSchema.safeParse(value?.importance);
+  const originalSuggestion = importanceSuggestionSchema.safeParse(
+    (job.result as Record<string, Json> | undefined)?.importance,
+  );
+  const importanceLocked =
+    current?.importance?.mode === "manual" && job.kind !== "importance";
   return (
     <Modal
       wide
@@ -598,6 +611,83 @@ export function AIJobReview({
             </>
           ) : (
             <>
+              {suggestion.success && (
+                <section className="importance-proposal">
+                  <h3>{t("重要等级建议", "Importance suggestion")}</h3>
+                  {importanceLocked ? (
+                    <p>
+                      {t("已手动锁定为", "Manually locked to")}{" "}
+                      {current &&
+                        t(...importanceLabels[importanceLevel(current)])}
+                      ；
+                      {t(
+                        "应用解释会保留你的等级。",
+                        "Applying the explanation preserves your choice.",
+                      )}
+                    </p>
+                  ) : (
+                    <>
+                      <label>
+                        {t("建议等级", "Suggested level")}
+                        <select
+                          aria-label={t("建议重要等级", "Suggested importance")}
+                          value={suggestion.data.level}
+                          onChange={(event) => {
+                            edit("importance", {
+                              ...suggestion.data,
+                              level: event.target.value,
+                            });
+                            edit("importanceManual", true);
+                          }}
+                        >
+                          {importanceLevels.map((level) => (
+                            <option key={level} value={level}>
+                              {t(...importanceLabels[level])}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="toggle">
+                        <input
+                          type="checkbox"
+                          checked={value?.importanceManual === true}
+                          onChange={(event) =>
+                            edit("importanceManual", event.target.checked)
+                          }
+                        />
+                        {t(
+                          "应用后锁定等级，后续 AI 不覆盖",
+                          "Lock this level against future AI changes",
+                        )}
+                      </label>
+                      {suggestion.data.level === "low" && (
+                        <p>
+                          {t(
+                            "确认应用后，此词条不再参与复习或提醒。",
+                            "Once applied, this entry will be excluded from reviews and reminders.",
+                          )}
+                        </p>
+                      )}
+                    </>
+                  )}
+                  <p>
+                    {t("AI 原建议：", "Original AI suggestion: ")}
+                    {originalSuggestion.success ? (
+                      <>
+                        {t(...importanceLabels[originalSuggestion.data.level])}{" "}
+                        · {originalSuggestion.data.reason}
+                      </>
+                    ) : (
+                      suggestion.data.reason
+                    )}
+                  </p>
+                </section>
+              )}
+              {typeof value?.importanceError === "string" && (
+                <p className="warning" role="status">
+                  {value.importanceError}
+                </p>
+              )}
               {typeof value?.content === "string" && (
                 <>
                   <h3>{t("生成内容", "Generated content")}</h3>
@@ -646,12 +736,17 @@ export function AIJobReview({
                   <Markdown>{current.content}</Markdown>
                 </details>
               )}
-              {job.kind === "graph" ? (
+              {job.kind === "graph" || job.kind === "importance" ? (
                 <p>
-                  {t(
-                    "请重新生成分析，避免应用过时的星图建议。",
-                    "Regenerate the graph analysis before applying it.",
-                  )}
+                  {job.kind === "graph"
+                    ? t(
+                        "请重新生成分析，避免应用过时的星图建议。",
+                        "Regenerate the graph analysis before applying it.",
+                      )
+                    : t(
+                        "重要等级或内容已改变，请重新评估。",
+                        "Importance or content changed; request a new assessment.",
+                      )}
                 </p>
               ) : (
                 <label className="toggle">
@@ -671,7 +766,11 @@ export function AIJobReview({
           <div className="actions">
             <button
               className="primary"
-              disabled={busy || (stale && (job.kind === "graph" || !force))}
+              disabled={
+                busy ||
+                (stale &&
+                  (job.kind === "graph" || job.kind === "importance" || !force))
+              }
               onClick={() =>
                 void run(async () => {
                   const target = await applyAIJob(id, force);

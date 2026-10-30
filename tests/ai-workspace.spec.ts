@@ -403,7 +403,16 @@ test("the autosaved concurrency limit controls actual requests, and a queued can
 }) => {
   const responses: ServerResponse[] = [];
   const requested: string[] = [];
+  let assessments = 0;
   const server = await streamingServer((body, res) => {
+    if (
+      body.messages.some((message) => message.content.includes("建议重要等级"))
+    ) {
+      assessments++;
+      delta(res, JSON.stringify({ level: "normal", reason: "一般知识" }));
+      done(res);
+      return;
+    }
     requested.push(JSON.stringify(body.messages));
     responses.push(res);
     delta(res, "部分内容");
@@ -446,6 +455,7 @@ test("the autosaved concurrency limit controls actual requests, and a queued can
       .click();
     await expect(page.locator('[data-job-state="review"]')).toHaveCount(2);
     expect(responses).toHaveLength(2);
+    expect(assessments).toBe(2);
     expect(
       await repository(
         page,
@@ -461,8 +471,17 @@ test("a second browser window mirrors pending results without overwriting or res
   page,
   context,
 }) => {
-  let requests = 0;
-  const server = await streamingServer((_body, res) => {
+  let requests = 0,
+    assessments = 0;
+  const server = await streamingServer((body, res) => {
+    if (
+      body.messages.some((message) => message.content.includes("建议重要等级"))
+    ) {
+      assessments++;
+      delta(res, JSON.stringify({ level: "normal", reason: "一般知识" }));
+      done(res);
+      return;
+    }
     requests++;
     delta(res, "已生成");
     done(res);
@@ -499,6 +518,7 @@ test("a second browser window mirrors pending results without overwriting or res
     });
     expect(state).toBe("blocked");
     expect(requests).toBe(1);
+    expect(assessments).toBe(1);
     await page
       .getByRole("button", { name: "打开相关页面并审阅", exact: true })
       .click();
@@ -513,8 +533,17 @@ test("a second browser window mirrors pending results without overwriting or res
 test("a reload retains partial streamed output and never reissues an interrupted task without retry", async ({
   page,
 }) => {
-  let requests = 0;
-  const server = await streamingServer((_body, res) => {
+  let requests = 0,
+    assessments = 0;
+  const server = await streamingServer((body, res) => {
+    if (
+      body.messages.some((message) => message.content.includes("建议重要等级"))
+    ) {
+      assessments++;
+      delta(res, JSON.stringify({ level: "normal", reason: "一般知识" }));
+      done(res);
+      return;
+    }
     requests++;
     delta(res, requests === 1 ? "需要保留的部分输出" : "重试完成的结果");
     if (requests > 1) done(res);
@@ -556,6 +585,7 @@ test("a reload retains partial streamed output and never reissues an interrupted
     );
     await expect(page.locator(".ai-job-card")).toContainText("重试完成的结果");
     expect(requests).toBe(2);
+    expect(assessments).toBe(1);
     expect(
       await repository(page, "return store.getSnapshot().entries[0].content"),
     ).toBe("原始内容");

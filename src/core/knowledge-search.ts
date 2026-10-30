@@ -3,6 +3,7 @@ import { entryLinks, hasEntryImage } from "./entry-links";
 import Fuse from "fuse.js";
 import type { Category, Entry } from "./types";
 import { needsReview } from "./review-policy";
+import { importanceLevel } from "./importance";
 /** A quoted phrase is literal; recognized filters and exclusions never become executable queries. */
 export interface SearchTerm {
   field: string;
@@ -16,10 +17,16 @@ export function parseKnowledgeQuery(query: string): SearchTerm[] {
   return tokens.map((raw) => {
     const negative = raw.startsWith("-") && raw.length > 1;
     const text = negative ? raw.slice(1) : raw;
-    const match = /^(title|body|tag|category|is|has|id):(.+)$/i.exec(text);
+    const match = /^(title|body|tag|category|is|has|id|importance):(.+)$/i.exec(
+      text,
+    );
     const value = (match?.[2] ?? text).replace(/"/g, "");
     let field = match?.[1].toLowerCase() ?? "text";
     if (
+      (field === "importance" &&
+        !["high", "normal", "low", "高", "普通", "中", "低"].includes(
+          value.toLowerCase(),
+        )) ||
       (field === "is" && !["due", "starred"].includes(value.toLowerCase())) ||
       (field === "has" &&
         !["image", "tag", "link"].includes(value.toLowerCase()))
@@ -97,6 +104,21 @@ export function searchKnowledge(
               : contains(path(entry.category));
           case "id":
             return entry.id === term.value;
+          case "importance":
+            return (
+              importanceLevel(entry) ===
+              (
+                {
+                  high: "high",
+                  高: "high",
+                  normal: "normal",
+                  普通: "normal",
+                  中: "normal",
+                  low: "low",
+                  低: "low",
+                } as Record<string, string>
+              )[value]
+            );
           case "is":
             return value === "starred"
               ? entry.starred === true

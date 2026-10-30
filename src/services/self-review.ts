@@ -4,6 +4,7 @@ import { sha256, canonical } from "../core/crypto";
 import { reviewTarget } from "../core/review-policy";
 import { scheduleRecall } from "../core/review";
 import type { Entry } from "../core/types";
+import { reviewEnabled } from "../core/importance";
 /** Hashable starting knowledge and policy protect a revealed answer from later remote/local edits. */
 export function selfReviewSource(entry: Entry, retention: number) {
   return canonical({
@@ -20,15 +21,17 @@ export async function startSelfReview(
   id: string = crypto.randomUUID(),
 ) {
   const state = store.getSnapshot(),
+    entry = state.entries.find((entry) => entry.id === entryId),
     existing = state.reviews.find(
       (review) =>
         review.entryId === entryId &&
         review.mode === "self" &&
         !["done", "cancelled"].includes(review.phase),
     );
-  if (existing) return existing.id;
-  const entry = state.entries.find((entry) => entry.id === entryId);
   if (!entry) throw Error("Entry missing");
+  if (!reviewEnabled(entry))
+    throw Error("低重要等级免复习 / Low importance is excluded from review");
+  if (existing) return existing.id;
   const retention = reviewTarget(state.docs),
     source = selfReviewSource(entry, retention),
     referenceHash = await sha256(source);
@@ -57,6 +60,7 @@ export async function startSelfReview(
         currentEntry = current.entries.find((entry) => entry.id === entryId);
       return (
         !!currentEntry &&
+        reviewEnabled(currentEntry) &&
         selfReviewSource(currentEntry, reviewTarget(current.docs)) === source &&
         !current.reviews.some(
           (review) =>
@@ -76,7 +80,13 @@ export async function startSelfReview(
           review.mode === "self" &&
           !["done", "cancelled"].includes(review.phase),
       );
-    if (existing) return existing.id;
+    if (
+      existing &&
+      store
+        .getSnapshot()
+        .entries.some((entry) => entry.id === entryId && reviewEnabled(entry))
+    )
+      return existing.id;
     throw Error("词条已改变，请重新开始 / Entry changed; start again");
   }
   return id;
@@ -99,6 +109,7 @@ async function updateSelfReview(id: string, rating?: 1 | 2 | 3 | 4) {
     !session ||
     session.mode !== "self" ||
     !entry ||
+    !reviewEnabled(entry) ||
     session.phase !== (rating ? "graded" : "answer")
   )
     throw Error("复习状态已改变 / Review changed");
@@ -137,6 +148,7 @@ async function updateSelfReview(id: string, rating?: 1 | 2 | 3 | 4) {
           currentSession = current.reviews.find((value) => value.id === id);
         return (
           !!currentEntry &&
+          reviewEnabled(currentEntry) &&
           !!currentSession &&
           selfReviewSource(currentEntry, reviewTarget(current.docs)) ===
             source &&

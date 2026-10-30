@@ -10,6 +10,7 @@ import { reviewTarget } from "../core/review-policy";
 import { useKnowledge, useT } from "../components/common";
 import { useReviewClock } from "../hooks/useReviewClock";
 import { store } from "../core/store";
+import { reviewEnabled } from "../core/importance";
 const day = 86400000,
   left = 58,
   top = 26,
@@ -34,6 +35,7 @@ export function ForgettingCurves({
     [future, setFuture] = useState(saved?.future ?? 30),
     [offset, setOffset] = useState(rememberedOffset);
   const [size, setSize] = useState({ width: 1200, height: 540 });
+  const [includeExcluded, setIncludeExcluded] = useState(false);
   const { width, height } = size;
   const [hover, setHover] = useState<{
       id: string;
@@ -73,6 +75,7 @@ export function ForgettingCurves({
       s.docs.filter((d) => d.collection === "entry").map((d) => [d.id, d]),
     );
     return s.entries
+      .filter((entry) => includeExcluded || reviewEnabled(entry))
       .map((entry) => ({ entry, r: memoryEstimate(entry, now) }))
       .filter((curve) => curve.r !== null && curve.r * 100 <= maxRecall)
       .sort((a, b) => a.r! - b.r!)
@@ -84,7 +87,7 @@ export function ForgettingCurves({
           docs.has(entry.id) ? [docs.get(entry.id)!] : [],
         ),
       }));
-  }, [s.entries, s.docs, now, maxRecall, limit]);
+  }, [s.entries, s.docs, now, maxRecall, limit, includeExcluded]);
   useEffect(() => {
     rememberedOffset = offset;
   }, [offset]);
@@ -200,6 +203,14 @@ export function ForgettingCurves({
         <button onClick={() => setOffset(0)}>{t("回到今天", "Today")}</button>
       </div>
       <div className="curve-controls">
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={includeExcluded}
+            onChange={(event) => setIncludeExcluded(event.target.checked)}
+          />
+          {t("包含免复习条目", "Include entries excluded from review")}
+        </label>
         <label>
           {t("展示条目数量", "Entry limit")}
           <input

@@ -1,4 +1,5 @@
 import { entryColors } from "./entry-colors";
+import { importanceSchema } from "./importance";
 /** Validate replicated domain shapes and causal closure before projecting untrusted remote operations. */
 import { z } from "zod";
 import type { Doc, Envelope } from "./types";
@@ -39,6 +40,7 @@ const schemas = {
     content: text,
     summary: text.max(600).optional(),
     starred: z.boolean().optional(),
+    importance: importanceSchema.optional(),
     color: z.enum(entryColors).optional(),
     reviewCount: z.number().int().nonnegative().optional(),
     editorDocument: z
@@ -110,6 +112,7 @@ const ai = z.object({
   ),
   tasks: z.object({
     explain: task,
+    importance: task.optional(),
     question: task,
     grade: task,
     classify: task,

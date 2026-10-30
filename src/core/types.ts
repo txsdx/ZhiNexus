@@ -43,6 +43,8 @@ export interface Entry {
   summary?: string;
   /** A synchronized bookmark, independent of the card schedule and taxonomy. */
   starred?: boolean;
+  /** Importance and manual override form one replicated register; missing means normal/automatic. */
+  importance?: import("./importance").EntryImportance;
   /** Soft row/document background chosen from the built-in palette. */
   color?: import("./entry-colors").EntryColor;
   editorDocument?: { schema: 1; markdown: string; json: Json };
@@ -93,6 +95,7 @@ export interface Topic {
 }
 export type Task =
   | "explain"
+  | "importance"
   | "question"
   | "grade"
   | "classify"

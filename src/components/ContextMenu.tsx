@@ -10,6 +10,15 @@ import {
 import { requestCategoryDeletion } from "./CategoryDeletion";
 import { editCategory, moveEntry } from "../services/categories";
 import { entryColors } from "../core/entry-colors";
+import {
+  importanceLevels,
+  importanceLabels,
+  manualImportance,
+} from "../core/importance";
+import {
+  entrySelectionSnapshot,
+  changeEntrySelection,
+} from "../services/entry-selection";
 import { useConfirmation } from "../hooks/useConfirmation";
 import { useT } from "./common";
 interface Menu {
@@ -159,6 +168,18 @@ export function ContextMenu({ notify }: { notify: (message: string) => void }) {
                   starred: !entry.starred,
                   updatedAt: new Date().toISOString(),
                 }),
+            },
+            {
+              label: t("重要等级", "Importance"),
+              children: importanceLevels.map((level) => ({
+                label: t(...importanceLabels[level]),
+                run: () =>
+                  changeEntrySelection(
+                    [entry.id],
+                    entrySelectionSnapshot([entry.id]),
+                    { importance: manualImportance(level) },
+                  ),
+              })),
             },
             {
               label: t("复制标题", "Copy title"),

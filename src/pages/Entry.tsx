@@ -1,6 +1,8 @@
 import { reviewTarget, nextReviewAt } from "../core/review-policy";
 /** Knowledge editor, AI enrichment, revision audit trail and prerequisite capture. */
 import { EntryReferences } from "../components/EntryReferences";
+import { EntryImportanceControl } from "../components/EntryImportance";
+import { reviewEnabled } from "../core/importance";
 import { EntrySwitcher } from "../components/EntrySwitcher";
 import { entryLinkMarkdown, entryLinkTarget } from "../core/entry-links";
 import { Star, Link2 } from "lucide-react";
@@ -186,6 +188,11 @@ export function EntryPage({
               t("未分类", "Uncategorized")}
           </span>
           <div className="actions">
+            <EntryImportanceControl
+              entry={entry}
+              disabled={saving}
+              notify={notify}
+            />
             <button
               className="icon"
               aria-label={t(
@@ -273,14 +280,21 @@ export function EntryPage({
                 </span>
                 <span>
                   {t("下次复习", "Next review")}:{" "}
-                  <time
-                    dateTime={nextReviewAt(
-                      entry,
-                      reviewTarget(s.docs),
-                    ).toISOString()}
-                  >
-                    {nextReviewAt(entry, reviewTarget(s.docs)).toLocaleString()}
-                  </time>
+                  {!reviewEnabled(entry) ? (
+                    t("免复习", "No review")
+                  ) : (
+                    <time
+                      dateTime={nextReviewAt(
+                        entry,
+                        reviewTarget(s.docs),
+                      ).toISOString()}
+                    >
+                      {nextReviewAt(
+                        entry,
+                        reviewTarget(s.docs),
+                      ).toLocaleString()}
+                    </time>
+                  )}
                 </span>
               </p>
             </div>

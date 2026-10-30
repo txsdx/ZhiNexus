@@ -37,3 +37,6 @@ Windows实际命令：`tauri build --no-bundle -- --profile release-windows`；p
 0.23：延续用户休息期间授权的自主迭代，实际阅读高水平公开源码/资料，维护OSS_UX_RESEARCH_023和ACCEPTANCE_023的115–123项。快捷切换/结构检索、稳定Markdown引用、收藏、真实学习日历、离线自主回忆和捕获模板均保持既有数据与草稿边界。Android只能使用固定发布身份，公开证书已固定；私钥在私有备份与四个Actions Secrets，不得复制进仓库。禁止临时新密钥回退，签名前后校验指纹，Secrets缺失在编译前失败。当前连接Secrets管理HTTP403，但维护者已确认配置四个Secrets；继续标准Build，用签名预检验证，不要求读取秘密原值。不把独立重签旧包证明冒充新版本编译或安装通过。
 
 0.23正式发布：Build41017924868全绿，237/47/109、三平台与Windows实包/资产读回通过；源码f0a7ed1。SDK签名显示文字不可依赖，使用标准PEM的DER摘要固定身份；保留唯一/完整/匹配证书检查。Secrets已配置有效，不因管理API403再次要求配置。
+
+
+0.24：按124–128处理知识重要性。importance={level:high|normal|low,mode:auto|manual,reason?:string}是一个CRDT寄存器，未设默认normal，不修改FSRS卡片。手动等级不被后续解释覆盖；独立importance AI任务使用可编辑模板/模型，解释与评估各是真实流式阶段，评估失败保留已生成解释。低等从统一review-policy和reminderPlan排除；自主/AI复习的开始、揭示、迟到回执和完成事务再次核对当前资格。学习负荷只数当前每项的下一次计划，不模拟未来会完成的次数。维护IMPORTANCE_DESIGN/ACCEPTANCE_024，沿用固定Android身份，不因前端特性生成新密钥。

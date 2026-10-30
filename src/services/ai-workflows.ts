@@ -11,6 +11,12 @@ import { validateClassification } from "./classification";
 import { chat } from "./agent";
 import { generateTopicTitle } from "./topic-titles";
 import {
+  importanceSchema,
+  importanceSuggestionSchema,
+  reviewEnabled,
+} from "../core/importance";
+import { diagnostics } from "./diagnostics";
+import {
   graphBatches,
   graphBatchCount,
   graphProposalSchema,
@@ -29,6 +35,7 @@ export const jobEntrySchema = z.object({
   content: z.string(),
   category: z.string(),
   prerequisites: z.array(z.string()),
+  importance: importanceSchema.nullable().optional(),
 });
 /** Read a captured entry rather than silently changing a queued prompt after an edit. */
 export function capturedEntry(job: AIJob) {
@@ -140,8 +147,18 @@ export async function executeAIJob(
     }
     case "title":
       return generateTopicTitle(job, context);
-    case "explain":
-      return { content: await generate(context, "explain", vars) };
+    case "importance":
+      return {
+        importance: json(
+          importanceSuggestionSchema.parse(
+            parseJson(await generate(context, "importance", vars)),
+          ),
+        ),
+      };
+    case "explain": {
+      const content = await generate(context, "explain", vars);
+      return { content, ...(await assessImportance(job, context, content)) };
+    }
     case "relations":
       return json(
         relationsSchema.parse(
@@ -176,6 +193,7 @@ export async function executeAIJob(
             ? "\n\n## 原始材料 / Captured source\n\n" + e.content
             : "");
         result.content = content;
+        Object.assign(result, await assessImportance(job, context, content));
       }
       if (job.input.relations)
         Object.assign(
@@ -292,6 +310,7 @@ export async function executeAIJob(
     }
     case "question": {
       if (!e || !job.target.sessionId) throw Error("Missing review target");
+      assertReviewEnabled(e.id);
       const replacing = job.input.replace === true;
       const question = questionSchema.parse(
         parseJson(
@@ -342,7 +361,9 @@ export async function executeAIJob(
         () => {
           if (
             context.signal.aborted ||
-            !store.getSnapshot().entries.some((x) => x.id === e.id)
+            !store
+              .getSnapshot()
+              .entries.some((x) => x.id === e.id && reviewEnabled(x))
           )
             return false;
           const current = store
@@ -370,6 +391,7 @@ export async function executeAIJob(
     }
     case "grade": {
       if (!e || !job.target.sessionId) throw Error("Missing review target");
+      assertReviewEnabled(e.id);
       const grade = gradeSchema.parse(
         parseJson(
           await generate(context, "grade", {
@@ -391,6 +413,9 @@ export async function executeAIJob(
             .reviews.find((r) => r.id === job.target.sessionId);
           return (
             !context.signal.aborted &&
+            store
+              .getSnapshot()
+              .entries.some((x) => x.id === e.id && reviewEnabled(x)) &&
             !!r &&
             !["done", "cancelled", "graded"].includes(r.phase) &&
             JSON.stringify(r.question) === JSON.stringify(job.base.question) &&
@@ -405,4 +430,46 @@ export async function executeAIJob(
       return json(grade);
     }
   }
+}
+/** Priority assessment failure never discards a successfully generated explanation or silently assigns low. */
+async function assessImportance(
+  job: AIJob,
+  context: AIJobContext,
+  content: string,
+): Promise<Record<string, Json>> {
+  const entry = capturedEntry(job);
+  if (entry.importance?.mode === "manual") return {};
+  try {
+    return {
+      importance: json(
+        importanceSuggestionSchema.parse(
+          parseJson(
+            await generate(context, "importance", {
+              title: entry.title,
+              content,
+            }),
+          ),
+        ),
+      ),
+    };
+  } catch (error) {
+    context.check();
+    diagnostics.error(
+      "ai",
+      "重要等级评估失败 / Importance assessment failed",
+      error,
+    );
+    return {
+      importanceError:
+        "重要等级评估未完成，当前等级将保留 / Importance assessment failed; the current level will be retained",
+    };
+  }
+}
+/** Low importance can pause a prepared session without deleting its answer or mutating its memory card. */
+function assertReviewEnabled(id: string) {
+  const entry = store.getSnapshot().entries.find((entry) => entry.id === id);
+  if (!entry || !reviewEnabled(entry))
+    throw Error(
+      "词条不存在或已设为免复习 / Entry is missing or excluded from review",
+    );
 }

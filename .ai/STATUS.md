@@ -1,13 +1,15 @@
 # 需求完成情况
 
-当前正式版本：**Windows/Ubuntu/Android 0.22.0**，累计新增107–114项布局、捕获、无Token更新、开源交互与Android缩放回归。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
+当前正式版本：**Windows/Ubuntu/Android 0.23.0**，本版新增115–123项检索、引用、离线练习、活动记录及固定Android签名。下面记录实际功能和验证范围；历史迭代见 CHANGELOG，限制见 KNOWN_ISSUES。
 
 
-## 0.23当前迭代（未发布）
+## 0.23最终验收（已正式发布）
 
-编号115–123已接入源码：广泛开源比较、快速词条切换/结构检索、稳定引用与反链、离线自主回忆、真实学习日历、捕获模板、收藏同步、固定Android签名及AI审阅关闭耐久保存。最终本地237单元/44脚本/109浏览器全量、生产构建、locked Rust check与格式检查通过；逐项证据和边界见ACCEPTANCE_023。
+正式[v0.23.0](https://github.com/txsdx/ZhiNexus/releases/tag/v0.23.0)于北京时间2026-10-30 15:38:52发布，打包源码`f0a7ed16458c2ac7560d5d06e841a5c262f4a5cf`。编号115–123已接入、完成对应验收并发布。
 
-固定私钥已在私有工作区生成并备份，公开证书指纹固定。两次独立APK重签都验证同一证书，但使用的是0.22包作签名验证，不是0.23编译/安装验收。GitHub连接自身仍无Secrets管理权限；维护者已在2026-10-30确认完成四个Secrets配置。现在继续标准Build，由最前置签名预检验证密钥/证书，再进行完整CI与实包验收；不再要求读取Secret原值。正式发布前0.22保持不动。
+最终[Build41017924868](https://github.com/txsdx/ZhiNexus/actions/runs/41017924868)全部成功：237单元/47脚本/109浏览器与生产构建，Windows11项、Ubuntu12项原生边界，Windows完整真实实包和Android arm64/Kotlin编译、固定签名验证。三平台四资产已下载读回，版本/URL/SHA-256、Windows单文件、Android图标/包名/递增versionCode及证书、匿名latest.json和发布标签均已独立验证。详细证据见[ITERATION_023](ITERATION_023.md)。
+
+首次Build因SDK37改变签名报告标签而误报；已改为标准PEM→X509 DER摘要校验，新增回归并在最终CI与实际APK上通过。维护者配置的固定签名有效，连接自身的Secrets管理403不再视为构建阻塞。旧临时签名首次迁移及实体机边界见KNOWN_ISSUES。
 
 | 需求 | 当前实现 |
 |---|---|
@@ -223,10 +225,3 @@ v0.20.0目前为现有空资产草稿（ID428089853），未正式发布；未�
 ## 环境复用
 
 install_script/start_skill 已更新并保存为云环境草稿；完整刷新脚本（npm ci、测试、构建、Rust check）成功，截图编译依赖与中/英文 OCR 数据可用。当前机器已验证；草稿保存不等于环境快照已发布，后续任务复用前需用户在环境设置中发布。
-
-
-## 0.23 CI签名续验（2026-10-30）
-
-[Build41014436551](https://github.com/txsdx/ZhiNexus/actions/runs/41014436551)实际通过固定私钥预检、237单元/44脚本/109浏览器与生产构建、Ubuntu12原生/DEB、Windows11原生和完整真实实包（匿名更新、独立捕获、系统/portable存储、替换与损坏恢复）。Android arm64/Kotlin编译成功，实际APK已签名并上传为诊断产物；SDK35和37的apksigner独立验证成功，证书为固定指纹。原脚本却只识别旧版Signer #1显示文字，SDK37输出V3.0 Signer，导致签名后校验误报，发布按门禁被阻止。
-
-修复为apksigner先验证签名并输出标准PEM，再由Node X509Certificate解析DER计算SHA-256与固定指纹比对；不再依赖报告标签，也不放宽证书身份检查。新增缺失/重复/损坏/错误指纹回归，待新CI执行。应用源码/平台版本/私钥未变。执行工作区在本次修复时断开，改用仓库接口提交；现有连接不提供workflow_dispatch，待恢复工作区或维护者从main手动运行标准Build。不能重跑旧提交来冒充修复已验证，当前未正式发布0.23。
